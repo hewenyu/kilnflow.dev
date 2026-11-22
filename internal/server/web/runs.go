@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,6 +17,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/server/ci/cistore"
 	"github.com/hewenyu/kilnflow.dev/internal/server/ci/planner"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
+	"github.com/hewenyu/kilnflow.dev/internal/shorten"
 	"github.com/hewenyu/kilnflow.dev/internal/workflow"
 )
 
@@ -33,14 +33,22 @@ const (
 // option 是下拉框的一个选项。
 type option struct{ Value, Label string }
 
-// runStateOptions 是运行列表按状态筛选的选项（与 store.RunState 一致）。
-var runStateOptions = []option{
-	{string(store.RunQueued), "排队中"},
-	{string(store.RunActive), "运行中"},
-	{string(store.RunSucceeded), "成功"},
-	{string(store.RunFailed), "失败"},
-	{string(store.RunCancelled), "已取消"},
-	{string(store.RunSkipped), "已跳过"},
+// textOption 是下拉框的一个选项，Label 是消息或原样的文字（见 text.go）。
+type textOption struct {
+	Value string
+	Label uiText
+}
+
+// runStateOptions 返回运行列表按状态筛选的选项（与 store.RunState 一致）。
+func runStateOptions() []textOption {
+	return []textOption{
+		{string(store.RunQueued), message(msgRunStateQueued)},
+		{string(store.RunActive), message(msgRunStateActive)},
+		{string(store.RunSucceeded), message(msgRunStateSucceeded)},
+		{string(store.RunFailed), message(msgRunStateFailed)},
+		{string(store.RunCancelled), message(msgRunStateCancelled)},
+		{string(store.RunSkipped), message(msgRunStateSkipped)},
+	}
 }
 
 // runView 是运行列表中的一个 run。
@@ -93,7 +101,7 @@ func readRunFilter(q url.Values) runFilter {
 		Ref:      strings.TrimSpace(q.Get("ref")),
 		Actor:    strings.TrimSpace(q.Get("actor")),
 	}
-	if !slices.ContainsFunc(runStateOptions, func(o option) bool { return o.Value == f.State }) {
+	if !slices.ContainsFunc(runStateOptions(), func(o textOption) bool { return o.Value == f.State }) {
 		f.State = ""
 	}
 	return f
@@ -122,7 +130,7 @@ type runsPage struct {
 	// RepoExact 是与筛选中的仓库全名完全相同的仓库（此时"启动构建"预选它）；为空表示按子串匹配或没有按仓库筛选。
 	RepoExact string
 	Runs      []runView
-	States    []option
+	States    []textOption
 	Workflows []string
 	// Paged 表示当前不是最新一页（用游标翻过页）；NewestID / OldestID 是本页第一个和最后一个 run。
 	Paged              bool
@@ -147,7 +155,7 @@ func (p *runsPage) Mine() bool { return p.Me != "" && strings.EqualFold(p.Filter
 func (d *Dashboard) pageRuns(w http.ResponseWriter, r *http.Request, se *session) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	p := &runsPage{Filter: readRunFilter(q), States: runStateOptions, NewURL: "/runs/new", GitHub: d.githubWeb()}
+	p := &runsPage{Filter: readRunFilter(q), States: runStateOptions(), NewURL: "/runs/new", GitHub: d.githubWeb()}
 	p.Me = se.githubLogin()
 	all, mine := p.Filter, p.Filter
 	all.Actor, mine.Actor = "", p.Me
@@ -231,7 +239,7 @@ func (d *Dashboard) pageRuns(w http.ResponseWriter, r *http.Request, se *session
 		d.serverError(w, r, err)
 		return
 	}
-	d.render(w, r, "runs", "Runs", p)
+	d.renderPage(w, r, "runs", message(msgNavRuns), p, http.StatusOK)
 }
 
 // runViews 给 run 加上仓库名和最新一次运行中各 job 的状态（烧制条）。
@@ -308,8 +316,10 @@ type runNewPage struct {
 	// Dispatchable 是 Target 中可以手动触发的 workflow 数。
 	Dispatchable int
 	// TargetErr 是读取 workflow 列表失败的原因（ref 找不到时放在 Form 的 ref 字段上）。
-	TargetErr string
+	TargetErr uiText
 	Form      *formState
+	// InputProblems 是 inputs 的各个问题（按行号和声明顺序）；有问题时 Form 的 inputs 字段上是汇总说明。
+	InputProblems []uiText
 	// Attempted 表示这是一次启动构建的提交（错误摘要据此写明"没有启动构建"）。
 	Attempted bool
 	// RequestID 是这次表单的幂等键：重复提交同一个表单只会创建一个 run（PLAN #5.2 的 dispatch:<请求 ID>）。
@@ -353,7 +363,7 @@ func (d *Dashboard) pageRunNew(w http.ResponseWriter, r *http.Request, _ *sessio
 func (d *Dashboard) postRunNewLoad(w http.ResponseWriter, r *http.Request, _ *session) {
 	p := &runNewPage{Form: dispatchForm(r), RequestID: formRequestID(r)}
 	if p.Form.Val("repo") == "" {
-		p.Form.fail("repo", "请先选择要构建的仓库")
+		p.Form.failText("repo", message(msgRunNewPickRepo))
 		if d.fillPicker(w, r, p, "", 1) {
 			d.renderRunNew(w, r, p, http.StatusUnprocessableEntity)
 		}
@@ -415,7 +425,7 @@ func (d *Dashboard) fillTarget(w http.ResponseWriter, r *http.Request, p *runNew
 	switch {
 	case errors.Is(err, store.ErrRepoNotFound) || (err != nil && !strings.Contains(name, "/")):
 		// 仓库不存在，或者写的不是 owner/name（不可能是任何仓库）
-		f.fail("repo", fmt.Sprintf("Kiln 中没有启用的仓库 %s，请重新选择", name))
+		f.failText("repo", message(msgRunNewRepoMissing, strArg(argRepo, name)))
 		return d.fillPicker(w, r, p, "", 1)
 	case err != nil:
 		d.serverError(w, r, err)
@@ -423,7 +433,7 @@ func (d *Dashboard) fillTarget(w http.ResponseWriter, r *http.Request, p *runNew
 	}
 	p.Repo = repo.FullName()
 	f.Values["repo"] = p.Repo
-	d.loadTarget(r, p)
+	d.loadTarget(r, p, repo.DefaultBranch)
 	if repo.Incomplete() {
 		// 记录来自 installation 事件、还没有默认分支时，读取 workflow 时已经补齐
 		if r2, err := store.FindRepo(ctx, d.db, p.Repo); err == nil {
@@ -434,15 +444,15 @@ func (d *Dashboard) fillTarget(w http.ResponseWriter, r *http.Request, p *runNew
 	return true
 }
 
-// loadTarget 读取 ref 下的 workflow 列表；失败时把原因放在 ref 字段或 TargetErr 上。
-func (d *Dashboard) loadTarget(r *http.Request, p *runNewPage) {
+// loadTarget 读取 ref 下的 workflow 列表；失败时把原因放在 ref 字段或 TargetErr 上。defaultBranch 是仓库的默认分支（ref 留空时找不到的就是它）。
+func (d *Dashboard) loadTarget(r *http.Request, p *runNewPage, defaultBranch string) {
 	t, err := d.admin.DispatchWorkflows(r.Context(), p.Repo, p.Form.Val("ref"))
 	de, isDispatchErr := errors.AsType[*planner.DispatchError](err)
 	switch {
 	case isDispatchErr && de.Field == "ref":
-		p.Form.fail("ref", de.Error())
+		p.Form.failText("ref", dispatchErrorText(de, defaultBranch))
 	case err != nil:
-		p.TargetErr = d.failure(r, err)
+		p.TargetErr = d.failureText(r, err)
 	default:
 		p.Target = t
 		for _, w := range t.Workflows {
@@ -462,7 +472,7 @@ func (d *Dashboard) renderRunNew(w http.ResponseWriter, r *http.Request, p *runN
 	}
 	// 表单里带着一次性的请求 ID：不让浏览器缓存，返回时重新生成
 	w.Header().Set("Cache-Control", "no-store")
-	d.renderStatus(w, r, "run_new", "启动构建", p, status)
+	d.renderPage(w, r, "run_new", message(msgRunNewTitle), p, status)
 }
 
 func (d *Dashboard) postDispatch(w http.ResponseWriter, r *http.Request, se *session) {
@@ -471,7 +481,7 @@ func (d *Dashboard) postDispatch(w http.ResponseWriter, r *http.Request, se *ses
 	p := &runNewPage{Form: f, RequestID: formRequestID(r), Attempted: true}
 	if f.Val("repo") == "" {
 		// 必须明确选定仓库，不替用户挑一个
-		f.fail("repo", "请先选择要构建的仓库")
+		f.failText("repo", message(msgRunNewPickRepo))
 		if d.fillPicker(w, r, p, "", 1) {
 			d.renderRunNew(w, r, p, http.StatusUnprocessableEntity)
 		}
@@ -487,12 +497,13 @@ func (d *Dashboard) postDispatch(w http.ResponseWriter, r *http.Request, se *ses
 	inputs, problems := parseInputs(f.Val("inputs"))
 	wf := f.Val("workflow")
 	if wf == "" {
-		f.fail("workflow", "请选择要运行的 workflow")
+		f.failText("workflow", message(msgRunNewPickWorkflow))
 	} else if p.Target != nil {
 		problems = append(problems, checkWorkflow(p.Target, wf, inputs, f)...)
 	}
 	if len(problems) > 0 {
-		f.fail("inputs", strings.Join(problems, "\n"))
+		p.InputProblems = problems
+		f.failText("inputs", message(msgRunNewInputs, intArg(argCount, int64(len(problems)))))
 	}
 	if f.Failed() {
 		d.renderRunNew(w, r, p, http.StatusUnprocessableEntity)
@@ -504,45 +515,83 @@ func (d *Dashboard) postDispatch(w http.ResponseWriter, r *http.Request, se *ses
 	})
 	if err != nil {
 		if de, ok := errors.AsType[*planner.DispatchError](err); ok {
-			f.fail(de.Field, de.Error())
+			f.failText(de.Field, dispatchErrorText(de, p.DefaultBranch))
 		} else {
-			f.fail(formGeneral, "触发失败："+d.failure(r, err))
+			// 表单顶部的标题已经写明"没有启动构建"，这里只给原因
+			f.failText(formGeneral, d.failureText(r, err))
 		}
 		d.renderRunNew(w, r, p, http.StatusUnprocessableEntity)
 		return
 	}
-	d.flashBack(w, r, runURL(id), "已启动构建")
+	d.flashMsg(w, r, runURL(id), message(msgRunNewDispatched))
+}
+
+// dispatchErrorText 返回手动触发失败的说明（按原因码，不按中文说明）；defaultBranch 是 ref 留空时使用的默认分支。
+func dispatchErrorText(de *planner.DispatchError, defaultBranch string) uiText {
+	switch de.Code {
+	case planner.DispatchRefNotFound:
+		ref := de.Subject
+		if ref == "" {
+			ref = defaultBranch
+		}
+		return message(msgRunNewRefNotFound, strArg(argGitRef, ref))
+	case planner.DispatchWorkflowMissing:
+		return message(msgRunNewWfMissing, strArg(argGitRef, shorten.Hash(de.SHA)), strArg(argFile, de.Subject))
+	case planner.DispatchNotDispatchable:
+		return message(msgRunNewWfNoDispatch, strArg(argFile, de.Subject))
+	}
+	return rawText(de.Error())
 }
 
 // checkWorkflow 检查选定的 workflow 在 ref 下存在、可以手动触发，并按它声明的 inputs 检查填写的 inputs。
 // workflow 的问题直接记在表单上，inputs 的问题作为返回值。
-func checkWorkflow(t *planner.DispatchTarget, file string, inputs map[string]string, f *formState) []string {
+func checkWorkflow(t *planner.DispatchTarget, file string, inputs map[string]string, f *formState) []uiText {
 	i := slices.IndexFunc(t.Workflows, func(w planner.DispatchWorkflow) bool {
 		return w.File == file || w.File == file+".yml" || w.File == file+".yaml"
 	})
 	if i < 0 {
-		f.fail("workflow", fmt.Sprintf("%s 中没有 .kiln/workflows/%s", t.Ref, file))
+		f.failText("workflow", message(msgRunNewWfMissing, strArg(argGitRef, t.Ref), strArg(argFile, file)))
 		return nil
 	}
 	w := t.Workflows[i]
 	if !w.Dispatchable {
-		f.fail("workflow", w.File+" 没有声明 on.workflow_dispatch，不能手动触发")
+		f.failText("workflow", message(msgRunNewWfNoDispatch, strArg(argFile, w.File)))
 		return nil
 	}
 	f.Values["workflow"] = w.File
-	return workflow.CheckDispatchInputs(w.Inputs, inputs)
+	var out []uiText
+	for _, p := range workflow.DispatchInputProblems(w.Inputs, inputs) {
+		out = append(out, inputProblemText(p))
+	}
+	return out
+}
+
+// inputProblemText 返回 input 问题的说明（按原因码）。choice 的可选值是原样的文字（不翻译），用 ", " 连接后作为一个参数。
+func inputProblemText(p workflow.InputProblem) uiText {
+	name := strArg(argName, p.Name)
+	switch p.Code {
+	case workflow.InputMissing:
+		return message(msgInputMissing, name)
+	case workflow.InputNotBoolean:
+		return message(msgInputNotBool, name)
+	case workflow.InputNotChoice:
+		return message(msgInputNotChoice, name, strArg(argOptions, strings.Join(p.Options, ", ")))
+	case workflow.InputUndeclared:
+		return message(msgInputUndeclared, name)
+	}
+	return rawText(p.String())
 }
 
 var inputNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
 
 // parseInputs 解析"每行一个 key=value"的 inputs：值可以包含 =，空行忽略。
 // 没有 =、名称为空或不合法、名称重复的行都作为问题返回（行号从 1 开始），不会被静默丢弃。
-func parseInputs(text string) (map[string]string, []string) {
+func parseInputs(text string) (map[string]string, []uiText) {
 	inputs := map[string]string{}
 	seen := map[string]int{}
-	var problems []string
+	var problems []uiText
 	for i, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		n := i + 1
+		n := intArg(argLine, int64(i+1))
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -551,15 +600,15 @@ func parseInputs(text string) (map[string]string, []string) {
 		k = strings.TrimSpace(k)
 		switch {
 		case !ok:
-			problems = append(problems, fmt.Sprintf("第 %d 行缺少 =，应写成 key=value：%s", n, line))
+			problems = append(problems, message(msgInputNoEquals, n, strArg(argText, line)))
 		case k == "":
-			problems = append(problems, fmt.Sprintf("第 %d 行缺少名称（= 前面为空）", n))
+			problems = append(problems, message(msgInputNoName, n))
 		case !inputNamePattern.MatchString(k):
-			problems = append(problems, fmt.Sprintf("第 %d 行的名称 %s 不合法：只能包含字母、数字、_ 和 -，且不能以数字或 - 开头", n, k))
+			problems = append(problems, message(msgInputBadName, n, strArg(argName, k)))
 		case seen[k] > 0:
-			problems = append(problems, fmt.Sprintf("第 %d 行的 %s 与第 %d 行重复", n, k, seen[k]))
+			problems = append(problems, message(msgInputDuplicate, n, strArg(argName, k), intArg(argFirst, int64(seen[k]))))
 		default:
-			seen[k] = n
+			seen[k] = i + 1
 			inputs[k] = strings.TrimSpace(v)
 		}
 	}

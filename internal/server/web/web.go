@@ -168,13 +168,12 @@ func (d *Dashboard) web(adminOnly bool, h func(w http.ResponseWriter, r *http.Re
 	}
 }
 
-// webAPI 包装页面脚本调用的只读接口：未登录时返回 401（而不是跳转到登录页），脚本据此提示重新登录。
+// webAPI 包装页面脚本调用的只读接口：未登录时返回 401（而不是跳转到登录页，正文是消息的 JSON），脚本据此提示重新登录。
 func (d *Dashboard) webAPI(h func(w http.ResponseWriter, r *http.Request, se *session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		se := d.getSession(r)
 		if se == nil {
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "登录已过期，请重新登录", http.StatusUnauthorized)
+			apiError(w, http.StatusUnauthorized, message(msgAPIUnauthorized))
 			return
 		}
 		h(w, r, se)
@@ -290,9 +289,10 @@ func (d *Dashboard) flashBack(w http.ResponseWriter, r *http.Request, to, msg st
 }
 
 // flashMsg 重定向到站内页面 to，并带上一条消息作为提示（前端按当前语言显示）。消息必须登记为 flash（见 text.go）；
+// 文字参数（原样的对象名、路径、原因）由 fitFlash 整理和截断，长度总能符合上限；
 // 不合格时（编程错误）记录错误并照常跳转，只是不带提示。
 func (d *Dashboard) flashMsg(w http.ResponseWriter, r *http.Request, to string, t uiText) {
-	v, err := flashValue(t)
+	v, err := flashValue(fitFlash(t))
 	if err != nil {
 		d.log.Error("跳转后的提示不合格", "path", r.URL.Path, "id", t.id, "err", err)
 		d.redirect(w, r, to)

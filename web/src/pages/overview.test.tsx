@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import fixture from '../../dev/fixtures/overview.json'
 import emptyFixture from '../../dev/fixtures/overview.empty.json'
 import setupFixture from '../../dev/fixtures/overview.setup.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, withData } from '../test/render'
 
 describe('总览', () => {
   it('按区块列出进行中、我发起的和失败的 run', () => {
@@ -57,5 +57,28 @@ describe('总览', () => {
     renderPage(withData({ ...env, Session: env.Session && { ...env.Session, Admin: false } }, { Setup: [] }))
     expect(screen.getByText(/请管理员注册一台/)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '注册一台' })).not.toBeInTheDocument()
+  })
+})
+
+describe('总览的语言', () => {
+  it('英文：说明、区块、统计、Runner 摘要和服务端给的初始设置清单都按英文显示', () => {
+    renderPage(envelope(setupFixture), '/', { locale: 'en' })
+    expect(document.title).toBe('Overview · Kiln')
+    expect(screen.getByRole('heading', { name: 'Finish setting up' })).toBeInTheDocument()
+    expect(screen.getAllByText('2 of 4 done').length).toBeGreaterThan(0)
+    expect(screen.getByText('Turn off admin token sign-in')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Turn off' })).toHaveAttribute('href', '/settings/account')
+    expect(screen.getByRole('heading', { name: 'Last 24 hours' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Start a build' })).toHaveAttribute('href', '/runs/new')
+  })
+
+  it('切换语言后立即更新，统计和 Runner 摘要的复数正确', async () => {
+    renderPage(envelope(fixture))
+    await switchLocale('English')
+    expect(screen.getByText('Hi octocat. Builds right now: 2 running, 1 queued.')).toBeInTheDocument()
+    expect(screen.getByText('80%').parentElement).toHaveTextContent('Success rate 80% · 23 builds')
+    expect(screen.getByText('2 online, 1 offline, 3 jobs')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Failed\s*3/ })).toHaveAttribute('href', '/runs?state=failed')
+    expect(document.title).toBe('Overview · Kiln')
   })
 })

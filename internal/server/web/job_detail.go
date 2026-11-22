@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/hewenyu/kilnflow.dev/internal/release"
@@ -223,7 +224,7 @@ type jobPage struct {
 	// Viewing 是地址中指定的、不是当前 attempt 的那次尝试（查看历史尝试时非 nil）。
 	Viewing *attemptView
 	// AttemptErr 非空表示地址中的 attempt 无效（页面返回 404，不加载日志）。
-	AttemptErr string
+	AttemptErr uiText
 	Spec       string
 	Terminal   bool
 	RunActive  bool
@@ -236,7 +237,7 @@ type jobPage struct {
 	// Rerun 是"重跑这个 job"的说明；run 没有结束时为 nil。
 	Rerun *jobRerun
 	// LogEmpty 是没有日志时显示的说明。
-	LogEmpty string
+	LogEmpty uiText
 	// Purged 是这个 job 的日志和产物按保留策略清理的时间（PLAN #10.3）；没有清理时为 nil。
 	Purged *time.Time
 	// Jobs 是同一次运行（rerun）中的全部 job（页面左侧的 job 列表，按 ID 排序）。
@@ -263,7 +264,7 @@ func (d *Dashboard) pageJob(w http.ResponseWriter, r *http.Request, _ *session) 
 	ctx := r.Context()
 	j, err := cistore.GetJob(ctx, d.db, pathID(r), false)
 	if isNotFound(err) || (err == nil && j.RunID == 0) {
-		d.notFound(w, r, fmt.Sprintf("没有编号为 %s 的 job：编号可能写错了，或者这个 job 已经被清理。", r.PathValue("id")))
+		d.notFoundText(w, r, message(msgJobNotFound, strArg(argValue, r.PathValue("id"))))
 		return
 	}
 	if err != nil {
@@ -277,10 +278,10 @@ func (d *Dashboard) pageJob(w http.ResponseWriter, r *http.Request, _ *session) 
 	}
 	p.selectAttempt(r.URL.Query().Get("attempt"))
 	status := http.StatusOK
-	if p.AttemptErr != "" {
+	if !p.AttemptErr.IsZero() {
 		status = http.StatusNotFound
 	}
-	d.renderStatus(w, r, "job", j.DisplayName, p, status)
+	d.renderPage(w, r, "job", rawText(j.DisplayName), p, status)
 }
 
 // selectAttempt 按地址中的 attempt 参数选择要查看的尝试。参数无效或不属于这个 job 时设置 AttemptErr。
@@ -291,10 +292,10 @@ func (p *jobPage) selectAttempt(v string) {
 	n, err := strconv.ParseInt(v, 10, 64)
 	switch {
 	case p.Publish():
-		p.AttemptErr = "发布 job 由 Server 执行，没有尝试记录，日志按 job 保存。"
+		p.AttemptErr = message(msgJobAttemptPublish)
 		return
 	case err != nil || n <= 0:
-		p.AttemptErr = fmt.Sprintf("地址中的 attempt 参数无效（%q），应为这个 job 的某次尝试的编号。", v)
+		p.AttemptErr = message(msgJobAttemptInvalid, strArg(argValue, v))
 		return
 	}
 	for i := range p.Attempts {
@@ -308,7 +309,7 @@ func (p *jobPage) selectAttempt(v string) {
 		}
 		return
 	}
-	p.AttemptErr = fmt.Sprintf("这个 job 没有尝试 #%d（可能属于别的 job，或编号写错了）。", n)
+	p.AttemptErr = message(msgJobAttemptMissing, intArg(argAttempt, n))
 }
 
 // jobPageData 准备 job 页面的数据（不含地址中的 attempt 参数）。
@@ -456,45 +457,47 @@ func newJobRerun(j *cistore.Job, jobs []*cistore.Job, purged bool) *jobRerun {
 }
 
 // logEmptyText 返回 job 没有日志时的说明；purged 表示日志已经按保留策略清理。
-func logEmptyText(j *cistore.Job, hasAttempts, purged bool) string {
+func logEmptyText(j *cistore.Job, hasAttempts, purged bool) uiText {
 	switch {
 	case purged && (hasAttempts || j.Kind == workflow.JobKindPublish):
-		return "日志已按保留策略清理：run 结束超过保留期后只保留结果（状态、耗时、原因、退出码）。"
+		return message(msgJobLogPurged)
 	case hasAttempts:
-		return "这次尝试没有输出日志。"
+		return message(msgJobLogNoOutput)
 	case j.Kind == workflow.JobKindPublish && !j.State.Terminal():
-		return "发布还没有开始，开始后这里会实时显示发布日志。"
+		return message(msgJobLogPublishPending)
 	case j.ReusedFrom != nil:
-		return fmt.Sprintf("这个 job 沿用上一次运行的结果，没有执行；日志见 job #%d。", *j.ReusedFrom)
+		return message(msgJobLogReused, intArg(argJob, *j.ReusedFrom))
 	case j.CachedFrom != nil:
-		return fmt.Sprintf("这个 job 命中缓存，没有执行；日志见 job #%d。", *j.CachedFrom)
+		return message(msgJobLogCached, intArg(argJob, *j.CachedFrom))
 	case j.State == store.JobSkipped:
-		return "这个 job 被跳过，没有执行。"
+		return message(msgJobLogSkipped)
 	case j.State.Queued():
-		return "还没有开始执行，开始后这里会实时显示日志。"
+		return message(msgJobLogQueued)
 	case j.State.Terminal():
-		return "这个 job 没有执行，没有日志（原因见上方）。"
+		return message(msgJobLogNotRun)
 	}
-	return "没有日志。"
+	return message(msgJobLogNone)
 }
 
 // getLog 返回日志片段。响应头带上下一次的 offset、日志是否结束、读取的 attempt、job 当前的 attempt 和状态
-// （页面据此切换到新的尝试、局部刷新）。job 或 attempt 不存在时返回 404，未登录时返回 401（见 webAPI）。
+// （页面据此切换到新的尝试、局部刷新）。job 或 attempt 不存在时返回 404，未登录时返回 401（见 webAPI）；
+// 错误的正文是消息的 JSON（logError），日志正文是原始字节，不翻译。
 func (d *Dashboard) getLog(w http.ResponseWriter, r *http.Request, _ *session) {
 	q := r.URL.Query()
 	attempt, err := parseOptionalInt(q.Get("attempt"))
 	if err != nil || attempt < 0 {
-		http.Error(w, "attempt 无效", http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, message(msgLogBadAttempt))
 		return
 	}
 	offset, err := parseOptionalInt(q.Get("offset"))
 	if err != nil || offset < 0 {
-		http.Error(w, "offset 无效", http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, message(msgLogBadOffset))
 		return
 	}
-	l, err := d.admin.JobLog(r.Context(), pathID(r), attempt, offset)
+	id := pathID(r)
+	l, err := d.admin.JobLog(r.Context(), id, attempt, offset)
 	if err != nil {
-		d.adminError(w, r, err)
+		d.logError(w, r, logOfJob, id, attempt, err)
 		return
 	}
 	writeLogChunk(w, r, d, l)
@@ -512,13 +515,18 @@ func parseOptionalInt(v string) (int64, error) {
 func (d *Dashboard) getLogDownload(w http.ResponseWriter, r *http.Request, _ *session) {
 	attempt, err := parseOptionalInt(r.URL.Query().Get("attempt"))
 	if err != nil || attempt < 0 {
-		d.badRequest(w, r, fmt.Sprintf("attempt 参数无效（%q），应为这个 job 的某次尝试的编号。", r.URL.Query().Get("attempt")))
+		d.badRequestText(w, r, message(msgJobAttemptInvalid, strArg(argValue, r.URL.Query().Get("attempt"))))
 		return
 	}
 	id := pathID(r)
 	f, err := d.admin.OpenJobLog(r.Context(), id, attempt)
+	if connect.CodeOf(err) == connect.CodeNotFound {
+		// 与日志接口相同：按请求的参数说明找不到的是 job 还是指定的 attempt
+		d.notFoundText(w, r, logOfJob.notFound(id, attempt))
+		return
+	}
 	if err != nil {
-		d.adminPageError(w, r, err)
+		d.serverError(w, r, err)
 		return
 	}
 	defer f.Close()
@@ -544,7 +552,7 @@ func (d *Dashboard) getOutput(w http.ResponseWriter, r *http.Request, _ *session
 	output, file := q.Get("output"), q.Get("path")
 	f, err := d.admin.JobOutputFile(r.Context(), id, output, file)
 	if errors.Is(err, admin.ErrOutputGone) {
-		d.flashBack(w, r, jobURL(id), fmt.Sprintf("没有下载：产物 %s/%s 已不在存储中。重跑这个 job（不用缓存）可以重新生成。", output, file))
+		d.flashMsg(w, r, jobURL(id), message(msgJobOutputGone, strArg(argOutput, output), strArg(argPath, file)))
 		return
 	}
 	if err != nil {

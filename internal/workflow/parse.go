@@ -228,7 +228,7 @@ func (d *decoder) parseDispatchInput(k, v *yaml.Node) DispatchInput {
 	switch in.Type {
 	case InputString, InputBoolean:
 	case InputChoice:
-		// 没有 options 时 CheckDispatchInputs 无从检查，任何值都会被接受（Actions 对此报错）
+		// 没有 options 时 DispatchInputProblems 无从检查，任何值都会被接受（Actions 对此报错）
 		if len(in.Options) == 0 {
 			d.errAt(k, "input %s 的类型是 choice，需要 options", in.Name)
 		}

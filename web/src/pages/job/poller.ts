@@ -1,8 +1,11 @@
+import { msg, parseText, type Text } from '../../i18n/messages'
 import { backoff, maxBackoffMs, nextStepMs, parseLogMeta, pollMs } from './log'
 
 // 日志的分段读取：GET {base}/log?attempt=&offset= 一段一段读（base 是 /jobs/{id} 或 /ai/tasks/{id}），读完已有内容后每 1.5 秒取新输出。
 // 区分加载中、实时更新、已完成、没有日志、暂时断线（退避重试，可立即重试）、未登录（401）、不存在（404）
 // 和收到的不是日志（例如被跳转到登录页），不可恢复的错误停止轮询。同一时间只有一个请求。
+// 状态中的说明是消息（Text），显示时按当前语言翻译：切换语言后已经显示的状态立即更新。错误响应的正文是服务端的消息（JSON），
+// 不是 JSON 时（例如旧版服务端的纯文本）原样显示。
 
 /** LogStatus 是日志区的状态。 */
 export type LogStatus =
@@ -11,9 +14,9 @@ export type LogStatus =
   | { kind: 'next-step' }
   | { kind: 'complete' }
   | { kind: 'empty' }
-  | { kind: 'retry'; why: string; wait: number; failures: number }
+  | { kind: 'retry'; why: Text; wait: number; failures: number }
   | { kind: 'expired'; why: 'unauthorized' | 'not-log' }
-  | { kind: 'not-found'; message: string }
+  | { kind: 'not-found'; message: Text }
   | { kind: 'failed'; status: number }
 
 /** LogSink 接收读到的日志和状态变化。 */
@@ -101,7 +104,7 @@ export class LogPoller {
     this.opts.sink.status(s)
   }
 
-  private retryLater(why: string): void {
+  private retryLater(why: Text): void {
     this.failures++
     const wait = backoff(pollMs, this.failures - 1, maxBackoffMs)
     this.opts.sink.status({ kind: 'retry', why, wait, failures: this.failures })
@@ -124,7 +127,7 @@ export class LogPoller {
     const { base, explicit, sink } = this.opts
     let res: Response
     let buf: ArrayBuffer | null = null
-    let notFound = ''
+    let notFound: Text = ''
     const ctl = new AbortController()
     this.ctl = ctl
     this.inflight = true
@@ -136,12 +139,12 @@ export class LogPoller {
       })
       // 响应体也在请求进行中读完：期间调用的 stop、retryNow 都能看到
       if (res.ok) buf = await res.arrayBuffer()
-      else if (res.status === 404) notFound = (await res.text().catch(() => '')).trim()
+      else if (res.status === 404) notFound = await errorText(res)
     } catch {
       this.inflight = false
       // stop 中止的请求不是断线，不进入退避重试
       if (ctl.signal.aborted) return
-      if (!this.isStopped()) this.retryLater('连接中断')
+      if (!this.isStopped()) this.retryLater(msg('logView.disconnected'))
       return
     }
     this.inflight = false
@@ -159,7 +162,7 @@ export class LogPoller {
       return
     }
     if (!res.ok || buf === null) {
-      this.retryLater(`服务器出错（HTTP ${res.status}）`)
+      this.retryLater(msg('logView.serverError', { status: res.status }))
       return
     }
     const meta = res.redirected ? null : parseLogMeta(res.headers)
@@ -207,5 +210,16 @@ export class LogPoller {
     }
     this.stopped = true
     sink.status(sink.shown() === 0 ? { kind: 'empty' } : { kind: 'complete' })
+  }
+}
+
+/** errorText 读取错误响应的说明：JSON 是服务端的消息（见 internal/server/web 的 apiError），其他按纯文本原样显示；读不到时为空。 */
+async function errorText(res: Response): Promise<Text> {
+  const body = (await res.text().catch(() => '')).trim()
+  if (!(res.headers.get('Content-Type') ?? '').startsWith('application/json')) return body
+  try {
+    return parseText(JSON.parse(body))
+  } catch {
+    return body
   }
 }

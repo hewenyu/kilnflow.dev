@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hewenyu/kilnflow.dev/internal/shorten"
+
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -61,9 +63,9 @@ func TestPostCancelAndRerun(t *testing.T) {
 	runPath := fmt.Sprintf("/runs/%d", id)
 
 	// 还没有结束的 run 不能重跑；成员也可以取消和重跑
-	flash := wantRedirect(t, "重跑运行中的 run", e.post(e.bob, runPath+"/rerun", url.Values{"mode": {"all"}}), runPath)
+	flash := flashZH(t, wantRedirect(t, "重跑运行中的 run", e.post(e.bob, runPath+"/rerun", url.Values{"mode": {"all"}}), runPath))
 	mustHave(t, "提示", flash, "重跑失败：", "还没有结束")
-	flash = wantRedirect(t, "取消", e.post(e.bob, runPath+"/cancel", nil), runPath)
+	flash = flashZH(t, wantRedirect(t, "取消", e.post(e.bob, runPath+"/cancel", nil), runPath))
 	if flash != "已请求取消" {
 		t.Errorf("取消的提示 = %q", flash)
 	}
@@ -75,8 +77,8 @@ func TestPostCancelAndRerun(t *testing.T) {
 	}
 
 	// 重跑整个 run：跳到新的一次运行
-	flash = wantRedirect(t, "重跑", e.post(e.bob, runPath+"/rerun", url.Values{"mode": {"all"}, "keep": {"on"}}), runPath+"?rerun=1")
-	if flash != "已创建 rerun 1" {
+	flash = flashZH(t, wantRedirect(t, "重跑", e.post(e.bob, runPath+"/rerun", url.Values{"mode": {"all"}, "keep": {"on"}}), runPath+"?rerun=1"))
+	if flash != "已开始第 1 次重跑" {
 		t.Errorf("重跑的提示 = %q", flash)
 	}
 	if state, rerun := e.runState(id); rerun != 1 || state.Terminal() {
@@ -88,20 +90,20 @@ func TestPostCancelAndRerun(t *testing.T) {
 	// 重跑一个 job：同样跳到新的一次运行
 	wantRedirect(t, "再次取消", e.post(e.alice, runPath+"/cancel", nil), runPath)
 	build := e.jobOf(id, 1, "build")
-	flash = wantRedirect(t, "重跑 job", e.post(e.alice, fmt.Sprintf("/jobs/%d/rerun", build), nil), runPath+"?rerun=2")
-	if flash != "已创建 rerun 2" {
+	flash = flashZH(t, wantRedirect(t, "重跑 job", e.post(e.alice, fmt.Sprintf("/jobs/%d/rerun", build), nil), runPath+"?rerun=2"))
+	if flash != "已开始第 2 次重跑" {
 		t.Errorf("重跑 job 的提示 = %q", flash)
 	}
 	// run 运行中时重跑 job：回到 job 页面并说明
 	build2 := e.jobOf(id, 2, "build")
-	flash = wantRedirect(t, "运行中重跑 job", e.post(e.alice, fmt.Sprintf("/jobs/%d/rerun", build2), nil), fmt.Sprintf("/jobs/%d", build2))
+	flash = flashZH(t, wantRedirect(t, "运行中重跑 job", e.post(e.alice, fmt.Sprintf("/jobs/%d/rerun", build2), nil), fmt.Sprintf("/jobs/%d", build2)))
 	mustHave(t, "提示", flash, "重跑失败：")
 
 	// 不存在的 run、job
 	missing := fmt.Sprintf("/runs/%d", id+1000)
-	flash = wantRedirect(t, "取消不存在的 run", e.post(e.alice, missing+"/cancel", nil), missing)
+	flash = flashZH(t, wantRedirect(t, "取消不存在的 run", e.post(e.alice, missing+"/cancel", nil), missing))
 	mustHave(t, "提示", flash, "取消失败：", fmt.Sprintf("没有 run #%d", id+1000))
-	flash = wantRedirect(t, "重跑不存在的 run", e.post(e.alice, missing+"/rerun", nil), missing)
+	flash = flashZH(t, wantRedirect(t, "重跑不存在的 run", e.post(e.alice, missing+"/rerun", nil), missing))
 	mustHave(t, "提示", flash, "重跑失败：", fmt.Sprintf("没有 run #%d", id+1000))
 	w := e.post(e.alice, fmt.Sprintf("/jobs/%d/rerun", build+1000), nil)
 	wantErrorPage(t, "重跑不存在的 job", w, http.StatusNotFound, []string{fmt.Sprintf("没有编号为 %d 的 job", build+1000)}, []string{"/runs"})
@@ -221,8 +223,8 @@ func TestPostActionDatabaseError(t *testing.T) {
 	id := e.addRun(runOpts{state: store.RunActive})
 	// 取消要写审计日志：表不存在时事务失败
 	e.exec(`ALTER TABLE audit_log RENAME TO audit_log_gone`)
-	flash := wantRedirect(t, "取消", e.post(e.bob, fmt.Sprintf("/runs/%d/cancel", id), nil), fmt.Sprintf("/runs/%d", id))
-	if !strings.HasPrefix(flash, "取消失败：服务器出错了（错误编号 ") || strings.Contains(flash, "audit_log") {
+	raw := wantRedirect(t, "取消", e.post(e.bob, fmt.Sprintf("/runs/%d/cancel", id), nil), fmt.Sprintf("/runs/%d", id))
+	if flash := flashZH(t, raw); !strings.HasPrefix(flash, "取消失败：服务器出错了（错误编号 ") || strings.Contains(raw, "audit_log") {
 		t.Errorf("提示 = %q，应只有错误编号", flash)
 	}
 	if out := e.log.String(); !strings.Contains(out, "操作出错") || !strings.Contains(out, "audit_log") {
@@ -242,5 +244,38 @@ func TestPageScopeDatabaseError(t *testing.T) {
 	wantStatus(t, "数据库错误", w, http.StatusInternalServerError)
 	if strings.Contains(w.Body.String(), "installations") {
 		t.Errorf("页面中有 SQL 错误的原文：%s", w.Body.String())
+	}
+}
+
+// failureText、failureFlash：给用户看的说明原样作为文字或参数（过长、带换行时整理成能放进地址的参数），
+// 内部错误是带错误编号的消息（按语言显示），原文不进入页面数据或地址。
+func TestFailureTextAndFlash(t *testing.T) {
+	t.Parallel()
+	d, _, logs := testDashboard(t, "")
+	r := httptest.NewRequest(http.MethodPost, "/runs/9/cancel", nil)
+	user := connect.NewError(connect.CodeFailedPrecondition, errors.New("run 已经结束"))
+	if got := d.failureText(r, user); got.id != "" || got.raw != "run 已经结束" {
+		t.Errorf("给用户看的说明 = %+v", got)
+	}
+	internal := connect.NewError(connect.CodeInternal, errors.New("boom 10.0.0.7"))
+	got := d.failureText(r, internal)
+	ref, _ := got.params[argRef].(string)
+	if got.id != msgActionInternal || len(ref) != 12 || strings.Contains(textZH(t, got), "10.0.0.7") || !strings.Contains(logs.String(), "ref="+ref) {
+		t.Errorf("内部错误 = %+v，日志 %s", got, logs.String())
+	}
+
+	// flash：参数中的换行换成空格，超长的截断，整条提示仍然合格（parseFlash 接受）
+	long := connect.NewError(connect.CodeFailedPrecondition, errors.New("第一行\n"+strings.Repeat("长", 2*maxFlashArgRunes)))
+	v, err := flashValue(d.failureFlash(r, long, msgRunCancelFailed, msgRunCancelFailedRef))
+	if err != nil {
+		t.Fatalf("过长的说明应截断后放进地址：%v", err)
+	}
+	shown := flashZH(t, v)
+	if !strings.HasPrefix(shown, "取消失败：第一行 长") || !strings.HasSuffix(shown, shorten.Ellipsis) || strings.Contains(shown, "\n") {
+		t.Errorf("提示 = %q", shown)
+	}
+	v, err = flashValue(d.failureFlash(r, internal, msgRunCancelFailed, msgRunCancelFailedRef))
+	if err != nil || !strings.HasPrefix(flashZH(t, v), "取消失败：服务器出错了（错误编号 ") || strings.Contains(v, "10.0.0.7") {
+		t.Errorf("内部错误的提示 = %q（%v）", v, err)
 	}
 }

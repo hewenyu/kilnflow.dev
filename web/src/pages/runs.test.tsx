@@ -5,7 +5,7 @@ import { vi } from 'vitest'
 import fixture from '../../dev/fixtures/runs.json'
 import emptyFixture from '../../dev/fixtures/runs.empty.json'
 import filteredFixture from '../../dev/fixtures/runs.filtered.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, withData } from '../test/render'
 import { json, stubFetch } from '../test/fetch'
 import { filterSummary } from './runs'
 
@@ -93,5 +93,36 @@ describe('运行列表', () => {
     const f = { Repo: 'demo', State: '', Workflow: 'ci.yml', Ref: 'main', Actor: 'bob', Active: true }
     expect(filterSummary(f, '')).toBe('已筛选：仓库名包含"demo"，workflow ci.yml，ref main，发起人 bob。')
     expect(filterSummary({ ...f, Active: false }, '')).toBe('')
+  })
+})
+
+describe('运行列表的语言', () => {
+  it('英文：筛选表单、状态选项（服务端的消息）、筛选说明和空状态', () => {
+    renderPage(envelope(filteredFixture), '/runs?repo=acme%2Fkiln&state=failed', { locale: 'en' })
+    expect(document.title).toBe('Runs · Kiln')
+    expect(screen.getByLabelText('Repository')).toHaveValue('acme/kiln')
+    const state = screen.getByLabelText('Status')
+    expect(state).toHaveValue('failed')
+    expect(within(state).getByRole('option', { name: 'Failed' })).toBeInTheDocument()
+    expect(within(state).getByRole('option', { name: 'All statuses' })).toBeInTheDocument()
+    expect(screen.getByText(/Filtered by repository acme\/kiln, status Failed\./)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No builds match the filters' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Start a build for acme/kiln' })).toBeInTheDocument()
+  })
+
+  it('筛选表单填写到一半时切换语言：已填的条件保留，文字立即切换', async () => {
+    renderPage(envelope(fixture), '/runs')
+    const ref = screen.getByLabelText('ref')
+    await userEvent.type(ref, 'release/1.x')
+    await switchLocale('English')
+    expect(screen.getByLabelText('Ref')).toBe(ref)
+    expect(ref).toHaveValue('release/1.x')
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Builds' })).getAllByRole('listitem').length).toBeGreaterThan(0)
+  })
+
+  it('filterSummary 按语言写说明', () => {
+    const f = { Repo: 'demo', State: 'failed', Workflow: '', Ref: '', Actor: 'bob', Active: true }
+    expect(filterSummary(f, '', 'en')).toBe('Filtered by repository name contains "demo", status Failed, started by bob. ')
   })
 })

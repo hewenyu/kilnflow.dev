@@ -1,5 +1,6 @@
 import { HomeIcon } from '@primer/octicons-react'
 import { ActionList, ActionMenu, NavList } from '@primer/react'
+import { useLocale, useT } from '../i18n/locale'
 import { jobState } from '../lib/format'
 import type { JobView } from '../lib/schemas'
 import { StatusIcon } from './StatusIcon'
@@ -13,13 +14,16 @@ export function RunSidebar({
   summaryURL,
   jobs,
   current,
-  title = 'Jobs',
+  title: titleProp,
 }: {
   summaryURL: string
   jobs: readonly JobView[]
   current: 'summary' | number
   title?: string
 }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const title = titleProp ?? t('run.jobs')
   const cur = current === 'summary' ? null : jobs.find((j) => j.ID === current)
   return (
     <>
@@ -31,15 +35,15 @@ export function RunSidebar({
             // 传元素而不是每次渲染新建的组件：否则每次定时刷新都会重新挂载图标，执行中的动画从头开始
             leadingVisual={cur ? <StatusIcon state={cur.State} /> : HomeIcon}
           >
-            {cur ? `${title}：${cur.DisplayName}` : '概要'}
+            {cur ? t('run.sidebarCurrent', { title, name: cur.DisplayName }) : t('run.summary')}
           </ActionMenu.Button>
           <ActionMenu.Overlay width="medium">
-            <ActionList aria-label="run 的概要和 job">
+            <ActionList aria-label={t('run.sidebar')}>
               <ActionList.LinkItem href={summaryURL} active={current === 'summary'} aria-current={current === 'summary' ? 'page' : undefined}>
                 <ActionList.LeadingVisual>
                   <HomeIcon />
                 </ActionList.LeadingVisual>
-                概要
+                {t('run.summary')}
               </ActionList.LinkItem>
               {jobs.length > 0 && (
                 <ActionList.Group>
@@ -47,7 +51,7 @@ export function RunSidebar({
                   {jobs.map((j) => (
                     <ActionList.LinkItem key={j.ID} href={`/jobs/${j.ID}`} active={current === j.ID} aria-current={current === j.ID ? 'page' : undefined}>
                       <ActionList.LeadingVisual>
-                        <StatusIcon state={j.State} label={jobState(j.State)} />
+                        <StatusIcon state={j.State} label={jobState(j.State, locale)} />
                       </ActionList.LeadingVisual>
                       {j.DisplayName}
                     </ActionList.LinkItem>
@@ -59,19 +63,19 @@ export function RunSidebar({
         </ActionMenu>
       </div>
       <div className={css.side}>
-        <NavList aria-label="run 的概要和 job">
+        <NavList aria-label={t('run.sidebar')}>
           <NavList.Item href={summaryURL} aria-current={current === 'summary' ? 'page' : undefined}>
             <NavList.LeadingVisual>
               <HomeIcon />
             </NavList.LeadingVisual>
-            概要
+            {t('run.summary')}
           </NavList.Item>
           {jobs.length > 0 && (
             <NavList.Group title={title}>
               {jobs.map((j) => (
                 <NavList.Item key={j.ID} href={`/jobs/${j.ID}`} aria-current={current === j.ID ? 'page' : undefined}>
                   <NavList.LeadingVisual>
-                    <StatusIcon state={j.State} label={jobState(j.State)} />
+                    <StatusIcon state={j.State} label={jobState(j.State, locale)} />
                   </NavList.LeadingVisual>
                   <span className={css.name} title={j.DisplayName}>
                     {j.DisplayName}

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { list } from '../../lib/envelope'
+import { list, textSchema } from '../../lib/envelope'
 import { jobViewSchema, runSchema } from '../../lib/schemas'
 
 // job 详情页的数据（internal/server/web/job_detail.go 的 jobPage，以及 json.go 中加上的 Publish、NoLog、AttemptKey）。
@@ -115,8 +115,8 @@ export const jobPageSchema = z.object({
   Explicit: z.boolean(),
   /** 地址中指定的、不是当前的那次尝试。 */
   Viewing: attemptSchema.nullable(),
-  /** 地址中的 attempt 无效（页面状态码 404，不加载日志）。 */
-  AttemptErr: z.string(),
+  /** 地址中的 attempt 无效（页面状态码 404，不加载日志）：服务端的消息，空串表示有效。 */
+  AttemptErr: textSchema,
   /** job spec（JSON，缩进过）。 */
   Spec: z.string(),
   Terminal: z.boolean(),
@@ -128,7 +128,8 @@ export const jobPageSchema = z.object({
   Producer: attemptSchema.nullable(),
   /** run 没有结束时为 null。 */
   Rerun: rerunSchema.nullable(),
-  LogEmpty: z.string(),
+  /** 没有日志时的说明（服务端的消息）。 */
+  LogEmpty: textSchema,
   /** 日志和产物按保留策略清理的时间。 */
   Purged: z.string().nullable(),
   /** 同一次运行中的全部 job（左侧列表）。 */

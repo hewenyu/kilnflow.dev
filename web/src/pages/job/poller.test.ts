@@ -147,9 +147,10 @@ describe('LogPoller', () => {
     const t = setup([new TypeError('offline'), new Response('oops', { status: 502 }), logRes('ok\n', { next: 3 })])
     t.p.start()
     await vi.advanceTimersByTimeAsync(0)
-    expect(last(t.statuses)).toEqual({ kind: 'retry', why: '连接中断', wait: 1500, failures: 1 })
+    // 状态中存消息（显示时按当前语言翻译），不存翻译好的文字
+    expect(last(t.statuses)).toEqual({ kind: 'retry', why: { id: 'logView.disconnected' }, wait: 1500, failures: 1 })
     await vi.advanceTimersByTimeAsync(1500)
-    expect(last(t.statuses)).toEqual({ kind: 'retry', why: '服务器出错（HTTP 502）', wait: 3000, failures: 2 })
+    expect(last(t.statuses)).toEqual({ kind: 'retry', why: { id: 'logView.serverError', params: { status: 502 } }, wait: 3000, failures: 2 })
     await vi.advanceTimersByTimeAsync(3000)
     expect(t.text()).toBe('ok\n')
   })
@@ -168,6 +169,16 @@ describe('LogPoller', () => {
     const cases: [Response, LogStatus][] = [
       [new Response('', { status: 401 }), { kind: 'expired', why: 'unauthorized' }],
       [new Response('没有这次尝试\n', { status: 404 }), { kind: 'not-found', message: '没有这次尝试' }],
+      // 服务端的错误是消息的 JSON（apiError）：按消息保存
+      [
+        new Response('{"id":"log.errJobAttemptNotFound","params":{"id":7,"attempt":9}}\n', {
+          status: 404,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        }),
+        { kind: 'not-found', message: { id: 'log.errJobAttemptNotFound', params: { id: 7, attempt: 9 } } },
+      ],
+      // 声明是 JSON 却解析不了时原样显示
+      [new Response('{oops', { status: 404, headers: { 'Content-Type': 'application/json' } }), { kind: 'not-found', message: '{oops' }],
       [new Response('', { status: 400 }), { kind: 'failed', status: 400 }],
       [new Response('<html>', { status: 200, headers: { 'Content-Type': 'text/html' } }), { kind: 'expired', why: 'not-log' }],
     ]

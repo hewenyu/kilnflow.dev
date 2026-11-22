@@ -41,10 +41,13 @@ func (s overviewStats) Rate() string {
 
 // setupItem 是总览中的一项初始设置。
 type setupItem struct {
-	Title, Text string
+	// Key 是这一项的稳定标识（前端列表的 key，不随语言变化）。
+	Key         string
+	Title, Text uiText
 	// URL 是去完成这一项的页面；Action 是按钮文字。
-	URL, Action string
-	Done        bool
+	URL    string
+	Action uiText
+	Done   bool
 }
 
 // overviewPage 是总览的数据。
@@ -142,7 +145,7 @@ func (d *Dashboard) pageOverview(w http.ResponseWriter, r *http.Request, se *ses
 			return
 		}
 	}
-	d.render(w, r, "overview", "总览", p)
+	d.renderPage(w, r, "overview", message(msgNavOverview), p, http.StatusOK)
 }
 
 // overviewSetup 检查初始设置的完成情况；全部完成时 p.Setup 为空。
@@ -157,20 +160,20 @@ func (d *Dashboard) overviewSetup(ctx context.Context, p *overviewPage) error {
 	}
 	items := []setupItem{
 		{
-			Title: "同步仓库", Text: "安装 GitHub App 后同步一次，Kiln 才知道要构建哪些仓库。",
-			URL: "/settings/repos", Action: "查看仓库", Done: repos > 0,
+			Key: "repos", Title: message(msgSetupReposTitle), Text: message(msgSetupReposText),
+			URL: "/settings/repos", Action: message(msgSetupReposAction), Done: repos > 0,
 		},
 		{
-			Title: "注册 Runner", Text: "Runner 运行在你自己的机器上，只向 Server 发出连接。至少需要一台才能开始构建。",
-			URL: "/runners/new", Action: "注册 Runner", Done: p.RunnerCounts.Total > p.RunnerCounts.Revoked,
+			Key: "runner", Title: message(msgSetupRunnerTitle), Text: message(msgSetupRunnerText),
+			URL: "/runners/new", Action: message(msgSetupRunnerAction), Done: p.RunnerCounts.Total > p.RunnerCounts.Revoked,
 		},
 		{
-			Title: "绑定你的 GitHub 账号", Text: "绑定后用 GitHub 登录即为管理员，操作记录也记在这个账号名下。",
-			URL: accountURL, Action: "去绑定", Done: bind != nil,
+			Key: "bind", Title: message(msgSetupBindTitle), Text: message(msgSetupBindText),
+			URL: accountURL, Action: message(msgSetupBindAction), Done: bind != nil,
 		},
 		{
-			Title: "关闭 admin token 登录", Text: "确认 GitHub 登录可用后关闭，Dashboard 只接受 GitHub 登录。",
-			URL: accountURL, Action: "去关闭", Done: bind != nil && !bind.TokenLogin,
+			Key: "token", Title: message(msgSetupTokenTitle), Text: message(msgSetupTokenText),
+			URL: accountURL, Action: message(msgSetupTokenAction), Done: bind != nil && !bind.TokenLogin,
 		},
 	}
 	for _, it := range items {

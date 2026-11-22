@@ -155,7 +155,9 @@
   ],
   "Producer": null,
   "Rerun": null,
-  "LogEmpty": "这次尝试没有输出日志。",
+  "LogEmpty": {
+   "id": "job.logNoOutput"
+  },
   "Purged": null,
   "Jobs": [
    {

@@ -2,6 +2,8 @@ import { ArrowDownIcon, ChevronDownIcon, ChevronUpIcon, DownloadIcon, SearchIcon
 import { Button, Checkbox, FormControl, IconButton, Link, TextInput } from '@primer/react'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useRouter } from '../../app/router'
+import { Trans, useLocale, useT } from '../../i18n/locale'
+import { defaultLocale, isEmpty, msg, translate, type Locale, type MsgKey, type Params, type Text } from '../../i18n/messages'
 import { loginURL } from '../../lib/api'
 import { LogBuffer } from './buffer'
 import { findMatches, logDownloadURL, parsePosition, searchLimit, stepIndex, storageKey, type Match } from './log'
@@ -27,33 +29,37 @@ function readPosition(key: string) {
   }
 }
 
-/** statusText 返回日志状态的说明（不含"立即重试"等操作）。 */
-export function statusText(s: LogStatus, counts: { shown: number; lines: number }, emptyText: string): string {
+/** statusText 返回日志状态的说明（不含"立即重试"等操作）；locale 不传时为 zh-CN。 */
+export function statusText(s: LogStatus, counts: { shown: number; lines: number }, emptyText: Text, locale: Locale = defaultLocale): string {
+  const t = (id: MsgKey, params?: Params) => translate(locale, msg(id, params))
   switch (s.kind) {
     case 'loading':
-      return counts.shown > 0 ? `正在加载…（已显示 ${counts.shown.toLocaleString('zh-CN')} 个字符）` : '正在加载日志…'
+      return counts.shown > 0 ? t('logView.loadingShown', { count: counts.shown }) : t('logView.loading')
     case 'live':
-      return counts.shown > 0 ? '实时更新中…' : '等待日志输出…'
+      return counts.shown > 0 ? t('logView.live') : t('logView.waiting')
     case 'next-step':
-      return '这次尝试已结束，等待 job 的下一步…'
+      return t('logView.nextStep')
     case 'complete':
-      return `日志已完整加载（${counts.lines.toLocaleString('zh-CN')} 行）。`
+      return t('logView.complete', { count: counts.lines })
     case 'empty':
-      return emptyText
+      return translate(locale, emptyText)
     case 'retry':
-      return `${s.why}，${Math.round(s.wait / 1000)} 秒后自动重试（第 ${s.failures} 次）；已显示的日志保留。`
+      return t('logView.retry', { why: translate(locale, s.why), seconds: Math.round(s.wait / 1000), n: s.failures })
     case 'expired':
-      return s.why === 'unauthorized' ? '登录已过期，日志已停止更新。' : '收到的不是日志内容（可能登录已过期），已停止更新。'
+      return s.why === 'unauthorized' ? t('logView.expired') : t('logView.notLog')
     case 'not-found':
-      return `日志不存在${s.message ? '：' + s.message : ''}。`
+      return isEmpty(s.message) ? t('logView.notFound') : t('logView.notFoundWhy', { why: translate(locale, s.message) })
     case 'failed':
-      return `读取日志失败（HTTP ${s.status}），已停止。`
+      return t('logView.failed', { status: s.status })
     default: {
       const _exhaustive: never = s
       return _exhaustive
     }
   }
 }
+
+/** Hits 是搜索结果的状态（显示时按当前语言翻译）：null 表示没有搜索。 */
+type Hits = null | { total: 0 } | { idx: number; total: number }
 
 const tone = (s: LogStatus): 'run' | 'ok' | 'warn' | 'bad' | 'muted' => {
   switch (s.kind) {
@@ -89,14 +95,16 @@ export interface LogViewerProps {
   attemptKey: string
   /** 页面上 job 的状态（日志接口返回的状态与它不同时刷新页面数据）。 */
   state: string
-  /** 没有日志时的说明（jobPage.LogEmpty，随页面数据更新）。 */
-  emptyText: string
+  /** 没有日志时的说明（jobPage.LogEmpty，随页面数据更新；服务端的消息或原样的文字）。 */
+  emptyText: Text
   /** 标题旁的说明，例如"第 1 次尝试"或"发布"。 */
   note?: string
 }
 
 export function LogViewer({ base, attempt: initialAttempt, explicit, attemptKey, state, emptyText, note }: LogViewerProps) {
   const { refresh } = useRouter()
+  const t = useT()
+  const { locale } = useLocale()
   const scroller = useRef<HTMLDivElement>(null)
   const linesRoot = useRef<HTMLDivElement>(null)
   const buffer = useRef<LogBuffer | null>(null)
@@ -115,7 +123,7 @@ export function LogViewer({ base, attempt: initialAttempt, explicit, attemptKey,
 
   // 搜索
   const [term, setTerm] = useState('')
-  const [hits, setHits] = useState('')
+  const [hits, setHits] = useState<Hits>(null)
   const search = useRef<{ term: string; matches: Match[]; idx: number; dirty: boolean }>({ term: '', matches: [], idx: -1, dirty: false })
 
   useEffect(() => {
@@ -135,7 +143,7 @@ export function LogViewer({ base, attempt: initialAttempt, explicit, attemptKey,
     search.current = { term: '', matches: [], idx: -1, dirty: false }
     highlights()?.delete(hitName)
     highlights()?.delete(curName)
-    setHits('')
+    setHits(null)
   })
 
   useEffect(() => {
@@ -241,7 +249,7 @@ export function LogViewer({ base, attempt: initialAttempt, explicit, attemptKey,
     }
     const cur = search.current
     if (cur.matches.length === 0) {
-      setHits('没有找到')
+      setHits({ total: 0 })
       return
     }
     cur.idx = stepIndex(cur.idx, dir, cur.matches.length)
@@ -259,7 +267,7 @@ export function LogViewer({ base, attempt: initialAttempt, explicit, attemptKey,
     // 滚到这一行（行元素的 offsetParent 是日志区）
     const line = r.startContainer.parentElement
     if (line) sc.scrollTop = line.offsetTop - sc.clientHeight / 3
-    setHits(`第 ${cur.idx + 1} / ${cur.matches.length} 处${cur.matches.length >= searchLimit ? `（最多 ${searchLimit} 处）` : ''}`)
+    setHits({ idx: cur.idx, total: cur.matches.length })
   }
 
   const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -272,26 +280,27 @@ export function LogViewer({ base, attempt: initialAttempt, explicit, attemptKey,
   const empty = status.kind === 'empty'
   // 没有执行过的 job（命中缓存、跳过、取消等）：不显示搜索、跟随和下载
   const toolsHidden = empty && attempt === 0
-  const t = tone(status)
+  const tn = tone(status)
   // 只有日志还会增加时才需要"跟随最新输出"
-  const streaming = t === 'run' || t === 'warn'
+  const streaming = tn === 'run' || tn === 'warn'
   const here = typeof window === 'undefined' ? '' : window.location.pathname + window.location.search
 
   return (
     <section className={css.panel} aria-labelledby="log-h" data-color-mode="dark" data-dark-theme="dark" data-light-theme="dark">
       <div className={css.head}>
         <h2 className={css.title} id="log-h">
-          日志{note && <span className={css.note}>{note}</span>}
+          {t('logView.title')}
+          {note && <span className={css.note}>{note}</span>}
         </h2>
         {!toolsHidden && (
           <div className={css.tools}>
-            <div className={css.search} role="search" aria-label="在日志中搜索">
+            <div className={css.search} role="search" aria-label={t('logView.search')}>
               <TextInput
                 size="small"
                 type="search"
                 leadingVisual={SearchIcon}
-                placeholder="搜索已加载的日志"
-                aria-label="在日志中搜索"
+                placeholder={t('logView.searchPlaceholder')}
+                aria-label={t('logView.search')}
                 aria-describedby="log-scope"
                 spellCheck={false}
                 autoCapitalize="off"
@@ -303,53 +312,70 @@ export function LogViewer({ base, attempt: initialAttempt, explicit, attemptKey,
                 onKeyDown={onSearchKey}
                 className={css.searchInput}
               />
-              <IconButton icon={ChevronUpIcon} aria-label="上一个" size="small" variant="invisible" onClick={() => go(-1)} />
-              <IconButton icon={ChevronDownIcon} aria-label="下一个" size="small" variant="invisible" onClick={() => go(1)} />
+              <IconButton icon={ChevronUpIcon} aria-label={t('logView.prev')} size="small" variant="invisible" onClick={() => go(-1)} />
+              <IconButton icon={ChevronDownIcon} aria-label={t('logView.next')} size="small" variant="invisible" onClick={() => go(1)} />
               <span className={css.hits} aria-live="polite">
-                {hits}
+                {hits === null
+                  ? ''
+                  : !('idx' in hits)
+                    ? t('logView.noHits')
+                    : t(hits.total >= searchLimit ? 'logView.hitsLimit' : 'logView.hits', { n: hits.idx + 1, total: hits.total, limit: searchLimit })}
               </span>
             </div>
             {streaming && (
               <FormControl layout="horizontal" className={css.follow}>
                 <Checkbox checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-                <FormControl.Label>跟随最新输出</FormControl.Label>
+                <FormControl.Label>{t('logView.follow')}</FormControl.Label>
               </FormControl>
             )}
-            <IconButton as="a" href={download} download icon={DownloadIcon} aria-label="下载完整日志" size="small" variant="invisible" />
+            <IconButton as="a" href={download} download icon={DownloadIcon} aria-label={t('logView.download')} size="small" variant="invisible" />
           </div>
         )}
       </div>
       <p className="visually-hidden" id="log-scope">
-        只搜索页面上已加载的日志，不区分大小写（回车下一个，Shift+回车上一个）；页面最多保留最后约 200 万个字符，完整内容请下载。
+        {t('logView.scope')}
       </p>
-      <div className={`${css.status ?? ''} ${css[t] ?? ''}`} role="status" aria-live="polite">
-        <span>{statusText(status, counts, emptyText)}</span>
+      <div className={`${css.status ?? ''} ${css[tn] ?? ''}`} role="status" aria-live="polite">
+        <span>{statusText(status, counts, emptyText, locale)}</span>
         {(status.kind === 'retry' || status.kind === 'failed') && (
           <Button size="small" onClick={() => poller.current?.retryNow()}>
-            {status.kind === 'retry' ? '立即重试' : '重试'}
+            {status.kind === 'retry' ? t('logView.retryNow') : t('error.linkRetry')}
           </Button>
         )}
-        {status.kind === 'expired' && <Link href={loginURL(here)}>重新登录</Link>}
-        {status.kind === 'not-found' && <Link href={base}>查看当前尝试</Link>}
+        {status.kind === 'expired' && <Link href={loginURL(here)}>{t('error.linkRelogin')}</Link>}
+        {status.kind === 'not-found' && <Link href={base}>{t('logView.current')}</Link>}
       </div>
       {switchedFrom > 0 && (
         <p className={css.notice}>
-          尝试 #{switchedFrom} 已结束，下面是新的尝试 #{attempt} 的日志。<Link href={`${base}?attempt=${switchedFrom}`}>查看尝试 #{switchedFrom} 的日志</Link>
+          <Trans
+            id="logView.switched"
+            params={{ from: switchedFrom, to: attempt }}
+            tags={{ link: (c) => <Link href={`${base}?attempt=${switchedFrom}`}>{c}</Link> }}
+          />
         </p>
       )}
       {truncated && (
         <p className={css.notice}>
-          日志太长，页面只保留最后约 200 万个字符，更早的部分已丢弃。<a href={download} download>下载完整日志</a>
+          <Trans
+            id="logView.truncated"
+            tags={{
+              link: (c) => (
+                <a href={download} download>
+                  {c}
+                </a>
+              ),
+            }}
+          />
         </p>
       )}
       <div className={css.bodyWrap}>
         <div ref={scroller} className={css.body} tabIndex={0} aria-labelledby="log-h" onScroll={onScroll} hidden={empty}>
           <div ref={linesRoot} className={css.lines} />
         </div>
-        {empty && <p className={css.empty}>{emptyText}</p>}
+        {empty && <p className={css.empty}>{translate(locale, emptyText)}</p>}
         {!follow && !empty && (
           <Button size="small" className={css.bottom} leadingVisual={ArrowDownIcon} onClick={() => setFollow(true)}>
-            {hasNew ? '有新输出 · 回到底部' : '回到底部'}
+            {hasNew ? t('logView.toBottomNew') : t('logView.toBottom')}
           </Button>
         )}
       </div>

@@ -120,7 +120,12 @@
    "Publish": false,
    "Replan": 0
   },
-  "LogEmpty": "这个 job 命中缓存，没有执行；日志见 job #377。",
+  "LogEmpty": {
+   "id": "job.logCached",
+   "params": {
+    "job": 377
+   }
+  },
   "Purged": null,
   "Jobs": [
    {

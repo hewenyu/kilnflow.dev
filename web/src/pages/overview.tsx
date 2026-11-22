@@ -3,6 +3,8 @@ import { LinkButton, ProgressBar } from '@primer/react'
 import type { ReactNode } from 'react'
 import { z } from 'zod'
 import { definePage, type PageProps } from '../app/definePage'
+import { Msg, Trans, useT } from '../i18n/locale'
+import type { MsgKey, Params } from '../i18n/messages'
 import { useLive } from '../app/live'
 import { Box, BoxHeader } from '../components/Box'
 import { EmptyState } from '../components/EmptyState'
@@ -12,7 +14,7 @@ import { runnerCountsSchema, runnerViewSchema, type RunnerCounts, type RunnerVie
 import { RunnerIcon } from '../components/RunnerStatus'
 import { aiRunnerCountsSchema, type AIRunnerCounts } from './ai/schema'
 import { Ago } from '../components/Time'
-import { list } from '../lib/envelope'
+import { list, textSchema } from '../lib/envelope'
 import { runViewSchema, type RunView } from '../lib/schemas'
 import css from './overview.module.css'
 
@@ -30,10 +32,12 @@ const statsSchema = z.object({
 type Stats = z.infer<typeof statsSchema>
 
 const setupSchema = z.object({
-  Title: z.string(),
-  Text: z.string(),
+  /** 稳定的标识（列表的 key，不随语言变化）。 */
+  Key: z.string(),
+  Title: textSchema,
+  Text: textSchema,
   URL: z.string(),
-  Action: z.string(),
+  Action: textSchema,
   Done: z.boolean(),
 })
 type SetupItem = z.infer<typeof setupSchema>
@@ -60,29 +64,35 @@ const schema = z.object({
 type Data = z.infer<typeof schema>
 
 function Setup({ items, done }: { items: SetupItem[]; done: number }) {
+  const t = useT()
+  const progress = t('overview.setupProgress', { done, total: items.length })
   return (
     <Box as="section" aria-labelledby="ov-setup-h" className={css.setup}>
-      <BoxHeader title="完成初始设置" id="ov-setup-h">
-        <span className={css.muted}>
-          已完成 {done} / {items.length}
-        </span>
+      <BoxHeader title={t('overview.setupTitle')} id="ov-setup-h">
+        <span className={css.muted}>{progress}</span>
       </BoxHeader>
-      <ProgressBar progress={(done * 100) / items.length} barSize="small" aria-label={`已完成 ${done} / ${items.length}`} className={css.setupBar} />
+      <ProgressBar progress={(done * 100) / items.length} barSize="small" aria-label={progress} className={css.setupBar} />
       <ol className={css.steps}>
         {items.map((it) => (
-          <li key={it.Title} className={it.Done ? css.stepDone : undefined}>
+          <li key={it.Key} className={it.Done ? css.stepDone : undefined}>
             {it.Done ? (
-              <CheckCircleFillIcon className={css.okIcon} aria-label="已完成" />
+              <CheckCircleFillIcon className={css.okIcon} aria-label={t('overview.stepDone')} />
             ) : (
-              <CircleIcon className={css.todoIcon} aria-label="未完成" />
+              <CircleIcon className={css.todoIcon} aria-label={t('overview.stepTodo')} />
             )}
             <div className={css.stepText}>
-              <b>{it.Title}</b>
-              {!it.Done && <p>{it.Text}</p>}
+              <b>
+                <Msg text={it.Title} />
+              </b>
+              {!it.Done && (
+                <p>
+                  <Msg text={it.Text} />
+                </p>
+              )}
             </div>
             {!it.Done && (
               <LinkButton size="small" href={it.URL}>
-                {it.Action}
+                <Msg text={it.Action} />
               </LinkButton>
             )}
           </li>
@@ -127,32 +137,42 @@ function RunSection({
 }
 
 const segments = [
-  { key: 'Succeeded', label: '成功', state: 'succeeded', bg: 'success' },
-  { key: 'Failed', label: '失败', state: 'failed', bg: 'danger' },
-  { key: 'Cancelled', label: '取消', state: 'cancelled', bg: 'neutral' },
-  { key: 'Active', label: '进行中', state: 'active', bg: 'attention' },
-] as const
+  { key: 'Succeeded', label: 'overview.statSucceeded', state: 'succeeded', bg: 'success' },
+  { key: 'Failed', label: 'overview.statFailed', state: 'failed', bg: 'danger' },
+  { key: 'Cancelled', label: 'overview.statCancelled', state: 'cancelled', bg: 'neutral' },
+  { key: 'Active', label: 'overview.statActive', state: 'active', bg: 'attention' },
+] as const satisfies readonly { key: keyof Stats; label: MsgKey; state: string; bg: string }[]
 
 /** Day 是右侧栏的"过去 24 小时"：成功率和各结果的比例（像 GitHub 仓库页的 Languages）。 */
 function Day({ s }: { s: Stats }) {
+  const t = useT()
   return (
     <section className={css.side} aria-labelledby="ov-day-h">
       <h2 id="ov-day-h" className={css.sideTitle}>
-        过去 24 小时
+        {t('overview.day')}
       </h2>
       {s.Total > 0 ? (
         <>
           <p className={css.rate}>
-            成功率 <b className="num">{s.Rate || '—'}</b> · 共 <span className="num">{s.Total}</span> 个构建
+            <Trans
+              id="overview.rate"
+              params={{ rate: s.Rate || '—', count: s.Total }}
+              tags={{ b: (c) => <b className="num">{c}</b>, num: (c) => <span className="num">{c}</span> }}
+            />
           </p>
           <ProgressBar
             className={css.bar}
-            aria-label={`成功 ${s.Succeeded}，失败 ${s.Failed}，取消 ${s.Cancelled}，进行中 ${s.Active}`}
+            aria-label={t('overview.dayBar', { succeeded: s.Succeeded, failed: s.Failed, cancelled: s.Cancelled, active: s.Active })}
           >
             {segments
               .filter((g) => s[g.key] > 0)
               .map((g) => (
-                <ProgressBar.Item key={g.key} progress={(s[g.key] * 100) / s.Total} bg={`${g.bg}.emphasis`} aria-label={`${g.label} ${s[g.key]}`} />
+                <ProgressBar.Item
+                  key={g.key}
+                  progress={(s[g.key] * 100) / s.Total}
+                  bg={`${g.bg}.emphasis`}
+                  aria-label={t('overview.statItem', { label: t(g.label), count: s[g.key] })}
+                />
               ))}
           </ProgressBar>
           <ul className={css.legend}>
@@ -160,60 +180,63 @@ function Day({ s }: { s: Stats }) {
               <li key={g.key}>
                 <a href={`/runs?state=${g.state}`}>
                   <span className={css.dot} style={{ backgroundColor: `var(--bgColor-${g.bg}-emphasis)` }} aria-hidden />
-                  <span className={css.legendLabel}>{g.label}</span> <span className="num">{s[g.key]}</span>
+                  <span className={css.legendLabel}>{t(g.label)}</span> <span className="num">{s[g.key]}</span>
                 </a>
               </li>
             ))}
           </ul>
         </>
       ) : (
-        <p className={css.muted}>过去 24 小时没有构建。</p>
+        <p className={css.muted}>{t('overview.dayEmpty')}</p>
       )}
     </section>
   )
 }
 
-function runnerLine(r: RunnerView): ReactNode {
+function RunnerLine({ runner: r }: { runner: RunnerView }) {
+  const t = useT()
   if (!r.Online) {
-    return (
-      <>
-        离线
-        {r.LastSeen && (
-          <>
-            ，<Ago t={r.LastSeen} />
-            联系过
-          </>
-        )}
-      </>
-    )
+    if (!r.LastSeen) return <>{t('overview.runnerOffline')}</>
+    return <Trans id="overview.runnerOfflineSeen" tags={{ ago: () => <Ago t={r.LastSeen} /> }} />
   }
   if (r.Jobs.length > 0) {
     return r.Jobs.map((j, i) => (
       <span key={j.JobID}>
-        {i > 0 && '、'}
-        <a href={`/jobs/${j.JobID}`}>
-          {j.Repo}：{j.Name}
-        </a>
+        {i > 0 && t('list.enum')}
+        <a href={`/jobs/${j.JobID}`}>{t('overview.runnerJob', { repo: j.Repo, name: j.Name })}</a>
       </span>
     ))
   }
-  return r.Drain ? '已暂停接单' : '空闲，等待任务'
+  return <>{r.Drain ? t('overview.runnerPaused') : t('overview.runnerIdle')}</>
+}
+
+/** counts 返回在线、离线和任务数的说明（为 0 的离线数和任务数不写），例如"2 在线，1 离线，3 个任务"。 */
+function counts(t: (id: MsgKey, params?: Params) => string, online: number, offline: number, tasks: number, tasksKey: MsgKey): string {
+  return [
+    t('overview.countOnline', { count: online }),
+    offline > 0 && t('overview.countOffline', { count: offline }),
+    tasks > 0 && t(tasksKey, { count: tasks }),
+  ]
+    .filter(Boolean)
+    .join(t('list.separator'))
 }
 
 /** AIRunners 是 AI 执行节点的一行统计（没有 AI 执行节点时不显示）。 */
 function AIRunners({ counts: c }: { counts: AIRunnerCounts }) {
+  const t = useT()
   if (c.Total === 0) return null
-  const parts = [`${c.Online} 在线`, c.Offline > 0 && `${c.Offline} 离线`, c.Tasks > 0 && `${c.Tasks} 个 AI 任务`].filter(Boolean).join('，')
   return (
     <p className={css.muted}>
-      <a href="/ai/runners">AI 执行节点</a>：{parts}
+      <a href="/ai/runners">{t('nav.aiRunners')}</a>
+      {t('list.colon')}
+      {counts(t, c.Online, c.Offline, c.Tasks, 'overview.countAITasks')}
     </p>
   )
 }
 
 function Runners({
   runners,
-  counts,
+  counts: c,
   aiCounts,
   more,
   admin,
@@ -224,14 +247,12 @@ function Runners({
   more: number
   admin: boolean
 }) {
-  const summary = [`${counts.Online} 在线`, counts.Offline > 0 && `${counts.Offline} 离线`, counts.Jobs > 0 && `${counts.Jobs} 个任务`]
-    .filter(Boolean)
-    .join('，')
+  const t = useT()
   return (
     <section className={css.side} aria-labelledby="ov-runners-h">
       <h2 id="ov-runners-h" className={css.sideTitle}>
-        <a href="/runners">Runner</a>
-        <span className={css.sideCount}>{summary}</span>
+        <a href="/runners">{t('nav.runners')}</a>
+        <span className={css.sideCount}>{counts(t, c.Online, c.Offline, c.Jobs, 'overview.countJobs')}</span>
       </h2>
       {runners.length > 0 ? (
         <ul className={css.runners}>
@@ -245,19 +266,25 @@ function Runners({
                   {r.Name}
                 </a>{' '}
                 <span className={css.muted}>{r.Pool}</span>
-                <p>{runnerLine(r)}</p>
+                <p>
+                  <RunnerLine runner={r} />
+                </p>
               </div>
             </li>
           ))}
           {more > 0 && (
             <li>
-              <a href="/runners">还有 {more} 台</a>
+              <a href="/runners">{t('overview.moreRunners', { count: more })}</a>
             </li>
           )}
         </ul>
       ) : (
         <p className={css.muted}>
-          还没有 Runner。{admin ? <><a href="/runners/new">注册一台</a>后才能开始构建。</> : '请管理员注册一台。'}
+          {admin ? (
+            <Trans id="overview.noRunnersAdmin" tags={{ link: (x) => <a href="/runners/new">{x}</a> }} />
+          ) : (
+            t('overview.noRunners')
+          )}
         </p>
       )}
       <AIRunners counts={aiCounts} />
@@ -265,24 +292,34 @@ function Runners({
   )
 }
 
+/** lead 返回页面说明：现在有多少构建在运行、在排队。 */
+function lead(t: (id: MsgKey, params?: Params) => string, data: Data): string {
+  const running = data.Running.length
+  const queued = data.Queued.length
+  const s =
+    running + queued === 0
+      ? t('overview.leadIdle')
+      : queued > 0
+        ? t('overview.leadQueued', { count: running, queued })
+        : t('overview.leadRunning', { count: running })
+  return data.Me ? t('overview.greeting', { login: data.Me, lead: s }) : s
+}
+
 function Overview({ data, env }: PageProps<Data>) {
   useLive(true)
+  const t = useT()
   const admin = env.Session?.Admin ?? false
   const active = [...data.Running, ...data.Queued]
-  const lead =
-    active.length > 0
-      ? `现在有 ${data.Running.length} 个构建在运行${data.Queued.length > 0 ? `，${data.Queued.length} 个在排队` : ''}。`
-      : '现在没有正在运行的构建。'
   return (
     <div className={css.page}>
       <PageHeader
-        title="总览"
-        description={`${data.Me ? `${data.Me}，` : ''}${lead}`}
+        title={t('nav.overview')}
+        description={lead(t, data)}
         actions={
           <>
-            <LinkButton href="/runs">全部运行</LinkButton>
+            <LinkButton href="/runs">{t('overview.allRuns')}</LinkButton>
             <LinkButton href="/runs/new" variant="primary" leadingVisual={PlayIcon}>
-              启动构建
+              {t('runNew.pageTitle')}
             </LinkButton>
           </>
         }
@@ -294,37 +331,37 @@ function Overview({ data, env }: PageProps<Data>) {
         <div className={css.main}>
           <RunSection
             id="ov-active-h"
-            title="正在进行"
-            more={{ label: '查看全部', href: '/runs?state=active' }}
+            title={t('overview.active')}
+            more={{ label: t('overview.viewAll'), href: '/runs?state=active' }}
             runs={active}
             empty={
-              <EmptyState size="small" icon={PlayIcon} title="现在没有构建在跑">
-                推送代码、开 PR 或推送 tag 后，构建会出现在这里。
+              <EmptyState size="small" icon={PlayIcon} title={t('overview.activeEmpty')}>
+                {t('overview.activeEmptyText')}
               </EmptyState>
             }
           />
           {data.Me && (
             <RunSection
               id="ov-mine-h"
-              title="我最近发起的"
-              more={{ label: '全部', href: data.MineURL }}
+              title={t('overview.mine')}
+              more={{ label: t('overview.mineAll'), href: data.MineURL }}
               runs={data.Mine}
               empty={
-                <EmptyState size="small" icon={PersonIcon} title="你最近没有发起构建">
-                  你推送、开 PR 或手动启动的构建会出现在这里。
+                <EmptyState size="small" icon={PersonIcon} title={t('overview.mineEmpty')}>
+                  {t('overview.mineEmptyText')}
                 </EmptyState>
               }
             />
           )}
           <RunSection
             id="ov-failed-h"
-            title="最近失败"
-            more={{ label: '全部失败', href: '/runs?state=failed' }}
+            title={t('overview.failures')}
+            more={{ label: t('overview.failuresAll'), href: '/runs?state=failed' }}
             runs={data.Failures}
-            empty={<EmptyState size="small" icon={CheckCircleIcon} title="最近没有失败的构建" />}
+            empty={<EmptyState size="small" icon={CheckCircleIcon} title={t('overview.failuresEmpty')} />}
           />
         </div>
-        <aside className={css.aside} aria-label="统计和 Runner">
+        <aside className={css.aside} aria-label={t('overview.aside')}>
           <Day s={data.Stats} />
           <Runners runners={data.Runners} counts={data.RunnerCounts} aiCounts={data.AIRunnerCounts} more={data.MoreRunners} admin={admin} />
         </aside>

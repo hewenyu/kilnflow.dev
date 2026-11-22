@@ -1,6 +1,8 @@
 {
  "Page": "overview",
- "Title": "总览",
+ "Title": {
+  "id": "nav.overview"
+ },
  "Nav": "overview",
  "Status": 200,
  "Session": {

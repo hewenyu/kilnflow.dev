@@ -7,7 +7,7 @@ import releaseFixture from '../../dev/fixtures/job.release.json'
 import runningFixture from '../../dev/fixtures/job.running.json'
 import successFixture from '../../dev/fixtures/job.success.json'
 import type { Envelope } from '../lib/envelope'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, withData } from '../test/render'
 import { statusText } from './job/LogViewer'
 import { jobPageSchema, type JobPage } from './job/schema'
 
@@ -402,9 +402,82 @@ describe('日志状态的说明', () => {
     expect(statusText({ kind: 'live' }, counts, '')).toBe('实时更新中…')
     expect(statusText({ kind: 'complete' }, counts, '')).toBe('日志已完整加载（56 行）。')
     expect(statusText({ kind: 'empty' }, counts, '这次尝试没有输出日志。')).toBe('这次尝试没有输出日志。')
-    expect(statusText({ kind: 'retry', why: '连接中断', wait: 3000, failures: 2 }, counts, '')).toBe('连接中断，3 秒后自动重试（第 2 次）；已显示的日志保留。')
+    expect(statusText({ kind: 'retry', why: { id: 'logView.disconnected' }, wait: 3000, failures: 2 }, counts, '')).toBe('连接中断，3 秒后自动重试（第 2 次）；已显示的日志保留。')
     expect(statusText({ kind: 'not-found', message: '没有这次尝试' }, counts, '')).toBe('日志不存在：没有这次尝试。')
     expect(statusText({ kind: 'expired', why: 'unauthorized' }, counts, '')).toBe('登录已过期，日志已停止更新。')
     expect(statusText({ kind: 'failed', status: 400 }, counts, '')).toBe('读取日志失败（HTTP 400），已停止。')
+  })
+})
+
+describe('job 详情页的语言', () => {
+  it('英文：标题区、日志状态、尝试和产物按英文显示，日志正文不翻译', async () => {
+    renderPage(page(fixture), '/jobs/412', { locale: 'en' })
+    expect(await screen.findByText('Log fully loaded (2 lines).')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Run summary and jobs' })).getByRole('link', { name: 'Summary' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download full log' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Attempts/ })).toBeInTheDocument()
+    expect(Array.from(document.querySelectorAll('.kiln-log-line'), (l) => l.textContent)).toEqual(['ok  pkg', '--- FAIL: TestRerun'])
+  })
+
+  it('读日志、搜索中途切换语言：搜索词、结果位置、阅读位置都保留，日志不重新读取，文字立即切换', async () => {
+    renderPage(page(fixture), '/jobs/412')
+    await screen.findByText('日志已完整加载（2 行）。')
+    const box = screen.getByRole('searchbox', { name: '在日志中搜索' })
+    await userEvent.type(box, 'fail{Enter}')
+    expect(screen.getByText('第 1 / 1 处')).toBeInTheDocument()
+    const body = document.querySelector<HTMLElement>('[tabindex="0"][aria-labelledby="log-h"]')
+    if (!body) throw new Error('没有日志区')
+    body.scrollTop = 17
+    const reads = calls.filter((c) => c.url.includes('/log?')).length
+
+    await switchLocale('English')
+    expect(screen.getByText('Log fully loaded (2 lines).')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1')).toBeInTheDocument()
+    // 同一个输入框和日志区（没有重新挂载），搜索词和阅读位置都在
+    expect(screen.getByRole('searchbox', { name: 'Search the log' })).toBe(box)
+    expect(box).toHaveValue('fail')
+    expect(document.querySelector('[tabindex="0"][aria-labelledby="log-h"]')).toBe(body)
+    expect(body.scrollTop).toBe(17)
+    expect(screen.getByRole('button', { name: 'Jump to bottom' })).toBeInTheDocument()
+    expect(calls.filter((c) => c.url.includes('/log?')).length).toBe(reads)
+
+    await switchLocale('简体中文')
+    expect(screen.getByText('第 1 / 1 处')).toBeInTheDocument()
+  })
+
+  it('重跑 job 的对话框打开时切换语言：对话框不关闭，勾选保留，说明立即切换', async () => {
+    renderPage(page(fixture), '/jobs/412')
+    await userEvent.click(screen.getByRole('button', { name: '重跑这个 job' }))
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: '失败时保留工作区' }))
+    await switchLocale('English')
+    expect(screen.getByRole('dialog')).toBe(dialog)
+    expect(within(dialog).getByRole('heading', { name: 'Re-run this job and its downstream jobs' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('checkbox', { name: 'Keep the workspace on failure' })).toBeChecked()
+  })
+
+  it('服务端的消息（无效的 attempt、没有日志的说明）按当前语言显示', () => {
+    renderPage(page(cachedFixture), '/jobs/388', { locale: 'en' })
+    expect(screen.getByText(/This job hit the cache and didn't execute; see job #377 for the log\./)).toBeInTheDocument()
+  })
+})
+
+describe('日志状态的说明（英文）', () => {
+  it('状态中的消息按语言显示', () => {
+    const counts = { shown: 1234, lines: 1 }
+    expect(statusText({ kind: 'loading' }, counts, '', 'en')).toBe('Loading… (1,234 characters shown)')
+    expect(statusText({ kind: 'complete' }, counts, '', 'en')).toBe('Log fully loaded (1 line).')
+    expect(statusText({ kind: 'empty' }, counts, { id: 'job.logPurged' }, 'en')).toMatch(/^The log was cleaned up under the retention policy/)
+    expect(statusText({ kind: 'retry', why: { id: 'logView.serverError', params: { status: 502 } }, wait: 3000, failures: 2 }, counts, '', 'en')).toBe(
+      'Server error (HTTP 502). Retrying automatically in 3s (attempt 2); the log shown so far is kept.',
+    )
+    expect(statusText({ kind: 'not-found', message: { id: 'log.errJobAttemptNotFound', params: { id: 7, attempt: 9 } } }, counts, '', 'en')).toBe(
+      "The log doesn't exist: Job #7 has no attempt #9.",
+    )
+    expect(statusText({ kind: 'not-found', message: '' }, counts, '', 'en')).toBe("The log doesn't exist.")
+    expect(statusText({ kind: 'not-found', message: { id: 'log.errJobAttemptNotFound', params: { id: 7, attempt: 9 } } }, counts, '')).toBe(
+      '日志不存在：job #7 没有尝试 #9。',
+    )
   })
 })

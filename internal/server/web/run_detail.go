@@ -184,7 +184,7 @@ func (d *Dashboard) pageRun(w http.ResponseWriter, r *http.Request, _ *session) 
 	ctx := r.Context()
 	run, err := cistore.GetRun(ctx, d.db, pathID(r), false)
 	if isNotFound(err) {
-		d.notFound(w, r, fmt.Sprintf("没有编号为 %s 的 run：编号可能写错了，或者这个 run 已经被清理。", r.PathValue("id")))
+		d.notFoundText(w, r, message(msgRunNotFound, strArg(argValue, r.PathValue("id"))))
 		return
 	}
 	if err != nil {
@@ -213,12 +213,11 @@ func (d *Dashboard) pageRun(w http.ResponseWriter, r *http.Request, _ *session) 
 		d.serverError(w, r, err)
 		return
 	}
-	title := fmt.Sprintf("Run #%d", run.ID)
 	n, ok := parseRerun(r.URL.Query().Get("rerun"), run.CurrentRerun)
 	if !ok {
 		// 地址中的 rerun 无效：不显示任何一次运行的 job，避免误以为在看最新结果
 		p.Invalid = r.URL.Query().Get("rerun")
-		d.renderStatus(w, r, "run", title, p, http.StatusNotFound)
+		d.renderPage(w, r, "run", runTitle(run.ID, run.CurrentRerun, run.CurrentRerun), p, http.StatusNotFound)
 		return
 	}
 	p.Viewed = &reruns[n]
@@ -249,10 +248,7 @@ func (d *Dashboard) pageRun(w http.ResponseWriter, r *http.Request, _ *session) 
 		}
 		p.Form = newRerunForm(latest, run.Purged())
 	}
-	if n != run.CurrentRerun {
-		title += " · " + rerunLabel(n)
-	}
-	d.render(w, r, "run", title, p)
+	d.renderPage(w, r, "run", runTitle(run.ID, n, run.CurrentRerun), p, http.StatusOK)
 }
 
 // jobStages 按 needs 把 job 分成阶段：没有依赖（或依赖不在这次运行中）的在第一阶段，其余在所依赖 job 中最晚的阶段之后。
@@ -306,28 +302,43 @@ func (d *Dashboard) runActivity(ctx context.Context, runID int64) ([]activityEnt
 	return pgx.CollectRows(rows, scanActivity)
 }
 
-// RunText 返回 run 详情页上这条活动的说明（不含操作者和 run 编号）。
-func (e activityEntry) RunText() string {
+// runTitle 返回 run 详情页的标题：查看的不是最新一次运行（n 不是 current）时写明是哪一次。
+func runTitle(id int64, n, current int) uiText {
+	switch n {
+	case current:
+		return message(msgRunTitle, intArg(argID, id))
+	case 0:
+		return message(msgRunTitleFirst, intArg(argID, id))
+	}
+	return message(msgRunTitleRerun, intArg(argID, id), intArg(argN, int64(n)))
+}
+
+// RunText 返回 run 详情页上这条活动的说明（不含操作者和 run 编号）：run 的操作是消息，
+// 其他活动（不会出现在 run 详情页上）原样返回审计日志的说明。
+func (e activityEntry) RunText() uiText {
 	num := func(k string) int64 {
 		v, _ := e.Detail[k].(float64)
 		return int64(v)
 	}
 	switch e.Action {
 	case "run.dispatch":
-		return "手动启动了这个 run"
+		return message(msgRunActDispatch)
 	case "run.cancel":
-		return "取消了这个 run"
+		return message(msgRunActCancel)
 	case "run.rerun":
-		what := map[string]string{
-			string(store.RerunFailed): "只重跑未成功的 job", string(store.RerunAll): "全部重跑", string(store.RerunAllNoCache): "全部重跑，不用缓存",
-		}[fmt.Sprint(e.Detail["mode"])]
+		n := intArg(argN, num("rerun"))
 		if j := num("job_id"); j != 0 {
-			what = fmt.Sprintf("重跑 job #%d", j)
+			return message(msgRunActRerunJob, intArg(argJob, j), n)
 		}
-		if what == "" {
-			return "重跑了这个 run，开始" + rerunLabel(int(num("rerun")))
+		switch store.RerunMode(fmt.Sprint(e.Detail["mode"])) {
+		case store.RerunFailed:
+			return message(msgRunActRerunFailed, n)
+		case store.RerunAll:
+			return message(msgRunActRerunAll, n)
+		case store.RerunAllNoCache:
+			return message(msgRunActRerunNoCache, n)
 		}
-		return "重跑了这个 run（" + what + "），开始" + rerunLabel(int(num("rerun")))
+		return message(msgRunActRerun, n)
 	}
-	return e.Text()
+	return rawText(e.Text())
 }

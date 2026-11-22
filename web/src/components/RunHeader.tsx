@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useLocale, useT } from '../i18n/locale'
 import { runState } from '../lib/format'
 import { runTitle, type Run } from '../lib/schemas'
 import { StatusIcon } from './StatusIcon'
@@ -28,10 +29,12 @@ export function RunHeader({
   note?: ReactNode
   actions?: ReactNode
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   return (
     <>
-      <nav className={css.crumbs} aria-label="位置">
-        <a href={back}>运行</a>
+      <nav className={css.crumbs} aria-label={t('nav.breadcrumb')}>
+        <a href={back}>{t('nav.runs')}</a>
         <span aria-hidden>/</span>
         <a href={`/runs?${new URLSearchParams({ repo }).toString()}`}>{repo}</a>
         <span aria-hidden>/</span>
@@ -41,7 +44,7 @@ export function RunHeader({
         <div className={css.titleRow}>
           {state !== null && (
             <span className={css.icon}>
-              <StatusIcon state={state} size={24} label={state ? runState(state) : '状态未知'} />
+              <StatusIcon state={state} size={24} label={state ? runState(state, locale) : t('run.stateUnknown')} />
             </span>
           )}
           <h1 className={css.title}>

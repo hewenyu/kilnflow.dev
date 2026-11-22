@@ -31,11 +31,28 @@ type DispatchRequest struct {
 }
 
 // DispatchError 表示手动触发的请求本身有问题：Field 为 "ref" 时是 ref 找不到，为 "workflow" 时是 workflow 不存在或没有声明 on.workflow_dispatch。
-// Dashboard 据此把错误显示在对应的字段旁。
+// Dashboard 据此把错误显示在对应的字段旁，按 Code 和 Subject 按语言显示说明（Err 是给 CLI 和日志的中文说明）。
 type DispatchError struct {
 	Field string
-	Err   error
+	// Code 是稳定的原因码；Subject 是原因涉及的对象（找不到的 ref 或 workflow 文件名，原样）。
+	Code    DispatchErrorCode
+	Subject string
+	// SHA 是读取 workflow 的 commit（DispatchWorkflowMissing 时有）。
+	SHA string
+	Err error
 }
+
+// DispatchErrorCode 是手动触发失败的原因码。
+type DispatchErrorCode string
+
+const (
+	// DispatchRefNotFound：ref 找不到（Subject 是填写的 ref，空表示默认分支）。
+	DispatchRefNotFound DispatchErrorCode = "ref_not_found"
+	// DispatchWorkflowMissing：commit 中没有这个 workflow 文件（Subject 是文件名）。
+	DispatchWorkflowMissing DispatchErrorCode = "workflow_missing"
+	// DispatchNotDispatchable：workflow 没有声明 on.workflow_dispatch（Subject 是文件名）。
+	DispatchNotDispatchable DispatchErrorCode = "not_dispatchable"
+)
 
 func (e *DispatchError) Error() string { return e.Err.Error() }
 
@@ -101,7 +118,7 @@ func (p *Planner) runByDedupeKey(ctx context.Context, key string) (int64, error)
 func (p *Planner) resolveDispatchRef(ctx context.Context, repo *store.Repo, ref string) (fullRef, sha string, err error) {
 	fullRef, sha, err = gitread.ResolveRef(ctx, p.gh.Inst(repo.InstallationID), repo, ref)
 	if gitread.IsRefError(err) {
-		return "", "", &DispatchError{Field: "ref", Err: err}
+		return "", "", &DispatchError{Field: "ref", Code: DispatchRefNotFound, Subject: ref, Err: err}
 	}
 	return fullRef, sha, err
 }

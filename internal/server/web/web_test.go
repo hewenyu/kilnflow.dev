@@ -78,11 +78,14 @@ func TestPagesRender(t *testing.T) {
 			Stats:        overviewStats{Total: 4, Succeeded: 2, Failed: 1, Active: 1},
 			Runners:      []*runnerView{{ID: 1, Name: "mini", Pool: "default", Online: true, Jobs: []cistore.RunningJob{{JobID: 11, Name: "build", Repo: "tester/demo"}}}},
 			RunnerCounts: runnerCounts{Total: 1, Online: 1, Accepting: 1, Jobs: 1}, MoreRunners: 2,
-			Setup: []setupItem{{Title: "同步仓库", URL: "/settings/repos", Action: "查看", Done: true}, {Title: "绑定", URL: accountURL, Action: "去绑定"}}, SetupDone: 1,
+			Setup: []setupItem{
+				{Key: "repos", Title: message(msgSetupReposTitle), URL: "/settings/repos", Action: message(msgSetupReposAction), Done: true},
+				{Key: "bind", Title: message(msgSetupBindTitle), URL: accountURL, Action: message(msgSetupBindAction)},
+			}, SetupDone: 1,
 		},
 		"runs": &runsPage{
 			Filter: runFilter{Repo: "tester/demo", State: "failed", Workflow: "ci.yml", Ref: "main"}, RepoExact: "tester/demo",
-			Runs: []runView{{Run: run, Repo: "tester/demo"}}, States: runStateOptions, Workflows: []string{"ci.yml"},
+			Runs: []runView{{Run: run, Repo: "tester/demo"}}, States: runStateOptions(), Workflows: []string{"ci.yml"},
 			Paged: true, NewestID: 7, OldestID: 7, NewerURL: "/runs?after=7", OlderURL: "/runs?before=7", LatestURL: "/runs",
 			Self: "/runs?before=8", NewURL: "/runs/new?repo=tester%2Fdemo", GitHub: "https://github.com",
 		},
