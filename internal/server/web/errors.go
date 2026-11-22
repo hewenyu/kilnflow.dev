@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 
@@ -17,12 +16,13 @@ import (
 // 统一的错误页：404、403、400（登录链接无效或过期）、502（GitHub 登录失败）和 500 都使用页面外壳，
 // 给出可读的原因和恢复入口（返回运行列表、重新登录、重试），保持正确的 HTTP 状态码；不显示内部错误，
 // 内部错误只写日志，页面上给出与日志对应的错误编号。页面脚本调用的接口（日志片段）仍返回纯文本。
+// 标题、原因和入口的文字是消息（见 text.go），前端按当前语言显示；调用方给出的原因（例如 admin.Service 的 NotFound 说明）原样显示。
 
 // errorPage 是错误页的内容。
 type errorPage struct {
 	Status int
 	// Heading 是标题，Reason 是可读的原因和下一步。
-	Heading, Reason string
+	Heading, Reason uiText
 	// Ref 是错误编号（与服务器日志中的 ref 对应），只有内部错误才有。
 	Ref   string
 	Links []errorLink
@@ -30,17 +30,18 @@ type errorPage struct {
 
 // errorLink 是错误页上的一个恢复入口；Primary 为主要操作。
 type errorLink struct {
-	Label, URL string
-	Primary    bool
+	Label   uiText
+	URL     string
+	Primary bool
 }
 
-// listLink 是"返回运行列表"。
-var listLink = errorLink{Label: "返回运行列表", URL: "/runs"}
+// listLink 返回"返回运行列表"。
+func listLink() errorLink { return errorLink{Label: message(msgErrLinkRuns), URL: "/runs"} }
 
 // showError 渲染错误页。错误页不缓存。
 func (d *Dashboard) showError(w http.ResponseWriter, r *http.Request, p *errorPage) {
 	w.Header().Set("Cache-Control", "no-store")
-	d.renderStatus(w, r, "error", p.Heading, p, p.Status)
+	d.renderPage(w, r, "error", p.Heading, p, p.Status)
 }
 
 // newErrorRef 生成错误编号。
@@ -55,48 +56,51 @@ func (d *Dashboard) serverError(w http.ResponseWriter, r *http.Request, err erro
 	ref := newErrorRef()
 	d.log.Error("页面出错", "path", r.URL.Path, "ref", ref, "err", err)
 	p := &errorPage{
-		Status: http.StatusInternalServerError, Heading: "服务器出错了", Ref: ref,
-		Reason: "处理这个请求时出现了内部错误，详细信息已记录在服务器日志中。可以稍后重试；问题持续出现时，请把下面的错误编号告诉管理员。",
+		Status: http.StatusInternalServerError, Heading: message(msgErrServerHeading), Ref: ref,
+		Reason: message(msgErrServerReasonGet),
 	}
 	if r.Method == http.MethodGet {
-		p.Links = append(p.Links, errorLink{Label: "重试", URL: r.URL.RequestURI(), Primary: true})
+		p.Links = append(p.Links, errorLink{Label: message(msgErrLinkRetry), URL: r.URL.RequestURI(), Primary: true})
 	} else {
-		p.Reason = "处理这个操作时出现了内部错误，操作可能没有完成，详细信息已记录在服务器日志中。请回到原来的页面确认结果后再决定是否重试；问题持续出现时，请把下面的错误编号告诉管理员。"
+		p.Reason = message(msgErrServerReasonPost)
 		if back := refererPath(r); back != "" {
-			p.Links = append(p.Links, errorLink{Label: "回到原来的页面", URL: back, Primary: true})
+			p.Links = append(p.Links, errorLink{Label: message(msgErrLinkBack), URL: back, Primary: true})
 		}
 	}
-	p.Links = append(p.Links, listLink)
+	p.Links = append(p.Links, listLink())
 	d.showError(w, r, p)
 }
 
-// notFound 返回 404 错误页；reason 为空时使用通用的说明。未登录时提供登录入口（登录后回到这个地址）。
+// notFound 返回 404 错误页；reason 是原样显示的说明，为空时使用通用的说明。未登录时提供登录入口（登录后回到这个地址）。
 func (d *Dashboard) notFound(w http.ResponseWriter, r *http.Request, reason string) {
-	if reason == "" {
-		reason = "地址可能写错了，或者要找的内容已经不存在。"
+	why := message(msgErrNotFoundReason)
+	if reason != "" {
+		why = rawText(reason)
 	}
-	p := &errorPage{Status: http.StatusNotFound, Heading: "找不到这个页面", Reason: reason}
+	p := &errorPage{Status: http.StatusNotFound, Heading: message(msgErrNotFoundHeading), Reason: why}
 	if d.getSession(r) == nil {
-		p.Links = append(p.Links, errorLink{Label: "登录", URL: loginURL(returnTo(r), ""), Primary: true})
+		p.Links = append(p.Links, errorLink{Label: message(msgErrLinkLogin), URL: loginURL(returnTo(r), ""), Primary: true})
 	}
-	p.Links = append(p.Links, listLink)
+	p.Links = append(p.Links, listLink())
 	d.showError(w, r, p)
 }
 
-// badRequest 返回 400 错误页（地址中的参数无效）。
+// badRequest 返回 400 错误页（地址中的参数无效）；reason 原样显示。
 func (d *Dashboard) badRequest(w http.ResponseWriter, r *http.Request, reason string) {
-	d.showError(w, r, &errorPage{Status: http.StatusBadRequest, Heading: "地址中的参数无效", Reason: reason, Links: []errorLink{listLink}})
+	d.showError(w, r, &errorPage{
+		Status: http.StatusBadRequest, Heading: message(msgErrBadRequestHeading), Reason: rawText(reason), Links: []errorLink{listLink()},
+	})
 }
 
 // forbidden 返回 403 错误页：需要管理员权限。GET 请求提供"用管理员身份登录"（登录后回到这个地址）。
 func (d *Dashboard) forbidden(w http.ResponseWriter, r *http.Request, se *session) {
 	p := &errorPage{
-		Status: http.StatusForbidden, Heading: "需要管理员权限",
-		Reason: fmt.Sprintf("这个页面或操作只有管理员可以使用。当前登录的 %s 是成员，没有执行任何操作。需要时请联系管理员，或用管理员身份重新登录。", se.Login),
-		Links:  []errorLink{{Label: "返回运行列表", URL: "/runs", Primary: true}},
+		Status: http.StatusForbidden, Heading: message(msgErrForbiddenHeading),
+		Reason: message(msgErrForbiddenReason, strArg(argLogin, se.Login)),
+		Links:  []errorLink{{Label: message(msgErrLinkRuns), URL: "/runs", Primary: true}},
 	}
 	if next := returnTo(r); next != "" {
-		p.Links = append(p.Links, errorLink{Label: "用管理员身份登录", URL: loginURL(next, "")})
+		p.Links = append(p.Links, errorLink{Label: message(msgErrLinkLoginAsAdmin), URL: loginURL(next, "")})
 	}
 	d.showError(w, r, p)
 }
@@ -104,13 +108,12 @@ func (d *Dashboard) forbidden(w http.ResponseWriter, r *http.Request, se *sessio
 // csrfFailed 返回 403 错误页：表单的 CSRF 校验失败（页面打开太久、重新登录过或来自其他网站），操作没有执行。
 func (d *Dashboard) csrfFailed(w http.ResponseWriter, r *http.Request) {
 	p := &errorPage{
-		Status: http.StatusForbidden, Heading: "页面已过期，操作没有执行",
-		Reason: "表单的安全校验（CSRF）没有通过，通常是因为页面打开太久、期间重新登录过，或者表单来自其他网站。请回到原来的页面刷新后再操作。",
+		Status: http.StatusForbidden, Heading: message(msgErrCSRFHeading), Reason: message(msgErrCSRFReason),
 	}
 	if back := refererPath(r); back != "" {
-		p.Links = append(p.Links, errorLink{Label: "回到原来的页面", URL: back, Primary: true})
+		p.Links = append(p.Links, errorLink{Label: message(msgErrLinkBack), URL: back, Primary: true})
 	}
-	p.Links = append(p.Links, listLink)
+	p.Links = append(p.Links, listLink())
 	d.showError(w, r, p)
 }
 
@@ -176,9 +179,9 @@ func internalError(err error) bool {
 	return admin.IsInternal(err) || errors.Is(err, pgx.ErrNoRows)
 }
 
-// loginLink 返回"重新登录"入口，登录后回到 next（不安全时省略）。
-func loginLink(label, next string, primary bool) errorLink {
-	return errorLink{Label: label, URL: loginURL(next, ""), Primary: primary}
+// loginLink 返回登录入口（文字为 label），登录后回到 next（不安全时省略）。
+func loginLink(label msgID, next string, primary bool) errorLink {
+	return errorLink{Label: message(label), URL: loginURL(next, ""), Primary: primary}
 }
 
 // githubLoginURL 返回 GitHub 登录的入口地址，登录后回到 next。

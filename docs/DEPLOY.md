@@ -549,6 +549,8 @@ kiln var set APPLE_ID you@example.com --repo owner/myapp
 | 让仓库缓存全部失效 | — | `kiln cache bump owner/repo` |
 | GitHub 请求失败（Check Run 没更新） | 设置 → 运维（outbox） | `kiln outbox --state dead`、`kiln outbox retry <id>` |
 
+**界面语言**：Dashboard 支持简体中文和英文，不需要在 Server 上配置。第一次打开时按浏览器的语言偏好（中文为简体中文，英文为英文，都不是时为简体中文）；在头像菜单的"语言"（未登录时在页面右上角）中切换，选择保存在这个浏览器中，刷新、重新登录后保持。CLI 和 GitHub 上的 Check Run、PR review、评论不受影响。
+
 ### 8.1 合并队列
 
 PR 加 label `kiln:merge`（或 run 页"加入合并队列"、`kiln merge-queue add owner/repo <PR>`）入队，验证通过后由 App 合并（落后时先更新分支、重跑 CI）并关闭 `Closes #N` 的 issue（PLAN #28），不需要分支保护。

@@ -5,6 +5,7 @@ import errorFixture from '../../dev/fixtures/error.json'
 import tokenFixture from '../../dev/fixtures/login.token.json'
 import type { Envelope } from '../lib/envelope'
 import { deferred, envelope, renderPage, withData } from '../test/render'
+import { translate } from '../i18n/messages'
 import { RouterProvider, useRouter } from './router'
 
 // 前端内跳转、表单提交和定时更新：用假的 fetch 代替 kiln-server。
@@ -186,7 +187,7 @@ describe('表单提交', () => {
     expect(body.get('token')).toBe('secret-1')
     expect(body.get('next')).toBe('/')
     expect(body.get('csrf')).toBe('tok')
-    expect(await screen.findByText(/admin token 不对/)).toBeInTheDocument()
+    expect(await screen.findByText(/admin token 不正确/)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/login')
   })
 })
@@ -197,7 +198,7 @@ describe('过期的响应', () => {
   let router: ReturnType<typeof useRouter> | null = null
   function Probe() {
     router = useRouter()
-    return <p data-testid="view">{router.view ? `${router.view.url}|${router.view.env.Title}` : ''}</p>
+    return <p data-testid="view">{router.view ? `${router.view.url}|${translate('zh-CN', router.view.env.Title)}` : ''}</p>
   }
   const shown = () => screen.getByTestId('view').textContent
   const r = () => {
@@ -240,7 +241,7 @@ describe('过期的响应', () => {
       await r().submit({ action: 'javascript:void(0)', body: new URLSearchParams() })
     })
     expect(calls).toHaveLength(0)
-    expect(r().failure).toBe('不支持提交到这个地址：javascript:void(0)')
+    expect(r().failure).toEqual({ id: 'router.unsupportedAction', params: { url: 'javascript:void(0)' } })
     expect(shown()).toBe('/runs/new|启动构建')
   })
 
@@ -270,7 +271,7 @@ describe('过期的响应', () => {
     })
     expect(shown()).toBe('/runners|Runner 列表')
     expect(window.location.pathname).toBe('/runners')
-    expect(r().failure).toBe('')
+    expect(r().failure).toBeNull()
     expect(r().loading).toBe(false)
     expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(['POST /runs/new', 'GET /runners'])
   })

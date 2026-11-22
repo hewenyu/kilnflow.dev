@@ -40,7 +40,7 @@ func (e *webEnv) bind(c *client, login string) *client {
 	}
 	// GitHub 授权后浏览器回到回调地址
 	w := serve(e.mux, testReq{target: "/auth/github/callback?code=ok-" + login + "&state=" + url.QueryEscape(state), cookie: c.cookie, browser: true})
-	if flash := wantRedirect(e.t, "完成绑定", w, accountURL); !strings.Contains(flash, "已绑定 GitHub 账号 "+login) {
+	if flash := wantRedirect(e.t, "完成绑定", w, accountURL); !strings.Contains(flashZH(e.t, flash), "已绑定 GitHub 账号 "+login) {
 		e.t.Errorf("绑定后的提示 = %q", flash)
 	}
 	return e.sessionClient(sessionCookieOf(e.t, w))
@@ -107,10 +107,12 @@ func TestAccountBindFlow(t *testing.T) {
 	wantRedirect(t, "失效的 token 会话", e.get(tok, "/runs"), "/login?next=%2Fruns&reason=revoked")
 	body = serve(e.mux, testReq{target: "/login?reason=revoked"}).Body.String()
 	lp := pageData[loginData](t, body)
-	expect(t, "关闭后的登录页不应再提供 admin token", lp, !lp.TokenLogin, lp.Bound == "octocat", parsePage(t, body).OAuth, strings.Contains(lp.Notice, "登录已失效"))
+	expect(t, "关闭后的登录页不应再提供 admin token", lp, !lp.TokenLogin, lp.Bound == "octocat", parsePage(t, body).OAuth, strings.Contains(textZH(t, lp.Notice), "登录已失效"))
 	w := serve(e.mux, testReq{method: http.MethodPost, target: "/login", form: url.Values{"token": {testAdminToken}}})
 	wantStatus(t, "关闭后用 admin token 登录", w, http.StatusForbidden)
-	mustHave(t, "关闭后用 admin token 登录", w.Body.String(), "admin token 登录已关闭")
+	if lf := pageData[loginData](t, w.Body.String()); !strings.Contains(textZH(t, lf.Form.Errors[formGeneral]), "admin token 登录已关闭") {
+		t.Errorf("关闭后用 admin token 登录：%+v", lf.Form)
+	}
 	p = pageData[accountData](t, e.get(gh, accountURL).Body.String())
 	expect(t, "全部完成", p, p.Step == 4, p.Binding != nil && !p.Binding.TokenLogin)
 
@@ -143,7 +145,7 @@ func TestAccountBindRequiresSameSession(t *testing.T) {
 	// 另一个管理员（alice）的浏览器打开同一个授权回调：不绑定
 	w := serve(e.mux, testReq{target: "/auth/github/callback?code=ok-mallory&state=" + state, cookie: e.alice.cookie, browser: true})
 	wantStatus(t, "其他会话完成绑定", w, http.StatusBadRequest)
-	if p := pageData[errorPage](t, w.Body.String()); !strings.Contains(p.Heading, "绑定链接无效") {
+	if p := pageData[errorPage](t, w.Body.String()); !strings.Contains(textZH(t, p.Heading), "绑定链接无效") {
 		t.Errorf("其他会话完成绑定：%+v", p)
 	}
 	// 没有登录时也不绑定
@@ -168,7 +170,7 @@ func TestSessionRevokedWhenRemoved(t *testing.T) {
 	// 从 KILN_USERS 中移除后，已有会话在下一个请求就失效（不等会话到期）
 	delete(e.d.cfg.Users, "bob")
 	wantRedirect(t, "移除后", e.get(e.bob, "/runs"), "/login?next=%2Fruns&reason=revoked")
-	mustHave(t, "移除后的登录页", serve(e.mux, testReq{target: "/login?reason=revoked"}).Body.String(), "登录已失效")
+	mustHave(t, "移除后的登录页", pageTextZH(t, serve(e.mux, testReq{target: "/login?reason=revoked"}).Body.String()), "登录已失效")
 	// 从 KILN_ADMINS 改到 KILN_USERS：立即失去设置权限
 	delete(e.d.cfg.Admins, "alice")
 	e.d.cfg.Users["alice"] = true

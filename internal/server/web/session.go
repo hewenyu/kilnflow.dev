@@ -277,8 +277,8 @@ type loginPage struct {
 	Next string
 	// GitHubURL 是 GitHub 登录的入口（带上 Next）。
 	GitHubURL string
-	// Notice 是登录页顶部的说明（会话已过期、已失效、已退出）。
-	Notice string
+	// Notice 是登录页顶部的说明（会话已过期、已失效、已退出；消息）。
+	Notice uiText
 	// TokenLogin 表示可以用 admin token 登录（管理员绑定 GitHub 账号后可以关闭）。
 	TokenLogin bool
 	// Bound 是管理员绑定的 GitHub 账号（没有绑定时为空），关闭 token 登录后登录页提示用它登录。
@@ -311,14 +311,14 @@ func (d *Dashboard) pageLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	switch q.Get("reason") {
 	case reasonExpired:
-		p.Notice = "登录已过期，请重新登录。登录后会回到刚才的页面。"
+		p.Notice = message(msgLoginNoticeExpired)
 	case reasonRevoked:
-		p.Notice = "登录已失效：管理员调整了登录方式或账号权限（例如关闭了 admin token 登录）。请重新登录。"
+		p.Notice = message(msgLoginNoticeRevoked)
 	case reasonLogout:
-		p.Notice = "已退出登录。"
+		p.Notice = message(msgLoginNoticeLogout)
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	d.render(w, r, "login", "登录", p)
+	d.renderPage(w, r, "login", message(msgLoginTitle), p, http.StatusOK)
 }
 
 // handleLogin 用 admin token 登录。token 不正确时重新显示登录页（401），在字段旁说明，保留安全的 next，不回显 token；
@@ -334,15 +334,15 @@ func (d *Dashboard) handleLogin(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !p.TokenLogin:
 		status = http.StatusForbidden
-		p.Form.fail(formGeneral, "admin token 登录已关闭，请用 GitHub 登录。")
+		p.Form.failText(formGeneral, message(msgLoginErrAdminOff))
 	case tok == "":
-		p.Form.fail("token", "请填写 admin token。")
+		p.Form.failText("token", message(msgLoginErrAdminEmpty))
 	case !d.keys.ValidAdminToken(tok):
-		p.Form.fail("token", "admin token 不正确，没有登录。请检查是否完整复制（不含空格和换行）。")
+		p.Form.failText("token", message(msgLoginErrAdminWrong))
 	}
 	if p.Form.Failed() {
 		w.Header().Set("Cache-Control", "no-store")
-		d.renderStatus(w, r, "login", "登录", p, status)
+		d.renderPage(w, r, "login", message(msgLoginTitle), p, status)
 		return
 	}
 	se := session{Login: admin.TokenActor, Via: viaToken}
@@ -432,9 +432,8 @@ func (d *Dashboard) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.URL.Query().Get("next"))
 	if !d.oauthEnabled() {
 		d.showError(w, r, &errorPage{
-			Status: http.StatusNotFound, Heading: "没有启用 GitHub 登录",
-			Reason: "这个 Server 没有配置 GitHub 登录（KILN_GITHUB_CLIENT_ID）。管理员可以在登录页用 admin token 登录。",
-			Links:  []errorLink{loginLink("返回登录页", next, true)},
+			Status: http.StatusNotFound, Heading: message(msgErrOAuthOffHeading), Reason: message(msgErrOAuthOffReason),
+			Links: []errorLink{loginLink(msgErrLinkBackToLogin, next, true)},
 		})
 		return
 	}
@@ -454,9 +453,8 @@ func (d *Dashboard) handleOAuthCallback(w http.ResponseWriter, r *http.Request) 
 	purpose, next, ok2 := strings.Cut(rest, "|")
 	if raw == nil || err != nil || !ok1 || !ok2 {
 		d.showError(w, r, &errorPage{
-			Status: http.StatusBadRequest, Heading: "登录链接无效",
-			Reason: "GitHub 登录返回的参数无效或被修改过（例如打开了旧的或不完整的链接），没有登录。请回到登录页重新登录。",
-			Links:  []errorLink{loginLink("重新登录", "", true)},
+			Status: http.StatusBadRequest, Heading: message(msgErrOAuthBadHeading), Reason: message(msgErrOAuthBadReason),
+			Links: []errorLink{loginLink(msgErrLinkRelogin, "", true)},
 		})
 		return
 	}
@@ -464,23 +462,22 @@ func (d *Dashboard) handleOAuthCallback(w http.ResponseWriter, r *http.Request) 
 	binding := strings.HasPrefix(purpose, bindPurposePrefix)
 	if exp, err := strconv.ParseInt(expS, 10, 64); err != nil || time.Now().Unix() > exp {
 		d.showError(w, r, &errorPage{
-			Status: http.StatusBadRequest, Heading: "登录已过期",
-			Reason: fmt.Sprintf("从打开 GitHub 授权页到返回 Kiln 超过了 %d 分钟，没有完成。请重新操作。", int(oauthStateTTL/time.Minute)),
-			Links:  []errorLink{loginLink("重新登录", next, true)},
+			Status: http.StatusBadRequest, Heading: message(msgErrOAuthExpHeading),
+			Reason: message(msgErrOAuthExpReason, intArg(argCount, int64(oauthStateTTL/time.Minute))),
+			Links:  []errorLink{loginLink(msgErrLinkRelogin, next, true)},
 		})
 		return
 	}
 	if e := q.Get("error"); e != "" {
 		// 用户在 GitHub 上拒绝了授权（access_denied）等
 		d.log.Info("GitHub 授权没有完成", "error", shorten.Text(e, 100))
-		links := []errorLink{{Label: "重新用 GitHub 登录", URL: githubLoginURL(next), Primary: true}, loginLink("返回登录页", next, false)}
+		links := []errorLink{{Label: message(msgErrLinkGitHubRelogin), URL: githubLoginURL(next), Primary: true}, loginLink(msgErrLinkBackToLogin, next, false)}
 		if binding {
-			links = []errorLink{{Label: "返回登录与身份", URL: accountURL, Primary: true}}
+			links = []errorLink{{Label: message(msgErrLinkAccount), URL: accountURL, Primary: true}}
 		}
 		d.showError(w, r, &errorPage{
-			Status: http.StatusBadRequest, Heading: "没有完成 GitHub 授权",
-			Reason: "GitHub 没有完成授权（例如在授权页点了取消），没有登录或绑定。可以重新操作。",
-			Links:  links,
+			Status: http.StatusBadRequest, Heading: message(msgErrOAuthDenyHeading), Reason: message(msgErrOAuthDenyReason),
+			Links: links,
 		})
 		return
 	}
@@ -490,9 +487,8 @@ func (d *Dashboard) handleOAuthCallback(w http.ResponseWriter, r *http.Request) 
 	}
 	if browser, ok := strings.CutPrefix(purpose, loginPurposePrefix); !ok || !sameOAuthBrowser(r, browser) {
 		d.showError(w, r, &errorPage{
-			Status: http.StatusBadRequest, Heading: "登录链接无效",
-			Reason: "这个 GitHub 授权不是在当前浏览器中发起的（例如打开了别人发来的链接，或在另一个浏览器中打开了回调地址），没有登录。请在登录页重新用 GitHub 登录。",
-			Links:  []errorLink{{Label: "重新用 GitHub 登录", URL: githubLoginURL(next), Primary: true}, loginLink("返回登录页", next, false)},
+			Status: http.StatusBadRequest, Heading: message(msgErrOAuthBadHeading), Reason: message(msgErrOAuthBrowserReason),
+			Links: []errorLink{{Label: message(msgErrLinkGitHubRelogin), URL: githubLoginURL(next), Primary: true}, loginLink(msgErrLinkBackToLogin, next, false)},
 		})
 		return
 	}
@@ -508,9 +504,8 @@ func (d *Dashboard) handleOAuthCallback(w http.ResponseWriter, r *http.Request) 
 	if d.roleOf(bind, login, id) == "" {
 		d.log.Info("GitHub 账号没有权限登录", "login", login, "id", id)
 		d.showError(w, r, &errorPage{
-			Status: http.StatusForbidden, Heading: "这个 GitHub 账号没有权限",
-			Reason: fmt.Sprintf("GitHub 账号 %s 不是管理员绑定的账号，也不在 Kiln 的成员或管理员名单（KILN_USERS / KILN_ADMINS）中，没有登录。请联系管理员添加；要换一个账号，先在 GitHub 上退出再重新登录。", login),
-			Links:  []errorLink{loginLink("返回登录页", next, true)},
+			Status: http.StatusForbidden, Heading: message(msgErrOAuthNoAccHeading), Reason: message(msgErrOAuthNoAccReason, strArg(argLogin, login)),
+			Links: []errorLink{loginLink(msgErrLinkBackToLogin, next, true)},
 		})
 		return
 	}
@@ -528,9 +523,8 @@ func (d *Dashboard) exchangeOrFail(w http.ResponseWriter, r *http.Request, code,
 	ref := newErrorRef()
 	d.log.Warn("GitHub 登录失败", "ref", ref, "err", err)
 	d.showError(w, r, &errorPage{
-		Status: http.StatusBadGateway, Heading: "GitHub 登录失败", Ref: ref,
-		Reason: "Kiln 没能从 GitHub 取得你的账号信息（可能是网络问题、GitHub 暂时不可用，或授权码已经用过），没有完成。可以重试；问题持续出现时，请把错误编号告诉管理员。",
-		Links:  []errorLink{{Label: "重试 GitHub 登录", URL: githubLoginURL(next), Primary: true}, loginLink("返回登录页", next, false)},
+		Status: http.StatusBadGateway, Heading: message(msgErrOAuthFailHeading), Ref: ref, Reason: message(msgErrOAuthFailReason),
+		Links: []errorLink{{Label: message(msgErrLinkGitHubRetry), URL: githubLoginURL(next), Primary: true}, loginLink(msgErrLinkBackToLogin, next, false)},
 	})
 	return "", 0, false
 }

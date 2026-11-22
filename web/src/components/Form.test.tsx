@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import errorFixture from '../../dev/fixtures/error.json'
 import { RouterProvider } from '../app/router'
 import { LiveProvider } from '../app/live'
+import { LocaleProvider, storageKey, useLocale } from '../i18n/locale'
 import { deferred, envelope } from '../test/render'
 import { ConfirmForm } from './Form'
 
@@ -74,6 +75,40 @@ describe('ConfirmForm', () => {
     const dialog = await screen.findByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: '取消' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(posts).toBe(0)
+  })
+})
+
+describe('ConfirmForm 与语言切换', () => {
+  function Switch() {
+    const { setLocale } = useLocale()
+    return (
+      <button type="button" onClick={() => setLocale('en')}>
+        to-en
+      </button>
+    )
+  }
+
+  it('对话框打开时切换语言：对话框保持打开，默认按钮的文字随之切换', async () => {
+    window.localStorage.setItem(storageKey, 'zh-CN')
+    render(
+      <LocaleProvider>
+        <RouterProvider initial={envelope(errorFixture)}>
+          <LiveProvider>
+            <Switch />
+            <ConfirmForm action="/runs/7/cancel" button="取消运行" title="取消这个 run？" confirmLabel="确认取消">
+              取消后不能恢复。
+            </ConfirmForm>
+          </LiveProvider>
+        </RouterProvider>
+      </LocaleProvider>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '取消运行' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'to-en', hidden: true }))
+    expect(screen.getByRole('alertdialog')).toBe(dialog)
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
     expect(posts).toBe(0)
   })
 })

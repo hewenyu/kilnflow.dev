@@ -264,8 +264,10 @@ run / job / attempt 状态都用它，同 Actions、不自创：成功绿勾、�
 - `prefers-reduced-motion: reduce`：动画和过渡压到 0.01ms、只播一次；状态仍靠图标形状和颜色表达。
 
 ### Copy
-- 中文界面，Actions 术语保留英文（run、job、workflow、Runner、environment、secret、tag、pool、executor），Re-run 译"重跑"；中文与英文 / 数字间留空格（"6 个 job"）。
-- 相对时间（"13 分钟前"，悬停显示具体时间），耗时"3 分 30 秒"；长版本号和 SHA 缩短，完整值放 `title` 或复制按钮。
+- 界面支持简体中文（`zh-CN`，默认）和英文（`en`）：按用户手动选择、浏览器语言、`zh-CN` 的顺序决定，头像菜单和未登录页面右上角可以切换，切换立即生效、不重新加载页面。所有给人看的文字（含 `aria-label`、`title`、`placeholder`、表格的 `data-label`、确认对话框）都从词典取，不在组件中写死；服务端给消息键和原始参数，不拼文案。词典、写法和迁移步骤见 [docs/I18N.md](docs/I18N.md)。
+- 中文文案：Actions 术语保留英文（run、job、workflow、Runner、environment、secret、tag、pool、executor），Re-run 译"重跑"；中文与英文 / 数字间留空格（"6 个 job"）。英文文案用 GitHub 的说法（"Re-run"、"In progress"、"Queued"），句首大写，按钮用动词开头。
+- 原始内容不翻译：日志、仓库名、分支 / tag / commit 标题、job 名、产物名、AI 报告和外部文档正文。
+- 相对时间（"13 分钟前" / "13 minutes ago"，悬停显示具体时间），耗时"3 分 30 秒" / "3m 30s"；日期时间按浏览器的时区和语言格式化；长版本号和 SHA 缩短，完整值放 `title` 或复制按钮。
 - 按钮动词开头并说清对象（"重跑这个 job""取消运行""升级到 0.1.44…"）。
 - 状态、空状态、失败都给原因和下一步。
 
@@ -276,3 +278,4 @@ run / job / attempt 状态都用它，同 Actions、不自创：成功绿勾、�
 - **Do** 先找 GitHub 上对应的页面和 Primer 组件，照它的结构、图标和说法做；Primer 有的组件不自己写。
 - **Don't** 在窑形标识和名字之外加 Kiln 自己的品牌色、插画或展示字体；不用 emoji 或字符代替 Octicons。
 - **Don't** 显示 secret、token 的值，或在表单出错后回填它们。
+- **Don't** 用翻译后的文字判断状态或样式（例如 `text === '已过期'`）：用状态值或服务端给的语义字段。

@@ -154,7 +154,7 @@ func TestSessionValidation(t *testing.T) {
 	relogin.cookie = cookieFor(e.d, "alice", time.Now().Add(2*time.Hour))
 	w := e.post(relogin, "/runners/mac-1/drain", nil)
 	wantStatus(t, "旧会话的 CSRF", w, http.StatusForbidden)
-	mustHave(t, "旧会话的 CSRF", w.Body.String(), "页面已过期")
+	mustHave(t, "旧会话的 CSRF", pageTextZH(t, w.Body.String()), "页面已过期")
 
 	// 退出只接受 POST 并校验 CSRF：其他网站不能让用户被动退出
 	w = serve(e.mux, testReq{target: "/logout", cookie: e.alice.cookie})

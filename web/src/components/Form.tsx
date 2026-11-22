@@ -3,6 +3,7 @@ import { Button, ConfirmationDialog, IconButton, type ButtonProps } from '@prime
 import { createContext, useContext, useEffect, useRef, useState, type SyntheticEvent, type ReactNode } from 'react'
 import { useRefreshLock } from '../app/live'
 import { useRouter } from '../app/router'
+import { useT } from '../i18n/locale'
 
 // 表单：仍按 application/x-www-form-urlencoded 提交给服务端（与没有前端时相同的地址和字段），由前端发请求并按结果跳转。
 
@@ -120,7 +121,7 @@ export function ConfirmForm({
   confirmLabel,
   danger = true,
   icon,
-  cancelLabel = '取消',
+  cancelLabel,
 }: {
   action: string
   fields?: Record<string, string>
@@ -131,10 +132,11 @@ export function ConfirmForm({
   children?: ReactNode
   confirmLabel: string
   danger?: boolean
-  /** 对话框中不执行操作的按钮；操作本身是"取消…"时用"返回"之类，避免两个"取消"。 */
+  /** 对话框中不执行操作的按钮（默认"取消"）；操作本身是"取消…"时用"返回"之类，避免两个"取消"。 */
   cancelLabel?: string
 }) {
   const { submit } = useRouter()
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   useRefreshLock(open || busy)
@@ -176,7 +178,7 @@ export function ConfirmForm({
           title={title}
           onClose={onClose}
           confirmButtonContent={confirmLabel}
-          cancelButtonContent={cancelLabel}
+          cancelButtonContent={cancelLabel ?? t('form.cancel')}
           confirmButtonType={danger ? 'danger' : 'primary'}
           confirmButtonLoading={busy}
         >

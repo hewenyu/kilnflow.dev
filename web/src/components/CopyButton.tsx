@@ -1,9 +1,11 @@
 import { CheckIcon, CopyIcon } from '@primer/octicons-react'
 import { IconButton } from '@primer/react'
 import { useEffect, useState } from 'react'
+import { useT } from '../i18n/locale'
 
-/** CopyButton 把 value 复制到剪贴板；复制后短暂显示对勾，并告诉读屏软件"已复制"。 */
-export function CopyButton({ value, label = '复制' }: { value: string; label?: string }) {
+/** CopyButton 把 value 复制到剪贴板；复制后短暂显示对勾，并告诉读屏软件"已复制"。label 默认是"复制"。 */
+export function CopyButton({ value, label }: { value: string; label?: string }) {
+  const t = useT()
   const [state, setState] = useState<'' | 'done' | 'failed'>('')
   useEffect(() => {
     if (state === '') return
@@ -19,7 +21,7 @@ export function CopyButton({ value, label = '复制' }: { value: string; label?:
         () => setState('failed'),
       )
   }
-  const text = state === 'done' ? '已复制' : state === 'failed' ? '复制失败，请手动复制' : label
+  const text = state === 'done' ? t('copy.done') : state === 'failed' ? t('copy.failed') : (label ?? t('copy.label'))
   return (
     <>
       <IconButton

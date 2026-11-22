@@ -37,6 +37,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // 固定时区：时间格式化的用例不随运行测试的机器变化（Asia/Shanghai 不是 UTC，能发现误用 UTC 的代码）
+    env: { TZ: 'Asia/Shanghai' },
     css: { modules: { classNameStrategy: 'non-scoped' } },
     // Primer React 的模块直接 import CSS，需要由 vite 处理
     server: { deps: { inline: [/@primer\/react/] } },

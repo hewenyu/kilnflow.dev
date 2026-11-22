@@ -94,9 +94,8 @@ func (d *Dashboard) finishBind(w http.ResponseWriter, r *http.Request, fingerpri
 	se := d.getSession(r)
 	if se == nil || !se.Admin() || fingerprint != d.bindFingerprint(se) {
 		d.showError(w, r, &errorPage{
-			Status: http.StatusBadRequest, Heading: "绑定链接无效",
-			Reason: "这个 GitHub 授权不是由当前登录的管理员发起的（例如在另一个浏览器中打开了链接，或期间重新登录过），没有绑定。请在 设置 → 登录与身份 中重新绑定。",
-			Links:  []errorLink{{Label: "返回登录与身份", URL: accountURL, Primary: true}},
+			Status: http.StatusBadRequest, Heading: message(msgErrBindBadHeading), Reason: message(msgErrBindBadReason),
+			Links: []errorLink{{Label: message(msgErrLinkAccount), URL: accountURL, Primary: true}},
 		})
 		return
 	}
@@ -109,7 +108,7 @@ func (d *Dashboard) finishBind(w http.ResponseWriter, r *http.Request, fingerpri
 		return
 	}
 	d.setSession(w, session{Login: login, ID: id, Via: viaGitHub})
-	d.flashBack(w, r, accountURL, fmt.Sprintf("已绑定 GitHub 账号 %s，现在以 %s 的身份登录。", login, login))
+	d.flashMsg(w, r, accountURL, message(msgAccountBound, strArg(argLogin, login)))
 }
 
 // postUnbind 解除绑定，同时恢复 admin token 登录。当前会话是绑定账号且不在 KILN_ADMINS 中时，随即失去管理员权限。
@@ -122,7 +121,7 @@ func (d *Dashboard) postUnbind(w http.ResponseWriter, r *http.Request, se *sessi
 		d.preconditionOrError(w, r, accountURL, "没有解除绑定", err)
 		return
 	}
-	d.flashBack(w, r, accountURL, "已解除绑定，admin token 登录已恢复。")
+	d.flashMsg(w, r, accountURL, message(msgAccountUnbound))
 }
 
 // postTokenLogin 开启或关闭 admin token 登录。关闭要求当前会话是用绑定的 GitHub 账号通过 GitHub 登录的。

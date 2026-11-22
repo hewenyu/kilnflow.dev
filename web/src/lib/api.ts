@@ -1,3 +1,4 @@
+import { msg, type Text } from '../i18n/messages'
 import { envelopeSchema, redirectSchema, type Envelope } from './envelope'
 
 // 页面数据的请求：带请求头 X-Kiln-UI: 1，服务端返回页面数据或重定向（JSON）。
@@ -5,9 +6,9 @@ import { envelopeSchema, redirectSchema, type Envelope } from './envelope'
 export type Fetched =
   | { kind: 'page'; env: Envelope }
   | { kind: 'redirect'; to: string }
-  | { kind: 'error'; status: number; message: string }
+  | { kind: 'error'; status: number; message: Text }
 
-const networkError = '连接不上 Kiln Server。检查网络后刷新页面重试。'
+// 错误说明是消息（不是译好的文字）：显示时按当前语言翻译，切换语言后立即更新。
 /** 错误说明最多显示的字符数。 */
 const maxErrorText = 500
 
@@ -41,24 +42,24 @@ export async function fetchPage({
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err
-    return { kind: 'error', status: 0, message: networkError }
+    return { kind: 'error', status: 0, message: msg('api.network') }
   }
   const type = res.headers.get('Content-Type') ?? ''
   if (!type.includes('application/json')) {
-    // 只显示纯文本的说明（kiln-server 的 http.Error）；反向代理的 HTML 错误页等不能把标记原样显示给用户
+    // 只显示纯文本的说明（kiln-server 的 http.Error，原样显示）；反向代理的 HTML 错误页等不能把标记原样显示给用户
     const text = type.startsWith('text/plain') ? (await res.text().catch(() => '')).trim().slice(0, maxErrorText) : ''
-    return { kind: 'error', status: res.status, message: text || `服务器返回了 ${res.status}，请稍后重试。` }
+    return { kind: 'error', status: res.status, message: text || msg('api.status', { status: res.status }) }
   }
   let json: unknown
   try {
     json = await res.json()
   } catch {
-    return { kind: 'error', status: res.status, message: '服务器返回的页面数据无法解析，请刷新页面重试。' }
+    return { kind: 'error', status: res.status, message: msg('api.unparsable') }
   }
   const redirect = redirectSchema.safeParse(json)
   if (redirect.success) return { kind: 'redirect', to: redirect.data.Redirect }
   const env = envelopeSchema.safeParse(json)
-  if (!env.success) return { kind: 'error', status: res.status, message: '服务器返回的页面数据格式不对，请刷新页面重试。' }
+  if (!env.success) return { kind: 'error', status: res.status, message: msg('api.malformed') }
   return { kind: 'page', env: env.data }
 }
 

@@ -162,3 +162,12 @@
     padding-top: 16px;
   }
 }
+
+/* 未登录页面（登录页、错误页）右上角的语言切换 */
+.localeSwitch {
+  display: flex;
+  justify-content: flex-end;
+  max-width: var(--kiln-container);
+  margin: 0 auto;
+  padding: 8px 16px 0;
+}

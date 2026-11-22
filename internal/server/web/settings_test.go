@@ -116,7 +116,7 @@ func TestSettings_AdminOnly(t *testing.T) {
 		wantStatus(t, "管理员打开 "+target, e.get(e.alice, target), http.StatusOK)
 		w := e.get(e.bob, target)
 		wantStatus(t, "成员打开 "+target, w, http.StatusForbidden)
-		mustHave(t, "成员打开 "+target, w.Body.String(), "需要管理员权限")
+		mustHave(t, "成员打开 "+target, pageTextZH(t, w.Body.String()), "需要管理员权限")
 	}
 	// 成员的写请求一律拒绝，不产生任何修改
 	for _, target := range []string{

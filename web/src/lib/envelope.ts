@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { parseText, type Text } from '../i18n/messages'
 
 // 服务端返回的页面数据（internal/server/web/ui.go 的 uiPage 和 uiRedirect）。
 
@@ -12,10 +13,17 @@ export const sessionSchema = z.object({
 })
 export type Session = z.infer<typeof sessionSchema>
 
+/**
+ * textSchema 是服务端给的一段文字：字符串原样显示，{id, params} 是按当前语言显示的消息（见 i18n/messages.ts）。
+ * 不会校验失败：格式不对的消息显示兜底说明，不让整页打不开。
+ */
+export const textSchema = z.unknown().transform((v): Text => parseText(v ?? ''))
+
 export const envelopeSchema = z.object({
   /** 页面名称，决定用哪个页面组件。 */
   Page: z.string(),
-  Title: z.string(),
+  /** 页面标题（document.title）。 */
+  Title: textSchema,
   /** 当前所在的导航标签（overview、runs、merge_queue、ai_dev、runners、settings、login、error）。 */
   Nav: z.string(),
   Status: z.number(),
@@ -25,7 +33,8 @@ export const envelopeSchema = z.object({
   OAuth: z.boolean(),
   /** 正在进行或排队的 run 数。 */
   Active: z.number(),
-  Flash: z.string(),
+  /** 跳转后显示一次的提示（服务端校验过的 ?flash=）；空串表示没有。 */
+  Flash: textSchema,
   Data: z.unknown(),
 })
 export type Envelope = z.infer<typeof envelopeSchema>
@@ -44,15 +53,16 @@ export function list<T extends z.ZodType>(item: T) {
 export const formStateSchema = z
   .object({
     Values: z.record(z.string(), z.string()).nullable(),
-    Errors: z.record(z.string(), z.string()).nullable(),
+    Errors: z.record(z.string(), textSchema).nullable(),
     Failed: z.boolean(),
   })
   .nullable()
 export type FormState = z.infer<typeof formStateSchema>
 
 /** fieldError 返回服务端回填的字段错误（没有时为 undefined）；name 为 "_" 时是整个表单的错误。 */
-export function fieldError(form: FormState, name: string): string | undefined {
-  return form?.Errors?.[name]
+export function fieldError(form: FormState, name: string): Text | undefined {
+  const e = form?.Errors?.[name]
+  return e === '' ? undefined : e
 }
 
 /** fieldValue 返回服务端回填的字段值（没有时为空串）。 */

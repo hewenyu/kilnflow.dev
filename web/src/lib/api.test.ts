@@ -23,13 +23,13 @@ describe('fetchPage', () => {
   it('反向代理返回的 HTML 错误页不把标记显示给用户，只说明状态码', async () => {
     const html = '<html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center></body></html>'
     reply(new Response(html, { status: 502, headers: { 'Content-Type': 'text/html' } }))
-    expect(await fetchPage({ url: '/runs' })).toEqual({ kind: 'error', status: 502, message: '服务器返回了 502，请稍后重试。' })
+    expect(await fetchPage({ url: '/runs' })).toEqual({ kind: 'error', status: 502, message: { id: 'api.status', params: { status: 502 } } })
   })
 
   it('过长的纯文本说明截断', async () => {
     reply(new Response('x'.repeat(2000), { status: 500, headers: { 'Content-Type': 'text/plain' } }))
     const r = await fetchPage({ url: '/runs' })
-    expect(r.kind === 'error' ? r.message.length : 0).toBe(500)
+    expect(r.kind === 'error' && typeof r.message === 'string' ? r.message.length : 0).toBe(500)
   })
 })
 

@@ -1,4 +1,11 @@
-// 时间、摘要、状态和事件的中文说明（从 Go 模板函数移植，规则与服务端一致）。
+import { formatClock } from '../i18n/datetime'
+import { defaultLocale, type Locale } from '../i18n/locale-id'
+import { isMsgKey, msg, translate, type MsgKey, type Params } from '../i18n/messages'
+
+// 时间、摘要、状态和事件的说明（从 Go 模板函数移植，规则与服务端一致）。
+// 需要文字的函数都显式接收语言 locale（React 组件经 useLocale 取得）；不传时为默认语言 zh-CN（还没有迁移的页面）。
+
+const tr = (locale: Locale, id: MsgKey, params?: Params) => translate(locale, msg(id, params))
 
 /** Unix 秒，或 Go 编码的时间字符串（RFC 3339）。0、空串、null 和 Go 的零值时间都表示"没有"。 */
 export type TimeLike = number | string | null | undefined
@@ -14,11 +21,11 @@ export function toDate(t: TimeLike): Date | null {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** clock 把时间格式化为本地时间（精确到分钟），例如 2026-11-05 14:03。 */
-export function clock(t: TimeLike): string {
+/** clock 把时间格式化为本地时间（精确到分钟），例如 2026-11-05 14:03、Nov 5, 2026, 2:03 PM。 */
+export function clock(t: TimeLike, locale: Locale = defaultLocale): string {
   const d = toDate(t)
   if (!d) return ''
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return formatClock(locale, d)
 }
 
 /** timeOfDay 把时间格式化为本地的时:分:秒，例如 14:03:09。 */
@@ -29,24 +36,24 @@ export function timeOfDay(t: TimeLike): string {
 }
 
 /** ago 把时间格式化为"多久之前"；48 小时以前的显示日期和时间。 */
-export function ago(t: TimeLike, now: number = Date.now()): string {
+export function ago(t: TimeLike, now: number = Date.now(), locale: Locale = defaultLocale): string {
   const d = toDate(t)
   if (!d) return ''
   const s = Math.max(0, Math.floor((now - d.getTime()) / 1000))
-  if (s < 60) return `${s} 秒前`
-  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`
-  if (s < 48 * 3600) return `${Math.floor(s / 3600)} 小时前`
-  return clock(d.getTime() / 1000)
+  if (s < 60) return tr(locale, 'time.secondsAgo', { count: s })
+  if (s < 3600) return tr(locale, 'time.minutesAgo', { count: Math.floor(s / 60) })
+  if (s < 48 * 3600) return tr(locale, 'time.hoursAgo', { count: Math.floor(s / 3600) })
+  return formatClock(locale, d)
 }
 
-/** dur 返回从 a 到 b（Unix 秒）的时长，例如"45 秒""3 分 26 秒""1 小时 5 分"；b 为 0 表示到现在，a 为 0 时返回空串。 */
-export function dur(a: number, b: number, now: number = Date.now()): string {
+/** dur 返回从 a 到 b（Unix 秒）的时长，例如"45 秒""3 分 26 秒""1 小时 5 分"（en：45s、3m 26s、1h 5m）；b 为 0 表示到现在，a 为 0 时返回空串。 */
+export function dur(a: number, b: number, now: number = Date.now(), locale: Locale = defaultLocale): string {
   if (a === 0) return ''
   const end = b === 0 ? Math.floor(now / 1000) : b
   const s = Math.max(end - a, 0)
-  if (s < 60) return `${s} 秒`
-  if (s < 3600) return `${Math.floor(s / 60)} 分 ${s % 60} 秒`
-  return `${Math.floor(s / 3600)} 小时 ${Math.floor((s % 3600) / 60)} 分`
+  if (s < 60) return tr(locale, 'duration.seconds', { s })
+  if (s < 3600) return tr(locale, 'duration.minutes', { m: Math.floor(s / 60), s: s % 60 })
+  return tr(locale, 'duration.hours', { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60) })
 }
 
 /** short 返回 commit SHA、action key 等摘要的前 12 个字符。 */
@@ -108,6 +115,12 @@ export function labelVariant(t: Tone): 'success' | 'danger' | 'attention' | 'sec
   }
 }
 
+/** label 返回 group.value 的说明（例如 runState.queued）；value 为空时用 emptyKey，词典中没有时原样返回 value。 */
+function label(locale: Locale, group: string, value: string, emptyKey?: string): string {
+  const key = `${group}.${value === '' && emptyKey ? emptyKey : value}`
+  return isMsgKey(key) ? tr(locale, key) : value
+}
+
 /** stateTone 返回 job、run、Runner、outbox 等状态的大类。 */
 export function stateTone(state: string): Tone {
   switch (state) {
@@ -133,79 +146,30 @@ export function stateTone(state: string): Tone {
   }
 }
 
-/** runState 返回 run 状态的中文说明；未知状态原样返回。 */
-export function runState(state: string): string {
-  switch (state) {
-    case 'queued':
-      return '排队中'
-    case 'active':
-      return '运行中'
-    case 'succeeded':
-      return '成功'
-    case 'failed':
-      return '失败'
-    case 'cancelled':
-      return '已取消'
-    case 'skipped':
-      return '已跳过'
-    default:
-      return state
-  }
+/** runState 返回 run 状态的说明；未知的值原样返回。 */
+export function runState(state: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'runState', state)
 }
 
-/** jobState 返回 job 状态的中文说明；未知状态原样返回。 */
-export function jobState(state: string): string {
-  switch (state) {
-    case 'waiting':
-      return '等待上游'
-    case 'pending':
-      return '排队中'
-    case 'running':
-      return '执行中'
-    case 'succeeded':
-      return '成功'
-    case 'failed':
-      return '失败'
-    case 'timed_out':
-      return '超时'
-    case 'cancelled':
-      return '已取消'
-    case 'skipped':
-      return '已跳过'
-    default:
-      return state
-  }
+/** jobState 返回 job 状态的说明；未知的值原样返回。 */
+export function jobState(state: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'jobState', state)
 }
 
 /** jobStatesSummary 返回一组 job 状态的文字说明，例如"4 个 job：成功 1，执行中 2，等待上游 1"。 */
-export function jobStatesSummary(states: readonly string[]): string {
+export function jobStatesSummary(states: readonly string[], locale: Locale = defaultLocale): string {
   const counts = new Map<string, number>()
   for (const s of states) {
-    const l = jobState(s)
+    const l = jobState(s, locale)
     counts.set(l, (counts.get(l) ?? 0) + 1)
   }
-  const parts = Array.from(counts, ([l, n]) => `${l} ${n}`)
-  return `${states.length} 个 job：${parts.join('，')}`
+  const parts = Array.from(counts, ([l, n]) => tr(locale, 'jobSummary.part', { label: l, count: n }))
+  return tr(locale, 'jobSummary.text', { count: states.length, parts: parts.join(tr(locale, 'list.separator')) })
 }
 
-/** outcome 返回 attempt 结果的中文说明；空值表示还在执行。 */
-export function outcome(o: string): string {
-  switch (o) {
-    case '':
-      return '执行中'
-    case 'succeeded':
-      return '成功'
-    case 'failed':
-      return '失败'
-    case 'infra_error':
-      return '基础设施错误'
-    case 'cancelled':
-      return '已取消'
-    case 'timed_out':
-      return '超时'
-    default:
-      return o
-  }
+/** outcome 返回 attempt 结果（空值表示还在执行）的说明；未知的值原样返回。 */
+export function outcome(o: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'outcome', o, 'running')
 }
 
 /** outcomeTone 返回 attempt 结果的大类。 */
@@ -224,20 +188,9 @@ export function outcomeTone(o: string): Tone {
   }
 }
 
-/** eventLabel 返回触发事件的中文说明；未知事件原样返回。 */
-export function eventLabel(event: string): string {
-  switch (event) {
-    case 'push':
-      return '推送'
-    case 'pull_request':
-      return 'PR'
-    case 'workflow_dispatch':
-      return '手动触发'
-    case 'schedule':
-      return '定时'
-    default:
-      return event
-  }
+/** eventLabel 返回触发事件的说明；未知的值原样返回。 */
+export function eventLabel(event: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'event', event)
 }
 
 /** refName 返回 ref 的简短名称，例如 refs/heads/main → main、refs/tags/v1.2.0 → v1.2.0。 */
@@ -256,38 +209,18 @@ export function refKind(ref: string): 'branch' | 'tag' | null {
 }
 
 /** rerunLabel 返回第 n 次运行的名称：0 是"首次运行"，其余是"第 n 次重跑"。 */
-export function rerunLabel(n: number): string {
-  return n === 0 ? '首次运行' : `第 ${n} 次重跑`
+export function rerunLabel(n: number, locale: Locale = defaultLocale): string {
+  return n === 0 ? tr(locale, 'rerun.first') : tr(locale, 'rerun.nth', { n })
 }
 
-/** releaseState 返回发布状态的中文说明。 */
-export function releaseState(state: string): string {
-  switch (state) {
-    case 'running':
-      return '发布中'
-    case 'succeeded':
-      return '已发布'
-    case 'failed':
-      return '发布失败'
-    default:
-      return state
-  }
+/** releaseState 返回发布状态的说明；未知的值原样返回。 */
+export function releaseState(state: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'releaseState', state)
 }
 
-/** targetState 返回发布目标状态的中文说明。 */
-export function targetState(state: string): string {
-  switch (state) {
-    case 'pending':
-      return '未开始'
-    case 'staged':
-      return '已暂存，未发布'
-    case 'committed':
-      return '已发布'
-    case 'failed':
-      return '失败'
-    default:
-      return state
-  }
+/** targetState 返回发布目标状态的说明；未知的值原样返回。 */
+export function targetState(state: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'targetState', state)
 }
 
 /** targetTone 返回发布目标状态的大类。 */
@@ -304,34 +237,14 @@ export function targetTone(state: string): Tone {
   }
 }
 
-/** targetKind 返回发布目标种类的中文说明。 */
-export function targetKind(kind: string): string {
-  switch (kind) {
-    case 'github':
-      return 'GitHub Release'
-    case 'upload':
-      return 'HTTP 上传'
-    case 'image':
-      return '容器镜像'
-    case 'npm':
-      return 'npm 包'
-    default:
-      return kind
-  }
+/** targetKind 返回发布目标种类的说明；未知的值原样返回。 */
+export function targetKind(kind: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'targetKind', kind)
 }
 
-/** outboxState 返回 outbox 投递状态的中文说明。 */
-export function outboxState(state: string): string {
-  switch (state) {
-    case 'pending':
-      return '等待投递'
-    case 'done':
-      return '已投递'
-    case 'dead':
-      return '已放弃（重试用尽）'
-    default:
-      return state
-  }
+/** outboxState 返回 outbox 投递状态的说明；未知的值原样返回。 */
+export function outboxState(state: string, locale: Locale = defaultLocale): string {
+  return label(locale, 'outboxState', state)
 }
 
 /** tokenActor 是还没有绑定 GitHub 账号时 admin token 的操作者（与服务端 admin.TokenActor 相同）。 */

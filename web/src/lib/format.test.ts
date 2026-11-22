@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ago, avatarHue, avatarURL, dur, jobStatesSummary, refKind, refName, shortDigest, shortVersion, size, stateTone, timeOfDay } from './format'
+import { ago, avatarHue, avatarURL, clock, dur, eventLabel, jobState, jobStatesSummary, outcome, refKind, refName, rerunLabel, runState, shortDigest, shortVersion, size, stateTone, timeOfDay } from './format'
 
 describe('format', () => {
   it('timeOfDay 显示本地的时:分:秒，没有时间时为空', () => {
@@ -63,5 +63,52 @@ describe('format', () => {
     expect(avatarURL('admin')).toBeNull()
     expect(avatarURL('dependabot[bot]')).toBeNull()
     expect(avatarHue('Alice')).toBe(avatarHue('alice'))
+  })
+
+  // 测试固定在 Asia/Shanghai 时区（vite.config.ts 的 test.env.TZ）：结果不随运行测试的机器变化
+  describe('按语言', () => {
+    const now = Date.UTC(2026, 10, 5, 12, 0, 0)
+    const s = (sec: number) => (now - sec * 1000) / 1000
+
+    it('ago：en 区分单复数，48 小时以前显示本地日期', () => {
+      expect(ago(s(1), now, 'en')).toBe('1 second ago')
+      expect(ago(s(0), now, 'en')).toBe('0 seconds ago')
+      expect(ago(s(2 * 60), now, 'en')).toBe('2 minutes ago')
+      expect(ago(s(3600), now, 'en')).toBe('1 hour ago')
+      expect(ago(s(49 * 3600), now, 'en')).toBe('Nov 3, 2026, 7:00 PM')
+      expect(ago(s(49 * 3600), now, 'zh-CN')).toBe('2026-11-03 19:00')
+    })
+
+    it('clock 按浏览器时区和语言格式化', () => {
+      const t = Date.UTC(2026, 0, 2, 3, 4, 0) / 1000
+      expect(clock(t, 'zh-CN')).toBe('2026-01-02 11:04')
+      expect(clock(t, 'en')).toBe('Jan 2, 2026, 11:04 AM')
+      expect(clock(0, 'en')).toBe('')
+    })
+
+    it('dur 的英文写法', () => {
+      expect(dur(100, 145, 0, 'en')).toBe('45s')
+      expect(dur(100, 306, 0, 'en')).toBe('3m 26s')
+      expect(dur(100, 100 + 3900, 0, 'en')).toBe('1h 5m')
+    })
+
+    it('状态、事件和重跑的名称；未知的值原样返回', () => {
+      expect(runState('active', 'en')).toBe('In progress')
+      expect(jobState('timed_out', 'en')).toBe('Timed out')
+      expect(outcome('', 'en')).toBe('In progress')
+      expect(outcome('', 'zh-CN')).toBe('执行中')
+      expect(eventLabel('workflow_dispatch', 'en')).toBe('Manual')
+      expect(runState('mystery', 'en')).toBe('mystery')
+      expect(rerunLabel(0, 'en')).toBe('First run')
+      expect(rerunLabel(2, 'en')).toBe('Re-run 2')
+    })
+
+    it.each([
+      [[], '0 jobs: '],
+      [['succeeded'], '1 job: Succeeded 1'],
+      [['succeeded', 'running'], '2 jobs: Succeeded 1, In progress 1'],
+    ])('job 状态汇总的复数：%j', (states, want) => {
+      expect(jobStatesSummary(states, 'en')).toBe(want)
+    })
   })
 })

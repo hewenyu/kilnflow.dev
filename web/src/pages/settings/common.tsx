@@ -7,6 +7,7 @@ import { Ago } from '../../components/Time'
 import { fieldError, fieldValue, type FormState } from '../../lib/envelope'
 import type { DockerStatus, DockerView, EnvView, NpmView } from './schemas'
 import css from './common.module.css'
+import { Msg } from '../../i18n/locale'
 
 export { css as settingsCss }
 
@@ -24,9 +25,10 @@ export function ScopeFields({ account, repo, env }: { account: string; repo: str
 /** FormAlert 是表单顶部的错误摘要（表单没有保存时）。 */
 export function FormAlert({ form }: { form: FormState }) {
   if (!form?.Failed) return null
+  const general = fieldError(form, '_')
   return (
     <Callout tone="critical" title="没有保存。">
-      {fieldError(form, '_') ?? '请按字段旁的提示修改后再保存。'}
+      {general ? <Msg text={general} /> : '请按字段旁的提示修改后再保存。'}
     </Callout>
   )
 }
@@ -109,7 +111,7 @@ export function TextField({
         />
       )}
       {caption && <FormControl.Caption>{caption}</FormControl.Caption>}
-      {err && <FormControl.Validation variant="error">{err}</FormControl.Validation>}
+      {err && <FormControl.Validation variant="error"><Msg text={err} /></FormControl.Validation>}
     </FormControl>
   )
 }
