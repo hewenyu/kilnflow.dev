@@ -289,7 +289,7 @@ func TestPageAIRequest(t *testing.T) {
 
 	w := e.get(e.bob, aiRequestURL(id))
 	wantStatus(t, "AI 请求详情", w, http.StatusOK)
-	if pg := parsePage(t, w.Body.String()); pg.Page != "ai_request" || pg.Nav != "ai_requests" || pg.Title != "AI 审计请求 #"+strconv.FormatInt(id, 10) {
+	if pg := parsePage(t, w.Body.String()); pg.Page != "ai_request" || pg.Nav != "ai_requests" || textZH(t, pg.Title) != "AI 审计请求 #"+strconv.FormatInt(id, 10) {
 		t.Fatalf("页面 = %q，导航 = %q，标题 = %q", pg.Page, pg.Nav, pg.Title)
 	}
 	p := pageData[aiRequestPage](t, w.Body.String())

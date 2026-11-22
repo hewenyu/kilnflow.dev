@@ -170,7 +170,7 @@ func TestPostRunnerCachePurge(t *testing.T) {
 	// 成员、CSRF 不对：拒绝，不写入
 	w := e.post(e.bob, "/runners/cache/arm/purge", url.Values{"kind": {"toolcache"}})
 	wantStatus(t, "成员", w, http.StatusForbidden)
-	mustHave(t, "页面", w.Body.String(), "需要管理员权限")
+	mustHave(t, "页面", pageTextZH(t, w.Body.String()), "需要管理员权限")
 	w = e.post(e.alice, "/runners/cache/arm/purge", url.Values{"csrf": {e.bob.csrf}})
 	wantStatus(t, "其他会话的 CSRF", w, http.StatusForbidden)
 	if n := purges(); n != 0 {

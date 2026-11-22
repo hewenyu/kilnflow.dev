@@ -7,6 +7,7 @@ import { Subhead } from '../components/Subhead'
 import { fieldError, fieldValue, formStateSchema, list } from '../lib/envelope'
 import { Crumbs, FormAlert, TextField, settingsCss } from './settings/common'
 import css from './settings_env_new.module.css'
+import { Msg } from '../i18n/locale'
 
 // 新建 environment：作用域（账号级，或从仓库选择器选中的仓库）、名称和可选的保护规则。
 
@@ -49,7 +50,7 @@ function SettingsEnvNew({ data }: PageProps<Data>) {
           <FormControl.Caption>
             要建在某个仓库上？<Link href="/settings/repos?pick=env">{data.Repo ? '换一个仓库' : '搜索并选择仓库'}</Link>
           </FormControl.Caption>
-          {scopeErr && <FormControl.Validation variant="error">{scopeErr}</FormControl.Validation>}
+          {scopeErr && <FormControl.Validation variant="error"><Msg text={scopeErr} /></FormControl.Validation>}
         </FormControl>
         <TextField
           form={form}

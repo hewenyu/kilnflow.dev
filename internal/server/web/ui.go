@@ -29,8 +29,9 @@ var uiFS embed.FS
 // uiPage 是一个页面的数据。
 type uiPage struct {
 	// Page 是页面名称（前端据此选择页面组件），Status 是 HTTP 状态码。
-	Page   string
-	Title  string
+	Page string
+	// Title 是页面标题（消息或原样的文字，见 text.go）。
+	Title  uiText
 	Nav    string
 	Status int
 	// Session 是当前登录的身份；未登录时为 nil。
@@ -40,8 +41,9 @@ type uiPage struct {
 	OAuth bool
 	// Active 是正在进行或排队的 run 数（导航中"运行"旁的数字）。
 	Active int
-	Flash  string
-	Data   any
+	// Flash 是跳转后显示一次的提示（地址中的 ?flash=，经 parseFlash 校验）。
+	Flash uiText
+	Data  any
 }
 
 // uiSession 是页面上显示的当前身份（不含会话 cookie 中的其他内容）。
@@ -105,8 +107,10 @@ func (d *Dashboard) page(h http.HandlerFunc) http.HandlerFunc {
 }
 
 // indexPlaceholder 是前端没有构建时（只用 go build，没有先执行 make web）返回的页面。
+// 占位页不依赖前端的词典（docs/I18N.md）：同时写中文和英文。
 const indexPlaceholder = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Kiln</title></head>
-<p>Dashboard 的前端没有构建进这个 kiln-server：在仓库根目录执行 <code>make web</code>，再重新构建 kiln-server。</p></html>`
+<p>Dashboard 的前端没有构建进这个 kiln-server：在仓库根目录执行 <code>make web</code>，再重新构建 kiln-server。</p>
+<p lang="en">The Dashboard frontend is not built into this kiln-server: run <code>make web</code> in the repository root, then rebuild kiln-server.</p></html>`
 
 // serveIndex 返回前端的 index.html（状态码 status）。index.html 引用的脚本和样式带内容摘要，index.html 本身每次向服务端确认。
 func (d *Dashboard) serveIndex(w http.ResponseWriter, status int) { d.serveIndexWith(w, status, nil) }

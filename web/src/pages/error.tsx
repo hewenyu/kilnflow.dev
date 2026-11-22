@@ -2,22 +2,26 @@ import { LinkButton } from '@primer/react'
 import { z } from 'zod'
 import { definePage, type PageProps } from '../app/definePage'
 import { KilnMark } from '../app/Shell'
-import { list } from '../lib/envelope'
+import { Msg, Trans, useT, useText } from '../i18n/locale'
+import { list, textSchema } from '../lib/envelope'
 import css from './error.module.css'
 
 // 统一的错误页：可读的原因和恢复入口；HTTP 状态码作为辅助信息，不显示内部错误。
+// 标题、原因和入口的文字是服务端给的消息，按当前语言显示。
 
 const schema = z.object({
   Status: z.number(),
-  Heading: z.string(),
-  Reason: z.string(),
+  Heading: textSchema,
+  Reason: textSchema,
   /** 错误编号（与服务器日志中的 ref 对应），只有内部错误才有。 */
   Ref: z.string(),
-  Links: list(z.object({ Label: z.string(), URL: z.string(), Primary: z.boolean() })),
+  Links: list(z.object({ Label: textSchema, URL: z.string(), Primary: z.boolean() })),
 })
 type Data = z.infer<typeof schema>
 
 function ErrorPage({ data, env }: PageProps<Data>) {
+  const t = useT()
+  const text = useText()
   return (
     <section className={css.page} aria-labelledby="err-h">
       {!env.Session && (
@@ -27,22 +31,25 @@ function ErrorPage({ data, env }: PageProps<Data>) {
         </a>
       )}
       <h1 className={css.heading} id="err-h">
-        {data.Heading}
+        <Msg text={data.Heading} />
       </h1>
-      <p className={css.reason}>{data.Reason}</p>
+      <p className={css.reason}>
+        <Msg text={data.Reason} />
+      </p>
       <p className={css.ref}>
-        HTTP {data.Status}
+        {t('error.status', { status: data.Status })}
         {data.Ref && (
           <>
-            {' · '}错误编号 <code>{data.Ref}</code>（与服务器日志对应）
+            {' · '}
+            <Trans id="error.ref" params={{ ref: data.Ref }} tags={{ code: (c) => <code>{c}</code> }} />
           </>
         )}
       </p>
       {data.Links.length > 0 && (
-        <nav className={css.links} aria-label="接下来可以">
+        <nav className={css.links} aria-label={t('error.next')}>
           {data.Links.map((l) => (
             <LinkButton key={l.URL} href={l.URL} variant={l.Primary ? 'primary' : 'default'}>
-              {l.Label}
+              {text(l.Label)}
             </LinkButton>
           ))}
         </nav>

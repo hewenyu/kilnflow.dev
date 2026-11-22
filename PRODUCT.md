@@ -28,7 +28,7 @@ Kiln 是自托管 CI，替代 GitHub Actions 构建 Go/TS 二进制和各类 run
 
 ## Capabilities and Constraints
 
-- 中文界面，术语沿用 Actions（run、job、workflow、Runner、environment、secret、Re-run）。
+- 界面支持简体中文（默认）和英文，用户可以随时切换（选择保存在浏览器中）；术语沿用 Actions（run、job、workflow、Runner、environment、secret、Re-run）。日志、仓库名、提交说明、AI 报告等原始内容按原文显示。
 - 不支持 `uses:`；fork PR 一律丢弃；secret 和发布凭据（Docker Hub、npm token）只写不读。
 - 保留策略：日志、产物、缓存等过程数据只存 12 小时，之后只留结果，页面需说明已清理。
 - 窄屏和键盘靠人工验收；尊重"减少动态效果"，跟随系统深色模式。

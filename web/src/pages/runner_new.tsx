@@ -13,6 +13,7 @@ import { Ago, secondMs, useNow } from '../components/Time'
 import { fieldError, fieldValue, formStateSchema, list, type FormState } from '../lib/envelope'
 import { clock, shortVersion, toDate } from '../lib/format'
 import css from './runner_new.module.css'
+import { Msg } from '../i18n/locale'
 
 // 注册新的 Runner（/runners/new）和生成令牌后的一次性展示页（/runners/enroll/{id}）：
 // 按顺序完成四步：准备机器，生成一次性注册令牌，在机器上执行命令，确认上线。令牌只在第一次打开展示页时返回。
@@ -157,7 +158,7 @@ function Field({ form, name, label, caption, children }: { form: FormState; name
       <FormControl.Label>{label}</FormControl.Label>
       {children({ value: fieldValue(form, name), invalid: Boolean(err) })}
       <FormControl.Caption>{caption}</FormControl.Caption>
-      {err && <FormControl.Validation variant="error">{err}</FormControl.Validation>}
+      {err && <FormControl.Validation variant="error"><Msg text={err} /></FormControl.Validation>}
     </FormControl>
   )
 }
@@ -165,13 +166,14 @@ function Field({ form, name, label, caption, children }: { form: FormState; name
 function TokenForm({ data }: { data: Data }) {
   const f = data.Form
   const general = fieldError(f, '_')
+  const kindErr = fieldError(f, 'kind')
   return (
     <Form action="/runners/token" aria-labelledby="s2">
       <input type="hidden" name="request_id" value={data.RequestID} />
       <Step n={2} title="生成一次性注册令牌">
         {f?.Failed && (
           <Callout tone="critical" title="没有生成令牌" className={css.gap}>
-            {general ?? '请按字段旁的提示修改后再生成。'}
+            {general ? <Msg text={general} /> : '请按字段旁的提示修改后再生成。'}
           </Callout>
         )}
         <div className={css.fields}>
@@ -199,7 +201,7 @@ function TokenForm({ data }: { data: Data }) {
                 它开发的 PR 由审计节点用另一个 Agent 审计；角色注册后不能修改。
               </FormControl.Caption>
             </FormControl>
-            {fieldError(f, 'kind') && <RadioGroup.Validation variant="error">{fieldError(f, 'kind')}</RadioGroup.Validation>}
+            {kindErr && <RadioGroup.Validation variant="error"><Msg text={kindErr} /></RadioGroup.Validation>}
           </RadioGroup>
           <Field
             form={f}

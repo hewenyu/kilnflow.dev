@@ -4,6 +4,7 @@ import {
   CpuIcon,
   GearIcon,
   GitMergeQueueIcon,
+  GlobeIcon,
   HomeIcon,
   PlayIcon,
   ServerIcon,
@@ -19,6 +20,8 @@ import {
 } from "@primer/react";
 import { type ReactNode, useRef } from "react";
 import { Avatar } from "../components/Avatar";
+import { Msg, Trans, useLocale, useT } from "../i18n/locale";
+import { localeNames, locales, type MsgKey } from "../i18n/messages";
 import { loginURL } from "../lib/api";
 import type { Envelope, Session } from "../lib/envelope";
 import { useRouter } from "./router";
@@ -46,56 +49,65 @@ export function KilnMark({ size = 32 }: { size?: number }) {
   );
 }
 
-const tabs = [
-  { nav: "overview", href: "/", label: "总览", icon: HomeIcon, admin: false },
-  { nav: "runs", href: "/runs", label: "运行", icon: PlayIcon, admin: false },
+const tabs: readonly {
+  nav: string;
+  href: string;
+  label: MsgKey;
+  icon: typeof HomeIcon;
+  admin: boolean;
+}[] = [
+  { nav: "overview", href: "/", label: "nav.overview", icon: HomeIcon, admin: false },
+  { nav: "runs", href: "/runs", label: "nav.runs", icon: PlayIcon, admin: false },
   {
     nav: "merge_queue",
     href: "/merge-queue",
-    label: "合并队列",
+    label: "nav.mergeQueue",
     icon: GitMergeQueueIcon,
     admin: false,
   },
   {
     nav: "ai_requests",
     href: "/ai/requests",
-    label: "AI 请求",
+    label: "nav.aiRequests",
     icon: CodeReviewIcon,
     admin: false,
   },
   {
     nav: "ai_dev",
     href: "/ai-dev",
-    label: "AI 开发",
+    label: "nav.aiDev",
     icon: CopilotIcon,
     admin: false,
   },
   {
     nav: "runners",
     href: "/runners",
-    label: "Runner",
+    label: "nav.runners",
     icon: ServerIcon,
     admin: false,
   },
   {
     nav: "ai_runners",
     href: "/ai/runners",
-    label: "AI 执行节点",
+    label: "nav.aiRunners",
     icon: CpuIcon,
     admin: false,
   },
   {
     nav: "settings",
     href: "/settings",
-    label: "设置",
+    label: "nav.settings",
     icon: GearIcon,
     admin: true,
   },
-] as const;
+];
 
 /** UserMenu 是身份菜单。退出登录提交 POST 表单（带 csrf），其他网站不能让用户被动退出。 */
 function UserMenu({ session, csrf }: { session: Session; csrf: string }) {
   const logout = useRef<HTMLFormElement>(null);
+  const t = useT();
+  const { locale, setLocale } = useLocale();
+  const role = t(session.Admin ? "role.admin" : "role.member");
   return (
     <>
       <form ref={logout} method="post" action="/logout" hidden>
@@ -106,33 +118,81 @@ function UserMenu({ session, csrf }: { session: Session; csrf: string }) {
           <IconButton
             // 传元素而不是组件：每次渲染新建的组件会让头像在每次定时刷新时重新挂载（重新请求图片、加载失败的状态丢失）
             icon={<Avatar login={session.Login} size={24} />}
-            aria-label={`${session.Login}（${session.Admin ? "管理员" : "成员"}）的菜单`}
+            aria-label={t("shell.userMenu", { login: session.Login, role })}
             variant="invisible"
           />
         </ActionMenu.Anchor>
         <ActionMenu.Overlay align="end" width="small">
           <span className={css.menuWho}>
             <strong>{session.Login}</strong>
-            {session.Admin ? "管理员" : "成员"}
-            {session.ViaToken ? " · 用 admin token 登录" : ""}
+            {role}
+            {session.ViaToken ? t("shell.viaToken") : ""}
           </span>
           <ActionList>
             <ActionList.Divider />
             {session.Admin && (
               <ActionList.LinkItem href="/settings/account">
-                登录与身份
+                {t("shell.account")}
               </ActionList.LinkItem>
             )}
+            <ActionList.Group selectionVariant="single">
+              <ActionList.GroupHeading>{t("locale.label")}</ActionList.GroupHeading>
+              {locales.map((l) => (
+                <ActionList.Item
+                  key={l}
+                  lang={l}
+                  selected={l === locale}
+                  onSelect={() => setLocale(l)}
+                >
+                  {localeNames[l]}
+                </ActionList.Item>
+              ))}
+            </ActionList.Group>
+            <ActionList.Divider />
             <ActionList.Item onSelect={() => logout.current?.submit()}>
               <ActionList.LeadingVisual>
                 <SignOutIcon />
               </ActionList.LeadingVisual>
-              退出登录
+              {t("shell.logout")}
             </ActionList.Item>
           </ActionList>
         </ActionMenu.Overlay>
       </ActionMenu>
     </>
+  );
+}
+
+/** LocaleSwitch 是未登录页面（登录页、错误页）右上角的语言切换。 */
+function LocaleSwitch() {
+  const t = useT();
+  const { locale, setLocale } = useLocale();
+  return (
+    <div className={css.localeSwitch}>
+      <ActionMenu>
+        <ActionMenu.Button
+          leadingVisual={GlobeIcon}
+          size="small"
+          variant="invisible"
+          aria-label={t("locale.switch", { current: localeNames[locale] })}
+        >
+          {localeNames[locale]}
+        </ActionMenu.Button>
+        <ActionMenu.Overlay align="end" width="small">
+          <ActionList selectionVariant="single" aria-label={t("locale.label")}>
+            {locales.map((l) => (
+              <ActionList.Item
+                key={l}
+                lang={l}
+                selected={l === locale}
+                onSelect={() => setLocale(l)}
+              >
+                {localeNames[l]}
+              </ActionList.Item>
+            ))}
+          </ActionList>
+        </ActionMenu.Overlay>
+      </ActionMenu>
+    </div>
   );
 }
 
@@ -146,6 +206,7 @@ function Notice({
   children: ReactNode;
   onDismiss?: () => void;
 }) {
+  const t = useT();
   return (
     <div
       className={`${css.notice} ${css[tone]}`}
@@ -156,7 +217,7 @@ function Notice({
         {onDismiss && (
           <IconButton
             icon={XIcon}
-            aria-label="关闭提示"
+            aria-label={t("shell.dismiss")}
             variant="invisible"
             size="small"
             onClick={onDismiss}
@@ -172,16 +233,20 @@ function TokenNotice({ session }: { session: Session }) {
   if (!session.ViaToken) return null;
   return (
     <Notice tone="warn">
-      当前用 admin token 登录。
       {session.Bound ? (
-        <Link href="/auth/github?next=%2Fsettings%2Faccount">
-          改用 GitHub 登录
-        </Link>
+        <Trans
+          id="shell.tokenNoticeBound"
+          tags={{
+            link: (c) => (
+              <Link href="/auth/github?next=%2Fsettings%2Faccount">{c}</Link>
+            ),
+          }}
+        />
       ) : (
-        <>
-          <Link href="/settings/account">绑定你的 GitHub 账号</Link>，之后用
-          GitHub 登录。
-        </>
+        <Trans
+          id="shell.tokenNoticeUnbound"
+          tags={{ link: (c) => <Link href="/settings/account">{c}</Link> }}
+        />
       )}
     </Notice>
   );
@@ -197,6 +262,7 @@ export function Shell({
 }) {
   const { view, failure, loading, expired, dismissFlash, dismissFailure } =
     useRouter();
+  const t = useT();
   const session = env.Session;
   const here = view?.url ?? "/";
   const bare = !session || env.Nav === "login";
@@ -211,19 +277,19 @@ export function Shell({
           document.getElementById("main")?.focus();
         }}
       >
-        跳到正文
+        {t("shell.skip")}
       </a>
       {loading && (
         <div
           className={css.progress}
           role="progressbar"
-          aria-label="正在加载页面"
+          aria-label={t("shell.loading")}
         />
       )}
       {!bare && (
         <header className={css.header}>
           <div className={css.top}>
-            <a className={css.brand} href="/" aria-label="Kiln 总览">
+            <a className={css.brand} href="/" aria-label={t("shell.home")}>
               <KilnMark />
               <span>Kiln</span>
             </a>
@@ -231,22 +297,22 @@ export function Shell({
             <UserMenu session={session} csrf={env.CSRF} />
           </div>
           <div className={css.nav}>
-            <UnderlineNav aria-label="主导航">
+            <UnderlineNav aria-label={t("nav.main")}>
               {tabs
-                .filter((t) => !t.admin || session.Admin)
-                .map((t) => (
+                .filter((tab) => !tab.admin || session.Admin)
+                .map((tab) => (
                   <UnderlineNav.Item
-                    key={t.nav}
-                    href={t.href}
-                    leadingVisual={<t.icon />}
-                    aria-current={env.Nav === t.nav ? "page" : undefined}
+                    key={tab.nav}
+                    href={tab.href}
+                    leadingVisual={<tab.icon />}
+                    aria-current={env.Nav === tab.nav ? "page" : undefined}
                     counter={
-                      t.nav === "runs" && env.Active > 0
+                      tab.nav === "runs" && env.Active > 0
                         ? env.Active
                         : undefined
                     }
                   >
-                    {t.label}
+                    {t(tab.label)}
                   </UnderlineNav.Item>
                 ))}
             </UnderlineNav>
@@ -254,20 +320,23 @@ export function Shell({
         </header>
       )}
       {session && !bare && <TokenNotice session={session} />}
+      {bare && <LocaleSwitch />}
       {expired && (
         <Notice tone="warn">
-          登录已过期，自动更新已停止。
-          <Link href={loginURL(here)}>重新登录</Link>
+          <Trans
+            id="shell.expired"
+            tags={{ link: (c) => <Link href={loginURL(here)}>{c}</Link> }}
+          />
         </Notice>
       )}
-      {failure && (
+      {failure !== null && (
         <Notice tone="error" onDismiss={dismissFailure}>
-          {failure}
+          <Msg text={failure} />
         </Notice>
       )}
-      {view?.flash && (
+      {view?.flash != null && (
         <Notice tone="info" onDismiss={dismissFlash}>
-          {view.flash}
+          <Msg text={view.flash} />
         </Notice>
       )}
       <main

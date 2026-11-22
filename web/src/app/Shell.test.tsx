@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import errorFixture from "../../dev/fixtures/error.json";
-import { envelope, renderPage } from "../test/render";
+import { envelope, renderPage, withData } from "../test/render";
 
 // 外壳：顶栏、标签导航、身份菜单、admin token 提示和跳转后的提示。
 
@@ -121,5 +121,51 @@ describe("外壳", () => {
       "href",
       "/",
     );
+  });
+
+  it("跳转后的提示是消息时按当前语言显示；在身份菜单中切换语言后提示立即切换、不被关闭", async () => {
+    renderPage(
+      envelope(errorFixture, {
+        Session: { Login: "bob", Admin: false, ViaToken: false, Bound: false },
+        Flash: { id: "account.bound", params: { login: "octocat" } },
+      }),
+      "/settings/account",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "已绑定 GitHub 账号 octocat，现在以 octocat 的身份登录。",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "bob（成员）的菜单" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "English" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Linked GitHub account octocat. You're now signed in as octocat.",
+    );
+    expect(within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("link", { name: /Runs/ })).toHaveAttribute("href", "/runs");
+    expect(screen.getByRole("button", { name: "Menu for bob (Member)" })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("admin token 的提醒按当前语言显示，链接保留", () => {
+    renderPage(
+      envelope(errorFixture, {
+        Session: { Login: "admin", Admin: true, ViaToken: true, Bound: false },
+      }),
+      "/",
+      { locale: "en" },
+    );
+    expect(screen.getByRole("link", { name: "Link your GitHub account" })).toHaveAttribute("href", "/settings/account");
+  });
+
+  it("引导期网络错误按当前语言显示，不白屏", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
+    renderPage(null, "/runs", { locale: "en" });
+    expect(await screen.findByText("Can't reach the Kiln Server. Check your network, then refresh the page.")).toBeInTheDocument();
+    expect(screen.getByText("The page can't be opened")).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("页面数据格式不对时按当前语言说明，不白屏", () => {
+    renderPage(withData(envelope(errorFixture), { Status: "oops" }), "/x", { locale: "en" });
+    expect(screen.getByText("Page data is malformed")).toBeInTheDocument();
+    expect(screen.getByText(/the frontend and kiln-server versions may differ/i)).toBeInTheDocument();
   });
 });

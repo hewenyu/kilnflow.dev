@@ -11,6 +11,7 @@ import { Form, formBody, SubmitButton } from '../components/Form'
 import { fieldError, fieldValue, formStateSchema, list } from '../lib/envelope'
 import { short } from '../lib/format'
 import css from './run_new.module.css'
+import { Msg } from '../i18n/locale'
 
 // 启动构建（/runs/new、POST /dispatch）：手动运行声明了 on.workflow_dispatch 的 workflow。
 // 没有选定仓库时显示仓库选择器；选定后按 ref 读取 workflow 列表（"读取 workflow" 提交到 POST /runs/new，不创建 run）。
@@ -76,7 +77,7 @@ function FormAlert({ data }: { data: Data }) {
   const general = fieldError(data.Form, '_')
   return (
     <Callout tone="critical" title={data.Attempted ? '没有启动构建。' : '请修改后再提交'} hideTitle={!data.Attempted}>
-      {general || '请按标出的提示修改后再提交。'}
+      {general ? <Msg text={general} /> : '请按标出的提示修改后再提交。'}
     </Callout>
   )
 }
@@ -117,7 +118,7 @@ function RepoPicker({ data, picker: s }: { data: Data; picker: Picker }) {
             validationStatus={repoErr ? 'error' : undefined}
             aria-invalid={repoErr ? true : undefined}
           />
-          {repoErr && <FormControl.Validation variant="error">{repoErr}</FormControl.Validation>}
+          {repoErr && <FormControl.Validation variant="error"><Msg text={repoErr} /></FormControl.Validation>}
         </FormControl>
         <Button type="submit">搜索</Button>
         {s.Query && (
@@ -223,7 +224,7 @@ function WorkflowChoice({ data }: { data: Data }) {
           <FormControl.Caption>
             .kiln/workflows/ 下的文件名，可以省略 .yml。{fieldError(f, 'ref') && '修正 ref 后点"读取 workflow"可以从列表中选择。'}
           </FormControl.Caption>
-          {wfErr && <FormControl.Validation variant="error">{wfErr}</FormControl.Validation>}
+          {wfErr && <FormControl.Validation variant="error"><Msg text={wfErr} /></FormControl.Validation>}
         </FormControl>
       </>
     )
@@ -245,7 +246,7 @@ function WorkflowChoice({ data }: { data: Data }) {
               </FormControl.Caption>
             </FormControl>
           ))}
-          {wfErr && <RadioGroup.Validation variant="error">{wfErr}</RadioGroup.Validation>}
+          {wfErr && <RadioGroup.Validation variant="error"><Msg text={wfErr} /></RadioGroup.Validation>}
         </RadioGroup>
       ) : (
         <Callout title="没有 workflow" hideTitle>
@@ -303,7 +304,7 @@ function DispatchForm({ data }: { data: Data }) {
           <FormControl.Caption>
             留空表示默认分支 {data.DefaultBranch}；可以写分支名、tag 名（如 v1.2.0）或完整 ref（如 refs/tags/v1.2.0）。改了 ref 后点"读取 workflow"刷新下面的列表。
           </FormControl.Caption>
-          {refErr && <FormControl.Validation variant="error">{refErr}</FormControl.Validation>}
+          {refErr && <FormControl.Validation variant="error"><Msg text={refErr} /></FormControl.Validation>}
         </FormControl>
         <div>
           <LoadButton />
@@ -339,7 +340,7 @@ function DispatchForm({ data }: { data: Data }) {
           </FormControl.Caption>
           {inErr && (
             <FormControl.Validation variant="error">
-              <span className={css.lines}>{inErr}</span>
+              <span className={css.lines}><Msg text={inErr} /></span>
             </FormControl.Validation>
           )}
         </FormControl>

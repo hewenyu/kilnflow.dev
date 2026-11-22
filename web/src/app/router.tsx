@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { isEmpty, msg, type Text } from '../i18n/messages'
 import { fetchPage, inApp, isWebURL, loginPath, type Fetched } from '../lib/api'
 import type { Envelope } from '../lib/envelope'
 
@@ -14,14 +15,14 @@ export interface View {
   seq: number
   /** 表单提交返回的页面（例如校验失败）：地址没有变，不定时刷新，免得丢掉错误提示。 */
   fromPost: boolean
-  /** 跳转后显示的提示（服务端重定向时带的 ?flash=）。 */
-  flash: string
+  /** 跳转后显示的提示（服务端重定向时带的 ?flash=，服务端校验后放在页面数据中）；null 表示没有。 */
+  flash: Text | null
 }
 
 interface Router {
   view: View | null
-  /** 跳转失败（网络错误、服务器错误）时的说明，显示在页面顶部。 */
-  failure: string
+  /** 跳转失败（网络错误、服务器错误）时的说明，显示在页面顶部；null 表示没有。存消息而不是译好的文字，切换语言后随之更新。 */
+  failure: Text | null
   /** 正在跳转（显示顶部进度条）。 */
   loading: boolean
   /** 自动更新时发现登录已过期。 */
@@ -56,6 +57,11 @@ function withoutFlash(u: URL): string {
 
 const maxRedirects = 5
 
+/** flashOf 返回页面数据中的提示（空串表示没有）。 */
+function flashOf(env: Envelope): Text | null {
+  return isEmpty(env.Flash) ? null : env.Flash
+}
+
 /** decodeHash 返回 #hash 中的元素 id（解码失败时原样使用）。 */
 function decodeHash(hash: string): string {
   const id = hash.slice(1)
@@ -70,9 +76,9 @@ export function RouterProvider({ initial, children }: { initial: Envelope | null
   const [view, setView] = useState<View | null>(() => {
     if (!initial) return null
     const u = new URL(window.location.href)
-    return { env: initial, url: withoutFlash(u), seq: 0, fromPost: false, flash: initial.Flash }
+    return { env: initial, url: withoutFlash(u), seq: 0, fromPost: false, flash: flashOf(initial) }
   })
-  const [failure, setFailure] = useState('')
+  const [failure, setFailure] = useState<Text | null>(null)
   const [loading, setLoading] = useState(false)
   const [expired, setExpired] = useState(false)
   const inflight = useRef<AbortController | null>(null)
@@ -106,8 +112,8 @@ export function RouterProvider({ initial, children }: { initial: Envelope | null
       }
       seq.current++
       pendingScroll.current = push !== null ? url.hash : null
-      setView({ env, url: path, seq: seq.current, fromPost, flash: env.Flash })
-      setFailure('')
+      setView({ env, url: path, seq: seq.current, fromPost, flash: flashOf(env) })
+      setFailure(null)
       setExpired(false)
     },
     [],
@@ -123,7 +129,7 @@ export function RouterProvider({ initial, children }: { initial: Envelope | null
         if (!u) {
           // 站外地址（GitHub 授权等）整页跳转；只接受 http(s)，javascript: 等地址不执行
           if (isWebURL(to)) window.location.assign(to)
-          else setFailure(`不支持跳转到这个地址：${to}`)
+          else setFailure(msg('router.unsupportedTarget', { url: to }))
           return
         }
         inflight.current?.abort()
@@ -148,7 +154,7 @@ export function RouterProvider({ initial, children }: { initial: Envelope | null
             return
           case 'redirect':
             if (depth >= maxRedirects) {
-              setFailure('页面重定向的次数太多，请刷新页面重试。')
+              setFailure(msg('router.tooManyRedirects'))
               return
             }
             to = r.to
@@ -181,7 +187,7 @@ export function RouterProvider({ initial, children }: { initial: Envelope | null
       const u = inApp(action)
       if (!u) {
         // 表单地址不在站内（或不是 http(s)）：说明原因，不让提交的 Promise 带着异常结束
-        setFailure(`不支持提交到这个地址：${action}`)
+        setFailure(msg('router.unsupportedAction', { url: action }))
         return
       }
       // 提交期间跳转到了别的页面或者又提交了一次：这次的响应（页面、重定向、错误）都不再显示
@@ -193,7 +199,7 @@ export function RouterProvider({ initial, children }: { initial: Envelope | null
       try {
         r = await fetchPage({ url: u.pathname + u.search, body })
       } catch {
-        if (!stale()) setFailure('提交失败，请刷新页面重试。')
+        if (!stale()) setFailure(msg('router.submitFailed'))
         return
       } finally {
         if (submitting.current === mine) submitting.current = null
@@ -303,8 +309,8 @@ export function RouterProvider({ initial, children }: { initial: Envelope | null
       navigate,
       submit,
       refresh,
-      dismissFlash: () => setView((v) => (v ? { ...v, flash: '' } : v)),
-      dismissFailure: () => setFailure(''),
+      dismissFlash: () => setView((v) => (v ? { ...v, flash: null } : v)),
+      dismissFailure: () => setFailure(null),
     }),
     [view, failure, loading, expired, navigate, submit, refresh],
   )

@@ -136,11 +136,13 @@ func serve(h http.Handler, q testReq) *httptest.ResponseRecorder {
 
 // testPage 是响应中的页面数据（uiPage）；Data 留给各测试按页面类型解析（pageData）。
 type testPage struct {
-	Page, Title, Nav, CSRF, Flash string
-	Status, Active                int
-	OAuth                         bool
-	Session                       *uiSession
-	Data                          json.RawMessage
+	Page, Nav, CSRF string
+	// Title、Flash 是消息或原样的文字（检查显示的中文用 textZH）。
+	Title, Flash   uiText
+	Status, Active int
+	OAuth          bool
+	Session        *uiSession
+	Data           json.RawMessage
 }
 
 // parsePage 解析响应正文中的页面数据：前端请求的 JSON，或浏览器请求的 index.html 中内嵌的 <script id="kiln-page">。
@@ -213,11 +215,13 @@ func TestSafeNext(t *testing.T) {
 
 // loginData 是登录页的页面数据（loginPage）。
 type loginData struct {
-	Next, GitHubURL, Notice, Bound string
-	TokenLogin                     bool
-	Form                           struct {
-		Values, Errors map[string]string
-		Failed         bool
+	Next, GitHubURL, Bound string
+	Notice                 uiText
+	TokenLogin             bool
+	Form                   struct {
+		Values map[string]string
+		Errors map[string]uiText
+		Failed bool
 	}
 }
 
@@ -255,14 +259,14 @@ func TestLoginPage(t *testing.T) {
 	})
 	t.Run("原因", func(t *testing.T) {
 		_, mux, _ := testDashboard(t, "")
-		if p := pageData[loginData](t, serve(mux, testReq{target: "/login?next=%2Fruns&reason=expired"}).Body.String()); !strings.Contains(p.Notice, "登录已过期") || p.Next != "/runs" {
+		if p := pageData[loginData](t, serve(mux, testReq{target: "/login?next=%2Fruns&reason=expired"}).Body.String()); !strings.Contains(textZH(t, p.Notice), "登录已过期") || p.Next != "/runs" {
 			t.Errorf("会话过期：%+v", p)
 		}
-		if p := pageData[loginData](t, serve(mux, testReq{target: "/login?reason=logout"}).Body.String()); !strings.Contains(p.Notice, "已退出登录") {
+		if p := pageData[loginData](t, serve(mux, testReq{target: "/login?reason=logout"}).Body.String()); !strings.Contains(textZH(t, p.Notice), "已退出登录") {
 			t.Errorf("退出：%+v", p)
 		}
-		if p := pageData[loginData](t, serve(mux, testReq{target: "/login"}).Body.String()); p.Notice != "" {
-			t.Errorf("没有原因时不应有说明：%q", p.Notice)
+		if p := pageData[loginData](t, serve(mux, testReq{target: "/login"}).Body.String()); !p.Notice.IsZero() {
+			t.Errorf("没有原因时不应有说明：%+v", p.Notice)
 		}
 		// 没有会话时不需要 CSRF，直接跳转
 		w := serve(mux, testReq{method: http.MethodPost, target: "/logout"})
@@ -297,7 +301,7 @@ func TestLoginFailure(t *testing.T) {
 			if pg := parsePage(t, body); pg.Page != "login" || pg.Status != http.StatusUnauthorized {
 				t.Errorf("登录失败：Page %q Status %d", pg.Page, pg.Status)
 			}
-			if p.Next != c.wantNext || !p.Form.Failed || !strings.Contains(p.Form.Errors["token"], c.wantErr) {
+			if p.Next != c.wantNext || !p.Form.Failed || !strings.Contains(textZH(t, p.Form.Errors["token"]), c.wantErr) {
 				t.Errorf("OAuth=%q token=%q：登录失败的数据不对：%+v", oauth, c.token, p)
 			}
 			if c.token != "" && strings.Contains(body, c.token) {
@@ -337,7 +341,7 @@ func wantErrorPage(t *testing.T, what string, w *httptest.ResponseRecorder, stat
 	if p.Status != status {
 		t.Errorf("%s：错误页的 Status %d，应为 %d", what, p.Status, status)
 	}
-	mustHave(t, what, p.Heading+"\n"+p.Reason, texts...)
+	mustHave(t, what, textZH(t, p.Heading)+"\n"+textZH(t, p.Reason), texts...)
 	var got []string
 	for _, l := range p.Links {
 		got = append(got, l.URL)
@@ -423,7 +427,7 @@ func TestErrorPages(t *testing.T) {
 	if p.Ref == "" || !strings.Contains(logs.String(), "ref="+p.Ref) || !strings.Contains(logs.String(), "secret_internal_table") {
 		t.Errorf("日志中应有错误编号 %q 和错误内容：%s", p.Ref, logs.String())
 	}
-	if l := p.Links[0]; l.Label != "重试" || !l.Primary {
+	if l := p.Links[0]; textZH(t, l.Label) != "重试" || !l.Primary {
 		t.Errorf("GET 出错时主要操作应为重试：%+v", l)
 	}
 	// POST 出错不提供"重试"（不能重放），回到原来的页面
@@ -543,7 +547,7 @@ func TestLayoutShell(t *testing.T) {
 	now := time.Now()
 	// 页面外壳的数据：当前身份（成员没有设置入口，由前端按 Session.Admin 决定）、CSRF、导航
 	pg := parsePage(t, serve(mux, testReq{target: "/no/such/page", cookie: cookieFor(d, "bob", now.Add(time.Hour))}).Body.String())
-	if pg.Session == nil || *pg.Session != (uiSession{Login: "bob"}) || pg.CSRF == "" || pg.Nav != "error" || pg.Title != "找不到这个页面" {
+	if pg.Session == nil || *pg.Session != (uiSession{Login: "bob"}) || pg.CSRF == "" || pg.Nav != "error" || textZH(t, pg.Title) != "找不到这个页面" {
 		t.Errorf("成员的页面外壳：%+v", pg)
 	}
 	// 导航高亮页面所属的一项；flash 提示来自地址中的 flash 参数
@@ -555,7 +559,7 @@ func TestLayoutShell(t *testing.T) {
 		w := httptest.NewRecorder()
 		d.render(w, r, page, "标题", struct{}{})
 		pg := parsePage(t, w.Body.String())
-		if pg.Page != page || pg.Nav != nav || pg.Flash != "已暂停接单" || pg.Title != "标题" {
+		if pg.Page != page || pg.Nav != nav || textZH(t, pg.Flash) != "已暂停接单" || textZH(t, pg.Title) != "标题" {
 			t.Errorf("页面 %s：Page %q Nav %q Flash %q，导航应为 %q", page, pg.Page, pg.Nav, pg.Flash, nav)
 		}
 		if se := pg.Session; se == nil || !se.Admin || !se.ViaToken || se.Bound {

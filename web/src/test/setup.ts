@@ -41,4 +41,7 @@ Object.defineProperty(HTMLElement.prototype, 'togglePopover', { configurable: tr
 
 afterEach(() => {
   cleanup()
+  // 语言选择保存在浏览器存储中：用例之间不互相影响
+  window.localStorage.clear()
+  document.documentElement.lang = ''
 })

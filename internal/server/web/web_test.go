@@ -69,8 +69,8 @@ func TestPagesRender(t *testing.T) {
 	se := &session{Login: "alice", Role: roleAdmin, Exp: now.Add(time.Hour).Unix()}
 
 	cases := map[string]any{
-		"login": &loginPage{Next: "/runs", GitHubURL: "/auth/github?next=%2Fruns", Notice: "登录已过期", Form: failedLoginForm()},
-		"error": &errorPage{Status: 500, Heading: "服务器出错了", Reason: "内部错误", Ref: "abc", Links: []errorLink{listLink}},
+		"login": &loginPage{Next: "/runs", GitHubURL: "/auth/github?next=%2Fruns", Notice: message(msgLoginNoticeExpired), Form: failedLoginForm()},
+		"error": &errorPage{Status: 500, Heading: message(msgErrServerHeading), Reason: message(msgErrServerReasonGet), Ref: "abc", Links: []errorLink{listLink()}},
 		"overview": &overviewPage{
 			Me: "alice", MineURL: "/runs?actor=alice",
 			Running: []runView{{Run: run, Repo: "tester/demo", States: []string{"succeeded", "running", "pending"}}},
@@ -249,7 +249,7 @@ func TestRoleOf(t *testing.T) {
 // failedLoginForm 是 admin token 错误时的登录表单。
 func failedLoginForm() *formState {
 	f := newForm()
-	f.fail("token", "admin token 不正确")
+	f.failText("token", message(msgLoginErrAdminWrong))
 	return f
 }
 

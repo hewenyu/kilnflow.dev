@@ -1,12 +1,16 @@
 import { BaseStyles } from '@primer/react'
 import { ThemeProvider } from '@primer/react/next'
 import { render, type RenderResult } from '@testing-library/react'
+import type { z } from 'zod'
 import { App } from '../app/App'
+import { storageKey } from '../i18n/locale'
+import type { Locale } from '../i18n/messages'
 import { envelopeSchema, type Envelope } from '../lib/envelope'
 
-/** envelope 把测试数据（例如 dev/fixtures/ 中的 JSON）校验为页面数据；overrides 覆盖其中的字段。 */
-export function envelope(json: unknown, overrides: Partial<Envelope> = {}): Envelope {
-  return { ...envelopeSchema.parse(json), ...overrides }
+/** envelope 把测试数据（例如 dev/fixtures/ 中的 JSON）校验为页面数据；overrides 按服务端的格式覆盖其中的字段（例如 Flash 可以是字符串或消息）。 */
+export function envelope(json: unknown, overrides: Partial<z.input<typeof envelopeSchema>> = {}): Envelope {
+  const base = typeof json === 'object' && json !== null ? json : {}
+  return envelopeSchema.parse({ ...base, ...overrides })
 }
 
 /** withData 返回把 Data 中的字段替换后的页面数据。 */
@@ -15,9 +19,13 @@ export function withData(env: Envelope, data: Record<string, unknown>): Envelope
   return { ...env, Data: { ...base, ...data } }
 }
 
-/** renderPage 用完整的前端（外壳、导航、定时刷新）渲染页面数据 env，地址为 url；env 为 null 时前端自己取数据。 */
-export function renderPage(env: Envelope | null, url = '/'): RenderResult {
+/**
+ * renderPage 用完整的前端（外壳、导航、定时刷新）渲染页面数据 env，地址为 url；env 为 null 时前端自己取数据。
+ * 语言默认是 zh-CN（不受 jsdom 的浏览器语言影响），locale 指定时按用户手动选择的语言渲染；每个用例结束后清理（见 setup.ts）。
+ */
+export function renderPage(env: Envelope | null, url = '/', { locale = 'zh-CN' }: { locale?: Locale } = {}): RenderResult {
   window.history.replaceState(null, '', url)
+  window.localStorage.setItem(storageKey, locale)
   return render(
     <ThemeProvider colorMode="light">
       <BaseStyles>

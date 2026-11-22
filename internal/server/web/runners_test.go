@@ -83,7 +83,7 @@ func renderAs(t *testing.T, page, role string, data any) string {
 	d := &Dashboard{log: slog.New(slog.DiscardHandler)}
 	w := httptest.NewRecorder()
 	se := &session{Login: "alice", Role: role, Exp: time.Now().Add(time.Hour).Unix()}
-	d.writeJSON(w, http.StatusOK, &uiPage{Page: page, Title: page, Session: newUISession(se), CSRF: "csrf", Nav: "runners", Status: http.StatusOK, Data: data})
+	d.writeJSON(w, http.StatusOK, &uiPage{Page: page, Title: rawText(page), Session: newUISession(se), CSRF: "csrf", Nav: "runners", Status: http.StatusOK, Data: data})
 	dumpUI("render "+page, w)
 	if w.Code != http.StatusOK {
 		t.Fatalf("编码 %s：HTTP %d：%s", page, w.Code, w.Body.String())
@@ -589,10 +589,10 @@ func TestPostRunnerOp(t *testing.T) {
 	mustHave(t, "页面", w.Body.String(), "没有这个 Runner 操作")
 	w = e.post(e.bob, "/runners/mac-2/undrain", nil)
 	wantStatus(t, "成员", w, http.StatusForbidden)
-	mustHave(t, "页面", w.Body.String(), "需要管理员权限")
+	mustHave(t, "页面", pageTextZH(t, w.Body.String()), "需要管理员权限")
 	w = e.post(e.alice, "/runners/mac-2/undrain", url.Values{"csrf": {e.bob.csrf}})
 	wantStatus(t, "其他会话的 CSRF", w, http.StatusForbidden)
-	mustHave(t, "页面", w.Body.String(), "页面已过期，操作没有执行")
+	mustHave(t, "页面", pageTextZH(t, w.Body.String()), "页面已过期，操作没有执行")
 	wantRedirect(t, "未登录", e.post(nil, "/runners/mac-2/undrain", nil), "/login?next=%2Fruns")
 	if !drain("mac-2") {
 		t.Error("被拒绝的操作不应改变 mac-2")

@@ -64,7 +64,7 @@ func renderJSON(t *testing.T, page string, se *session, data any) string {
 	t.Helper()
 	d := &Dashboard{log: slog.New(slog.NewTextHandler(t.Output(), nil))}
 	w := httptest.NewRecorder()
-	d.writeJSON(w, http.StatusOK, &uiPage{Page: page, Title: page, Session: newUISession(se), CSRF: "csrf", Nav: page, Status: http.StatusOK, Data: data})
+	d.writeJSON(w, http.StatusOK, &uiPage{Page: page, Title: rawText(page), Session: newUISession(se), CSRF: "csrf", Nav: page, Status: http.StatusOK, Data: data})
 	dumpUI("render "+page, w)
 	if w.Code != http.StatusOK {
 		t.Fatalf("编码 %s：HTTP %d：%s", page, w.Code, w.Body.String())

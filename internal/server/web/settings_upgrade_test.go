@@ -71,7 +71,7 @@ func TestRunnerUpgradePage(t *testing.T) {
 		w := e.post(e.alice, runnerUpgradeURL+"/registry", url.Values{"registry": {c.registry}})
 		wantStatus(t, c.what, w, http.StatusUnprocessableEntity)
 		f := pageData[runnerUpgradePage](t, w.Body.String()).Form
-		if f == nil || !strings.Contains(f.Errors["registry"], c.want) || f.Values["registry"] != c.registry {
+		if f == nil || !strings.Contains(textZH(t, f.Errors["registry"]), c.want) || f.Values["registry"] != c.registry {
 			t.Errorf("%s：表单 = %+v", c.what, f)
 		}
 	}
