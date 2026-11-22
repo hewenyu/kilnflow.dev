@@ -78,10 +78,32 @@ describe('translate', () => {
 })
 
 describe('富文本', () => {
-  it('参数中的标签是普通文字，不会被当作元素', () => {
-    const segs = segments('zh-CN', msg('login.signedIn', { login: '<link>evil</link><img src=x onerror=alert(1)>', role: '成员' }))
-    expect(segs.find((s) => s.tag === 'strong')?.text).toBe('<link>evil</link><img src=x onerror=alert(1)>')
-    expect(segs.filter((s) => s.tag === 'link').map((s) => s.text)).toEqual(['继续'])
+  // 先按词典切分标签、后代入参数：参数中的标签（包括闭合词典外层标签、再新开标签的写法）
+  // 只能出现在它所在段的文字中，不能改变段的结构。
+  it.each([
+    '<link>evil</link><img src=x onerror=alert(1)>',
+    '</strong><link>evil</link><strong>',
+    '</strong>evil<strong>',
+    '<strong>evil',
+  ])('参数中的标签是普通文字，不会被当作元素：%s', (login) => {
+    expect(segments('zh-CN', msg('login.signedIn', { login, role: '成员' }))).toEqual([
+      { tag: null, text: '当前已登录为 ' },
+      { tag: 'strong', text: login },
+      { tag: null, text: '（成员）。可以直接' },
+      { tag: 'link', text: '继续' },
+      { tag: null, text: '，或在下面换一个身份登录。' },
+    ])
+  })
+
+  it('参数在英文文案中同样不会关闭词典标签', () => {
+    const login = '</strong><link>evil</link><strong>'
+    expect(segments('en', msg('login.signedIn', { login, role: 'member' }))).toEqual([
+      { tag: null, text: "You're signed in as " },
+      { tag: 'strong', text: login },
+      { tag: null, text: ' (member). You can ' },
+      { tag: 'link', text: 'continue' },
+      { tag: null, text: ', or sign in as someone else below.' },
+    ])
   })
 })
 
