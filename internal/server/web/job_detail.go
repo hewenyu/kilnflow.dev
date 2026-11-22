@@ -552,7 +552,7 @@ func (d *Dashboard) getOutput(w http.ResponseWriter, r *http.Request, _ *session
 	output, file := q.Get("output"), q.Get("path")
 	f, err := d.admin.JobOutputFile(r.Context(), id, output, file)
 	if errors.Is(err, admin.ErrOutputGone) {
-		d.flashMsg(w, r, jobURL(id), message(msgJobOutputGone, strArg(argOutput, flashArgText(output)), strArg(argPath, flashArgText(file))))
+		d.flashMsg(w, r, jobURL(id), message(msgJobOutputGone, strArg(argOutput, output), strArg(argPath, file)))
 		return
 	}
 	if err != nil {

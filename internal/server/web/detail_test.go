@@ -659,7 +659,10 @@ func TestGetOutput(t *testing.T) {
 	app := []byte("#!/bin/sh\necho app\n")
 	appFile := cas.FileEntry{Path: "bin/app", Digest: e.putBlob(app), Size: int64(len(app))}
 	lostFile := cas.FileEntry{Path: "lost.txt", Digest: cas.Digest([]byte("lost")), Size: 4}
-	out := e.putJSON(cas.OutputManifest{Schema: cas.OutputSchema, Files: []cas.FileEntry{appFile, lostFile}})
+	// 合法的长文件名：每个 & 在 JSON 中编码为 6 个字节，原样放进提示会超过地址中提示的字节上限
+	longName := strings.Repeat("&", 180) + ".txt"
+	longFile := cas.FileEntry{Path: longName, Digest: cas.Digest([]byte("gone")), Size: 4}
+	out := e.putJSON(cas.OutputManifest{Schema: cas.OutputSchema, Files: []cas.FileEntry{appFile, lostFile, longFile}})
 	result := e.putJSON(cas.ResultManifest{Schema: cas.ResultSchema, Outputs: map[string]string{"bin": out}})
 	run := e.addRun(runOpts{})
 	job := e.addJob(jobOpts{runID: run, manifest: result})
@@ -702,6 +705,12 @@ func TestGetOutput(t *testing.T) {
 	// 文件内容已不在存储中：回到 job 页面并说明
 	w = e.browse(e.bob, fmt.Sprintf("/jobs/%d/download?output=bin&path=lost.txt", job))
 	if flash := flashZH(t, wantRedirect(t, "产物已丢失", w, jobURL(job))); !strings.Contains(flash, "没有下载：产物 bin/lost.txt 已不在存储中") {
+		t.Errorf("提示 = %q", flash)
+	}
+	// 文件名很长时截断后仍然给出提示，不静默跳回
+	w = e.browse(e.bob, fmt.Sprintf("/jobs/%d/download?output=bin&path=%s", job, url.QueryEscape(longName)))
+	if flash := flashZH(t, wantRedirect(t, "长文件名的产物已丢失", w, jobURL(job))); !strings.Contains(flash, "没有下载：产物 bin/&&&&") ||
+		!strings.Contains(flash, "… 已不在存储中") {
 		t.Errorf("提示 = %q", flash)
 	}
 }

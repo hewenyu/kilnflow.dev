@@ -1,10 +1,13 @@
 package web
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -473,6 +476,77 @@ func flashArgText(s string) string {
 	}
 	runes := []rune(s)
 	return string(runes[:maxFlashArgRunes-1]) + shorten.Ellipsis
+}
+
+// fitFlash 让提示放得进地址：文字参数先按 flashArgText 整理，整条消息的 JSON 超过 maxFlashBytes 时
+// 再按字节预算截断文字参数（以省略号结尾），保证长度合格的消息总能带着提示跳转。
+// 单个参数的字符上限不能保证整条 JSON 的字节上限：转义（& 编码为 \u0026，6 个字节）、多字节字符和多个参数都会叠加。
+// 预算在文字参数之间平分，用不完的份额留给更长的参数；参数名和数字参数不变。
+func fitFlash(t uiText) uiText {
+	texts := make(map[string]string) // 文字参数（整理后）
+	params := make(map[string]any, len(t.params))
+	for name, v := range t.params {
+		if s, ok := v.(string); ok {
+			texts[name] = flashArgText(s)
+			v = texts[name]
+		}
+		params[name] = v
+	}
+	t.params = params
+	if len(texts) == 0 {
+		return t
+	}
+	// 文字参数都换成空串时的长度：消息 id、参数名、数字参数和引号，与文字参数的内容无关
+	empty := maps.Clone(params)
+	total := 0
+	for name, s := range texts {
+		empty[name] = ""
+		total += jsonStringLen(s)
+	}
+	b, err := json.Marshal(textJSON{ID: t.id, Params: empty})
+	if err != nil {
+		return t
+	}
+	budget := maxFlashBytes - len(b)
+	if total <= budget || budget < 0 {
+		return t // 放得下；或者连空参数都放不下（由 flashValue 报告）
+	}
+	// 从短到长分配：放得下的原样保留，余下的预算由更长的参数平分
+	names := slices.Collect(maps.Keys(texts))
+	slices.SortFunc(names, func(a, b string) int {
+		return cmp.Or(cmp.Compare(jsonStringLen(texts[a]), jsonStringLen(texts[b])), cmp.Compare(a, b))
+	})
+	for i, name := range names {
+		s := truncateJSONString(texts[name], budget/(len(names)-i))
+		params[name] = s
+		budget -= jsonStringLen(s)
+	}
+	return t
+}
+
+// jsonStringLen 是 s 编码为 JSON 字符串后的字节数（不含两边的引号）。
+func jsonStringLen(s string) int {
+	b, _ := json.Marshal(s) // 字符串总能编码
+	return len(b) - len(`""`)
+}
+
+// truncateJSONString 截断 s，使它编码为 JSON 字符串后不超过 limit 个字节（不含引号）；截断时以省略号结尾，不切开字符。
+func truncateJSONString(s string, limit int) string {
+	if jsonStringLen(s) <= limit {
+		return s
+	}
+	limit -= jsonStringLen(shorten.Ellipsis)
+	if limit < 0 {
+		return ""
+	}
+	n := 0
+	for i, r := range s {
+		n += jsonStringLen(string(r))
+		if n > limit {
+			return s[:i] + shorten.Ellipsis
+		}
+	}
+	return s // 不会到达：编码后超过 limit 的 s 在循环中已经截断
 }
 
 // isControl 表示控制字符（换行、制表符等，不应出现在提示的参数中）。

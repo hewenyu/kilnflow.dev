@@ -289,9 +289,10 @@ func (d *Dashboard) flashBack(w http.ResponseWriter, r *http.Request, to, msg st
 }
 
 // flashMsg 重定向到站内页面 to，并带上一条消息作为提示（前端按当前语言显示）。消息必须登记为 flash（见 text.go）；
+// 文字参数（原样的对象名、路径、原因）由 fitFlash 整理和截断，长度总能符合上限；
 // 不合格时（编程错误）记录错误并照常跳转，只是不带提示。
 func (d *Dashboard) flashMsg(w http.ResponseWriter, r *http.Request, to string, t uiText) {
-	v, err := flashValue(t)
+	v, err := flashValue(fitFlash(t))
 	if err != nil {
 		d.log.Error("跳转后的提示不合格", "path", r.URL.Path, "id", t.id, "err", err)
 		d.redirect(w, r, to)

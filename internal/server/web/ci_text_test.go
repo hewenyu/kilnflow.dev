@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -113,5 +114,88 @@ func TestFlashArgText(t *testing.T) {
 	}
 	if got := flashArgText("a\xffb"); !utf8.ValidString(got) {
 		t.Errorf("不合法的 UTF-8 应替换：%q", got)
+	}
+}
+
+// TestFitFlash：单个参数的字符上限不能保证整条消息的字节上限（JSON 转义、多字节字符、多个参数），
+// fitFlash 按字节预算截断文字参数，长度合格的消息总能放进地址。
+func TestFitFlash(t *testing.T) {
+	amp := strings.Repeat("&", 180) + ".txt" // & 编码为 \u0026（6 个字节）
+	emoji := strings.Repeat("😀", maxFlashArgRunes)
+	for name, c := range map[string]struct {
+		t      uiText
+		fits   bool // 不截断就能放下
+		prefix map[string]string
+	}{
+		"短参数原样保留": {
+			message(msgJobOutputGone, strArg(argOutput, "bin"), strArg(argPath, "lost.txt")), true,
+			map[string]string{argOutput: "bin", argPath: "lost.txt"},
+		},
+		"转义后超长": {
+			message(msgJobOutputGone, strArg(argOutput, "bin"), strArg(argPath, amp)), false,
+			map[string]string{argOutput: "bin", argPath: "&&&&"},
+		},
+		"多个多字节参数": {
+			message(msgJobOutputGone, strArg(argOutput, emoji), strArg(argPath, emoji)), false,
+			map[string]string{argOutput: "😀😀", argPath: "😀😀"},
+		},
+		"一个参数超长、一个含控制字符": {
+			message(msgJobOutputGone, strArg(argOutput, "a\nb"), strArg(argPath, strings.Repeat("<", 3*maxFlashArgRunes))), false,
+			map[string]string{argOutput: "a b", argPath: "<<<<"},
+		},
+	} {
+		if _, err := flashValue(c.t); (err == nil) != c.fits {
+			t.Fatalf("%s：前提不成立，flashValue 的错误 = %v", name, err)
+		}
+		got := fitFlash(c.t)
+		v, err := flashValue(got)
+		if err != nil {
+			t.Errorf("%s：整理后仍不合格：%v", name, err)
+			continue
+		}
+		parsed := parseFlash(v)
+		if parsed.id != c.t.id {
+			t.Errorf("%s：地址中的提示应能读回：%s", name, v)
+		}
+		for arg, want := range c.prefix {
+			s, _ := parsed.params[arg].(string)
+			if !strings.HasPrefix(s, want) {
+				t.Errorf("%s：参数 %s = %q，应以 %q 开头", name, arg, s, want)
+			}
+			if orig, _ := c.t.params[arg].(string); s != flashArgText(orig) && !strings.HasSuffix(s, "…") {
+				t.Errorf("%s：截断的参数 %s 应以省略号结尾：%q", name, arg, s)
+			}
+		}
+		if c.fits && !reflect.DeepEqual(got.params, c.t.params) {
+			t.Errorf("%s：放得下的消息不应改变：%v", name, got.params)
+		}
+	}
+	// 截断时多出的预算留给更长的参数：短参数原样保留
+	got := fitFlash(message(msgJobOutputGone, strArg(argOutput, "bin"), strArg(argPath, amp)))
+	if got.params[argOutput] != "bin" {
+		t.Errorf("短参数不应截断：%q", got.params[argOutput])
+	}
+	if v, _ := flashValue(got); len(v) < maxFlashBytes-jsonStringLen("&") {
+		t.Errorf("应尽量用满预算：%d 字节", len(v))
+	}
+}
+
+func TestTruncateJSONString(t *testing.T) {
+	for _, c := range []struct {
+		s     string
+		limit int
+		want  string
+	}{
+		{"abc", 3, "abc"},
+		{"abcdef", 5, "ab…"},
+		{"&&&", 12, "&…"}, // \u0026 是 6 个字节，省略号 3 个字节
+		{"&&&", 8, "…"},
+		{"长长长", 8, "长…"},
+		{"abc", 2, ""},
+	} {
+		got := truncateJSONString(c.s, c.limit)
+		if got != c.want || jsonStringLen(got) > c.limit {
+			t.Errorf("truncateJSONString(%q, %d) = %q，应为 %q", c.s, c.limit, got, c.want)
+		}
 	}
 }
