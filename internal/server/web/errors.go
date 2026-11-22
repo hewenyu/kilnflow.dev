@@ -209,12 +209,13 @@ func (d *Dashboard) failureText(r *http.Request, err error) uiText {
 	return rawText(connectMessage(err))
 }
 
-// failureFlash 返回操作失败后跳转时的提示：内部错误用 withRef（参数是错误编号），其余用 withReason（参数是原样的说明，过长时截断）。
-func (d *Dashboard) failureFlash(r *http.Request, err error, withReason, withRef msgID) uiText {
+// failureFlash 返回操作失败后跳转时的提示：内部错误用 withRef（参数是错误编号），其余用 withReason（参数是原样的说明，过长时截断）；
+// args 是两条消息共同的其他参数（例如操作的对象名）。
+func (d *Dashboard) failureFlash(r *http.Request, err error, withReason, withRef msgID, args ...msgArg) uiText {
 	if ref := d.failureRef(r, err); ref != "" {
-		return message(withRef, strArg(argRef, ref))
+		return message(withRef, append(args, strArg(argRef, ref))...)
 	}
-	return message(withReason, strArg(argReason, flashArgText(connectMessage(err))))
+	return message(withReason, append(args, strArg(argReason, flashArgText(connectMessage(err))))...)
 }
 
 // failureRef 记录操作失败的日志：内部错误（见 internalError）生成并返回错误编号，详细信息只写日志；

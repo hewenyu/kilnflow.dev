@@ -1,6 +1,8 @@
 {
  "Page": "runner_new",
- "Title": "注册新的 Runner",
+ "Title": {
+  "id": "runnerNew.pageTitle"
+ },
  "Nav": "runners",
  "Status": 404,
  "Session": {

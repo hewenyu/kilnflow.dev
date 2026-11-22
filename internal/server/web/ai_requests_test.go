@@ -60,7 +60,7 @@ func testAITaskPage(now time.Time) *aiTaskPage {
 
 func testAIRunner(now time.Time) *aiRunnerView {
 	return &aiRunnerView{
-		ID: 3, Name: "reviewer", Role: store.RunnerRoleReview, RoleLabel: "AI 审计节点", Version: "v0.3.0", Platform: "darwin/arm64",
+		ID: 3, Name: "reviewer", Role: store.RunnerRoleReview, Version: "v0.3.0", Platform: "darwin/arm64",
 		Protocol: agentcfg.AIProtocol, HostID: "host-1", Online: true, LastSeen: &now, Capacity: 2, OrcaState: "ready",
 		OrcaVersion: "1.4.245", OrcaRuntimeID: "runtime-1", DockerState: "unavailable", DockerReason: "没有 Docker",
 		Agents: []aiAgentView{{Agent: "codex", Name: "Codex", Version: "0.50.0", State: "available", CheckedAt: &now}},
@@ -75,7 +75,7 @@ func testAIRunner(now time.Time) *aiRunnerView {
 func testAIRunnersPage(now time.Time) *aiRunnersPage {
 	return &aiRunnersPage{
 		Runners: []*aiRunnerView{testAIRunner(now)}, Counts: aiRunnerCounts{Total: 1, Online: 1, Accepting: 1, Tasks: 1}, Self: aiRunnersPath,
-		OfflineAfter: "2 分钟", LeaseTTL: "1 分钟", LongPoll: "25 秒",
+		OfflineAfter: 120, LeaseTTL: 60, LongPoll: 25,
 	}
 }
 
@@ -485,7 +485,7 @@ func TestPageAIRunners(t *testing.T) {
 		t.Fatalf("AI 执行节点 = %+v", p.Runners)
 	}
 	r := p.Runners[1]
-	if r.Role != store.RunnerRoleReview || r.RoleLabel != "AI 审计节点" || !r.Online || r.OrcaState != "unavailable" ||
+	if r.Role != store.RunnerRoleReview || !r.Online || r.OrcaState != "unavailable" ||
 		r.OrcaReason != "Orca Server 没有启动" || r.Capacity != 2 || len(r.Agents) != 1 || r.Agents[0].Agent != "codex" ||
 		len(r.Tasks) != 1 || r.Tasks[0].TaskID != task || r.Tasks[0].RequestID != req || r.Tasks[0].Orca.DispatchID != "" {
 		t.Errorf("reviewer = %+v", r)
@@ -515,15 +515,15 @@ func TestPostAIRunnerOps(t *testing.T) {
 	task := e.addAITask(e.addAIRequest(aiRequestOpts{pr: 5}), aiTaskOpts{state: ai.TaskRunning})
 	e.addAIAttempt(task, rev, "", "")
 
-	flash := wantRedirect(t, "暂停", e.post(e.alice, "/runners/reviewer/drain", nil), aiRunnersPath)
+	flash := flashZH(t, wantRedirect(t, "暂停", e.post(e.alice, "/runners/reviewer/drain", nil), aiRunnersPath))
 	if !strings.Contains(flash, "正在执行的 1 个任务会继续执行到结束") {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "吊销", e.post(e.alice, "/runners/reviewer/revoke", nil), aiRunnersPath)
+	flash = flashZH(t, wantRedirect(t, "吊销", e.post(e.alice, "/runners/reviewer/revoke", nil), aiRunnersPath))
 	if !strings.Contains(flash, "1 个 AI 任务会被中断") {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "检查更新", e.post(e.alice, "/runners/upgrade/reviewer/check", nil), aiRunnerURL("reviewer"))
+	flash = flashZH(t, wantRedirect(t, "检查更新", e.post(e.alice, "/runners/upgrade/reviewer/check", nil), aiRunnerURL("reviewer")))
 	if flash == "" {
 		t.Error("检查更新应给出结果")
 	}

@@ -137,7 +137,7 @@ func TestPagesRender(t *testing.T) {
 		"ai_request":       testAIRequestPage(now),
 		"ai_task":          testAITaskPage(now),
 		"ai_runners":       testAIRunnersPage(now),
-		"ai_runner":        &aiRunnerPage{Runner: testAIRunner(now), OfflineAfter: "2 分钟", LongPoll: "25 秒"},
+		"ai_runner":        &aiRunnerPage{Runner: testAIRunner(now), OfflineAfter: 120, LongPoll: 25},
 		"settings_ops": &opsPage{
 			Section: sectionOps, App: "kiln", PublicURL: "https://kiln.example.com", Version: "dev",
 			Outbox: []*outbox.Item{{ID: 1, DedupeKey: "checkrun:job:1", Kind: "checkrun.job", State: "dead", Attempts: 3, LastError: "boom", UpdatedAt: now}},

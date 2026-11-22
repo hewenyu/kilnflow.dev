@@ -2,7 +2,6 @@ package web
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 
@@ -36,8 +35,8 @@ type runnerPage struct {
 	// Registry 是 Runner 查询和下载升级包用的 registry；RegistryDefault 表示是官方 registry（没有设置）。
 	Registry        string
 	RegistryDefault bool
-	// OfflineAfter、LongPoll 是页面说明中用到的时长。
-	OfflineAfter, LongPoll string
+	// OfflineAfter、LongPoll 是页面说明中用到的时长（秒）。
+	OfflineAfter, LongPoll int64
 }
 
 func (d *Dashboard) pageRunner(w http.ResponseWriter, r *http.Request, _ *session) {
@@ -54,7 +53,7 @@ func (d *Dashboard) pageRunner(w http.ResponseWriter, r *http.Request, _ *sessio
 			d.redirect(w, r, aiRunnerURL(name))
 			return
 		}
-		d.notFound(w, r, fmt.Sprintf("没有名为 %s 的 Runner。", name))
+		d.notFoundText(w, r, message(msgRunnerNotFound, strArg(argName, name)))
 		return
 	}
 	reqs, err := upgradectl.History(ctx, d.db, v.ID, runnerHistoryLimit)
@@ -69,12 +68,12 @@ func (d *Dashboard) pageRunner(w http.ResponseWriter, r *http.Request, _ *sessio
 	}
 	p := &runnerPage{
 		Runner: v, Registry: upgrade.Registry(ov.Registry), RegistryDefault: ov.Registry == "",
-		OfflineAfter: humanDuration(admin.RunnerOfflineAfter), LongPoll: humanDuration(d.longPoll()),
+		OfflineAfter: seconds(admin.RunnerOfflineAfter), LongPoll: seconds(d.longPoll()),
 	}
 	for _, q := range reqs {
 		p.History = append(p.History, newUpgradeRequestView(q))
 	}
-	d.render(w, r, "runner", "Runner · "+name, p)
+	d.renderPage(w, r, "runner", message(msgRunnerTitle, strArg(argName, name)), p, http.StatusOK)
 }
 
 // postRunnerUpgradeOp 是一台 Runner 的升级操作：升级到它查到的最新版本（start）、取消进行中的升级（cancel）、
@@ -91,52 +90,48 @@ func (d *Dashboard) postRunnerUpgradeOp(w http.ResponseWriter, r *http.Request, 
 	if v != nil && v.AI {
 		back = aiRunnerURL(name)
 	}
-	var msg string
+	var msg uiText
 	switch op {
 	case upgradeOpStart:
 		req, created, err := d.admin.RequestRunnerUpgrade(ctx, name, r.PostFormValue("version"), se.Login)
 		switch {
 		case err != nil:
-			msg = "没有升级：" + d.upgradeFailure(r, err)
+			msg = d.upgradeFailure(r, err, name, msgUpgradeStartFailed, msgUpgradeStartFailedRef)
 		case !created:
-			msg = fmt.Sprintf("%s 已经在升级到 %s，没有重复请求。", name, req.Version)
+			msg = message(msgUpgradeAlready, strArg(argName, name), strArg(argVersion, req.Version))
+		case v != nil && !v.Online:
+			msg = message(msgUpgradeRequestedOff, strArg(argName, name), strArg(argVersion, req.Version))
 		default:
-			msg = fmt.Sprintf("已请求把 %s 升级到 %s：Runner 下载、核对后等正在执行的任务结束再切换，新版本启动并确认后完成。", name, req.Version)
-			if v != nil && !v.Online {
-				msg += "它目前离线，重新连接后执行。"
-			}
+			msg = message(msgUpgradeRequested, strArg(argName, name), strArg(argVersion, req.Version))
 		}
 	case upgradeOpCancel:
 		req, err := d.admin.CancelRunnerUpgrade(ctx, name, se.Login)
 		if err != nil {
-			msg = "没有取消：" + d.upgradeFailure(r, err)
+			msg = d.upgradeFailure(r, err, name, msgUpgradeCancelFailed, msgUpgradeCancelFailedRef)
 		} else {
-			msg = fmt.Sprintf("已取消 %s 升级到 %s；已经下载的包保留，之后再升级时直接使用。", name, req.Version)
+			msg = message(msgUpgradeCancelled, strArg(argName, name), strArg(argVersion, req.Version))
 		}
 	case upgradeOpCheck:
 		if _, err := d.admin.CheckRunnerUpgrade(ctx, name, se.Login); err != nil {
-			msg = "没有检查：" + d.upgradeFailure(r, err)
+			msg = d.upgradeFailure(r, err, name, msgUpgradeCheckFailed, msgUpgradeCheckFailedRef)
 		} else {
-			msg = fmt.Sprintf("已请求 %s 查询最新版本：它下一次连接 Server 时查询（在线时最长约 %s）。", name, humanDuration(d.longPoll()))
+			msg = message(msgUpgradeCheckRequested, strArg(argName, name), intArg(argPoll, seconds(d.longPoll())))
 		}
 	default:
-		d.notFound(w, r, "没有这个升级操作，没有执行任何操作。")
+		d.notFoundText(w, r, message(msgUpgradeOpUnknown))
 		return
 	}
-	d.flashBack(w, r, back, msg)
+	d.flashMsg(w, r, back, msg)
 }
 
-// upgradeFailure 返回升级操作失败的说明：Runner 当前的状态不允许（已是最新、需要 service install 等）、参数错误时
-// 直接显示原因，其他错误按 failure 处理。
-func (d *Dashboard) upgradeFailure(r *http.Request, err error) string {
-	if re, ok := errors.AsType[*upgradectl.RefusedError](err); ok {
-		return re.Msg
-	}
-	if ie, ok := errors.AsType[*upgradectl.InvalidError](err); ok {
-		return ie.Msg
+// upgradeFailure 返回升级操作失败后的提示：Runner 当前的状态不允许（已是最新、需要 service install 等）时按 upgradectl 的
+// 原因码显示原因；Runner 不存在时说明；参数错误和其他错误按 failureFlash 处理（withReason 带原样的说明，withRef 带错误编号）。
+func (d *Dashboard) upgradeFailure(r *http.Request, err error, name string, withReason, withRef msgID) uiText {
+	if re, ok := errors.AsType[*upgradectl.RefusedError](err); ok && !re.Reason.IsZero() {
+		return upgradeReasonText(re.Reason)
 	}
 	if errors.Is(err, upgradectl.ErrRunnerNotFound) {
-		return "没有这台 Runner"
+		return message(msgUpgradeRunnerMissing, strArg(argName, name))
 	}
-	return d.failure(r, err)
+	return d.failureFlash(r, err, withReason, withRef)
 }

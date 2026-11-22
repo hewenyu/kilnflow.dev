@@ -1,6 +1,8 @@
 {
  "Page": "runner_new",
- "Title": "注册新的 Runner",
+ "Title": {
+  "id": "runnerNew.pageTitle"
+ },
  "Nav": "runners",
  "Status": 200,
  "Session": {
@@ -78,10 +80,9 @@
      }
     ],
     "Accepting": true,
-    "ConnLabel": "在线",
     "ConnClass": "ok",
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/mini-01"
+    "URL": "/runners/detail/mini-01",
+    "Kind": "ci"
    }
   },
   "Missing": false,

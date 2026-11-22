@@ -8,6 +8,7 @@ import { Callout } from '../components/Callout'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { RunnerIcon, RunnerLabels } from '../components/RunnerStatus'
+import { Trans, useT } from '../i18n/locale'
 import { list } from '../lib/envelope'
 import { AIRunnerFacts, AIRunnerOps, AIWork, RoleLabel } from './ai/runner'
 import { aiRunnerCountsSchema, aiRunnerSchema, aiRunnerURL, type AIRunner } from './ai/schema'
@@ -22,10 +23,10 @@ const schema = z.object({
   Runners: list(aiRunnerSchema),
   Counts: aiRunnerCountsSchema,
   Self: z.string(),
-  /** 页面说明中用到的时长。 */
-  OfflineAfter: z.string(),
-  LeaseTTL: z.string(),
-  LongPoll: z.string(),
+  /** 页面说明中用到的时长（秒）。 */
+  OfflineAfter: z.number(),
+  LeaseTTL: z.number(),
+  LongPoll: z.number(),
 })
 type Data = z.infer<typeof schema>
 
@@ -57,47 +58,54 @@ function Row({ runner: r, data, admin }: { runner: AIRunner; data: Data; admin: 
 
 function AIRunners({ data, env }: PageProps<Data>) {
   useLive(true)
+  const t = useT()
   const admin = env.Session?.Admin ?? false
   const c = data.Counts
   return (
     <div className={css.page}>
       <PageHeader
-        title="AI 执行节点"
+        title={t('aiRunners.title')}
         description={
-          <>
-            执行 AI 审计和 AI 开发的节点：执行机器上的 Orca 通过连接器 kiln-orca 领取任务，一个节点可以同时执行多个任务。{data.OfflineAfter}
-            没有联系 Server 时显示为离线。CI 的 Runner 见 <a href="/runners">Runner</a>。
-          </>
+          <Trans id="aiRunners.description" params={{ offline: data.OfflineAfter }} tags={{ link: (s) => <a href="/runners">{s}</a> }} />
         }
         actions={
           admin && (
             <LinkButton href="/runners/new" variant="primary" leadingVisual={PlusIcon}>
-              注册新的 Runner
+              {t('runners.register')}
             </LinkButton>
           )
         }
       />
       {c.Total > 0 && c.Accepting === 0 && (
-        <Callout tone="warning" title="没有在线并接单的 AI 执行节点">
-          新的 AI 请求会一直排队，直到有 AI 执行节点上线{c.Paused > 0 ? '或恢复接单' : ''}。
+        <Callout tone="warning" title={t('aiRunners.noAcceptingTitle')}>
+          {t(c.Paused > 0 ? 'aiRunners.noAcceptingPaused' : 'aiRunners.noAccepting')}
         </Callout>
       )}
       <Box>
-        <h2 className="visually-hidden">AI 执行节点列表</h2>
+        <h2 className="visually-hidden">{t('aiRunners.listTitle')}</h2>
         {c.Total > 0 && (
           <BoxRow className={css.muted}>
-            共 {c.Total} 个：{c.Online} 在线，{c.Accepting} 接单中，{c.Paused} 已暂停，{c.Offline} 离线，{c.Revoked} 已吊销；{c.Tasks} 个 AI 任务在执行。
+            {t('aiRunners.counts', {
+              count: c.Total,
+              online: c.Online,
+              accepting: c.Accepting,
+              paused: c.Paused,
+              offline: c.Offline,
+              revoked: c.Revoked,
+              tasks: c.Tasks,
+            })}
           </BoxRow>
         )}
         {data.Runners.length > 0 ? (
-          <ul className={runnersCss.rows} aria-label="AI 执行节点">
+          <ul className={runnersCss.rows} aria-label={t('aiRunners.title')}>
             {data.Runners.map((r) => (
               <Row key={r.ID} runner={r} data={data} admin={admin} />
             ))}
           </ul>
         ) : (
-          <EmptyState icon={CpuIcon} title="还没有 AI 执行节点">
-            注册时选择"AI 审计节点"或"AI 开发节点"。{admin ? '' : '注册 Runner 需要管理员。'}
+          <EmptyState icon={CpuIcon} title={t('aiRunners.emptyTitle')}>
+            {t('aiRunners.emptyText')}
+            {admin ? '' : t('runners.needAdmin')}
           </EmptyState>
         )}
       </Box>

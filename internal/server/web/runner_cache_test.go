@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	runnerv1 "github.com/hewenyu/kilnflow.dev/gen/go/kiln/runner/v1"
+	"github.com/hewenyu/kilnflow.dev/internal/server/admin"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
 )
 
@@ -61,9 +62,10 @@ func TestPageRunners_CapacityAndCache(t *testing.T) {
 	}
 	arm := byName["arm"]
 	want := capacityView{
-		Machine: "4 核 / 24.0 GiB", Reserved: "0 核 / 2.0 GiB", Allocatable: "4 核 / 22.0 GiB", Allocated: "1.5 核 / 1.0 GiB",
+		Machine: resourcesView{"4", "24.0 GiB"}, Reserved: resourcesView{"0", "2.0 GiB"}, Allocatable: resourcesView{"4", "22.0 GiB"},
+		Allocated: resourcesView{"1.5", "1.0 GiB"},
 		// oci 的上限都是 0（不限制），不列出
-		Limits: []string{"host 上限 2 核 / 6.0 GiB"}, MaxJobs: 2,
+		Limits: []limitView{{Executor: "host", resourcesView: resourcesView{"2", "6.0 GiB"}}}, MaxJobs: 2,
 	}
 	if c := arm.Capacity; c == nil || c.Machine != want.Machine || c.Reserved != want.Reserved || c.Allocatable != want.Allocatable ||
 		c.Allocated != want.Allocated || !slices.Equal(c.Limits, want.Limits) || c.MaxJobs != want.MaxJobs {
@@ -95,16 +97,16 @@ func TestPageRunnerCache_Member(t *testing.T) {
 		p.DiskTotal != 1000 || p.DiskFree != 400 || p.Self != "/runners/cache/arm" {
 		t.Fatalf("缓存页 = %+v", p)
 	}
-	if e0 := p.Entries[0]; e0.Repo != "tester/demo" || e0.KindLabel != "toolcache" || e0.LastUsed == nil || e0.Size != 10 {
+	if e0 := p.Entries[0]; e0.Repo != "tester/demo" || e0.Kind != "toolcache" || e0.LastUsed == nil || e0.Size != 10 {
 		t.Errorf("清单的第一项 = %+v", e0)
 	}
-	if p.Entries[2].KindLabel != "git 镜像" || p.Entries[4].Repo != "" || p.Entries[4].Expires == nil {
+	if p.Entries[2].Kind != "git" || p.Entries[4].Repo != "" || p.Entries[4].Expires == nil {
 		t.Errorf("清单 = %+v", p.Entries)
 	}
 	if p.GC == nil || p.GC.Removed != 3 || p.GC.RemovedBytes != 30 || len(p.GC.Failures) != 1 || p.GC.Failures[0].Error != "permission denied" {
 		t.Errorf("上一次清理 = %+v", p.GC)
 	}
-	if !slices.Equal(p.Domains, []string{"host", "oci-root"}) || len(p.Kinds) == 0 {
+	if !slices.Equal(p.Domains, []string{"host", "oci-root"}) || !slices.Equal(p.Kinds, admin.CacheKinds()) {
 		t.Errorf("表单选项：Domains %v Kinds %v", p.Domains, p.Kinds)
 	}
 	if p.Preview != nil || p.Repos != nil || p.Repo != "" {
@@ -118,7 +120,7 @@ func TestPageRunnerCache_Member(t *testing.T) {
 	}
 	w = e.get(e.bob, "/runners/cache/ghost")
 	wantStatus(t, "不存在的 Runner", w, http.StatusNotFound)
-	mustHave(t, "页面", w.Body.String(), "没有名为 ghost 的 Runner")
+	mustHave(t, "页面", pageTextZH(t, w.Body.String()), "没有名为 ghost 的 Runner")
 }
 
 // 管理员预览：只包含所选范围的项，列出继续保留的共享缓存；预览不写入清理请求。
@@ -133,7 +135,7 @@ func TestPageRunnerCache_Preview(t *testing.T) {
 	if !slices.Equal(p.Repos, []string{"tester/demo", "tester/other"}) || p.Repo != "tester/demo" || !slices.Equal(p.KindsPicked, []string{"toolcache"}) {
 		t.Errorf("表单取值：Repos %v Repo %q Kinds %v", p.Repos, p.Repo, p.KindsPicked)
 	}
-	if p.Preview == nil || p.Preview.Error != "" {
+	if p.Preview == nil || !p.Preview.Error.IsZero() {
 		t.Fatalf("预览 = %+v", p.Preview)
 	}
 	var matched []string
@@ -143,7 +145,10 @@ func TestPageRunnerCache_Preview(t *testing.T) {
 	if !slices.Equal(matched, []string{"toolcache/host/501/linux-arm64/gomod", "toolcache/oci-root/501/linux-arm64/gomod"}) || p.Preview.MatchedBytes != 30 {
 		t.Errorf("预览匹配 %v（%d 字节）", matched, p.Preview.MatchedBytes)
 	}
-	if len(p.Preview.Shared) == 0 || len(p.Preview.Notes) == 0 {
+	// 说明是原因码映射的消息：清单的生成时间是 Unix 秒（前端按语言和时区显示），正在执行的 job，共享缓存继续保留
+	if n := p.Preview.Notes; len(p.Preview.Shared) == 0 || len(n) != 3 || n[0].id != msgCacheNoteReport ||
+		toInt64(t, n[0].params[argAt]) != p.Generated.Unix() || textZH(t, n[1]) != "arm 正在执行 1 个 job：清理在它们结束后进行，期间不领取新任务" ||
+		n[2].id != msgCacheNoteSharedKept {
 		t.Errorf("预览应列出保留的共享缓存和说明：%+v", p.Preview)
 	}
 	// 逗号分隔的类别与重复的 kind 相同；指定执行身份时只匹配这个执行身份的项（两个仓库的 host toolcache）
@@ -153,7 +158,7 @@ func TestPageRunnerCache_Preview(t *testing.T) {
 	}
 	// 不在 Kiln 中的仓库：预览失败，页面仍然正常显示
 	p = pageData[runnerCachePage](t, e.get(e.alice, "/runners/cache/arm?repo=tester/ghost&preview=1").Body.String())
-	if p.Preview == nil || p.Preview.Error == "" || len(p.Entries) != 5 {
+	if p.Preview == nil || textZH(t, p.Preview.Error) != "仓库 tester/ghost 不在 Kiln 中，不能预览。" || len(p.Entries) != 5 {
 		t.Errorf("未知仓库的预览 = %+v", p.Preview)
 	}
 	if n := e.count(`SELECT count(*) FROM runner_cache_purges`); n != 0 {
@@ -178,9 +183,9 @@ func TestPostRunnerCachePurge(t *testing.T) {
 	}
 
 	// 管理员：写入待执行的清理请求（类别用逗号分隔，与预览页的确认表单相同），回到缓存页
-	flash := wantRedirect(t, "发起清理", e.post(e.alice, "/runners/cache/arm/purge", url.Values{
+	flash := flashZH(t, wantRedirect(t, "发起清理", e.post(e.alice, "/runners/cache/arm/purge", url.Values{
 		"repo": {"tester/demo"}, "kind": {"toolcache,git"}, "domain": {"host"},
-	}), "/runners/cache/arm")
+	}), "/runners/cache/arm"))
 	mustHave(t, "操作结果", flash, "已发起清理请求 #", "arm 在没有正在执行的 job 时执行")
 	var (
 		runnerID, repoID int64
@@ -199,9 +204,9 @@ func TestPostRunnerCachePurge(t *testing.T) {
 	}
 
 	// 未知仓库：失败，不写入；不存在的 Runner：回到列表
-	flash = wantRedirect(t, "未知仓库", e.post(e.alice, "/runners/cache/arm/purge", url.Values{"repo": {"tester/ghost"}}), "/runners/cache/arm")
+	flash = flashZH(t, wantRedirect(t, "未知仓库", e.post(e.alice, "/runners/cache/arm/purge", url.Values{"repo": {"tester/ghost"}}), "/runners/cache/arm"))
 	mustHave(t, "操作结果", flash, "发起清理失败")
-	flash = wantRedirect(t, "不存在的 Runner", e.post(e.alice, "/runners/cache/ghost/purge", nil), "/runners")
+	flash = flashZH(t, wantRedirect(t, "不存在的 Runner", e.post(e.alice, "/runners/cache/ghost/purge", nil), "/runners"))
 	mustHave(t, "操作结果", flash, "没有名为 ghost 的 Runner")
 	if n := purges(); n != 1 {
 		t.Errorf("失败的请求不应写入：%d", n)

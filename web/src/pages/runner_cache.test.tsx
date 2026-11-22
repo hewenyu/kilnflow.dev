@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/runner_cache.json'
 import noneFixture from '../../dev/fixtures/runner_cache.none.json'
 import previewFixture from '../../dev/fixtures/runner_cache.preview.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, envelope, renderPage, switchLocale, withData } from '../test/render'
 import { json, stubFetch } from '../test/fetch'
 
 let requests: { url: string; method: string; body: string }[] = []
@@ -145,3 +145,39 @@ describe('Runner 的本地缓存', () => {
     expect(screen.getByRole('region', { name: '清理请求' })).toHaveTextContent('还没有清理请求。')
   })
 })
+
+describe('Runner 本地缓存（英文与切换语言）', () => {
+  const rawZH = ['unlinkat gocache/00/0a1b-d: permission denied；用清理容器删除也失败：docker run busybox:1.37：exit status 125：Cannot connect to the Docker daemon']
+
+  it('英文：清单、类别、预览说明（服务端的原因码）和清理记录都按英文显示，没有残留的中文界面文字', () => {
+    renderPage(envelope(previewFixture), '/runners/cache/mini-01?preview=1', { locale: 'en' })
+    expect(screen.getAllByText('git mirror').length).toBeGreaterThan(0)
+    const notes = within(screen.getByRole('list', { name: 'Preview notes' }))
+    expect(notes.getByText(/^The preview uses the inventory reported at .+; the purge acts on what is actually on the runner$/)).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Caches to be removed' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Purge…' })).toBeInTheDocument()
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('预览失败的原因是服务端的消息，切换语言后立即更新', async () => {
+    const p = previewFixture.Data.Preview
+    const error = { id: 'runnerCache.errRepoNotFound', params: { repo: 'acme/ghost' } }
+    renderPage(withData(envelope(previewFixture), { Preview: { ...p, Error: error } }), '/runners/cache/mini-01?preview=1')
+    expect(screen.getByText('仓库 acme/ghost 不在 Kiln 中，不能预览。')).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText("Can't preview")).toBeInTheDocument()
+    expect(screen.getByText('Repository acme/ghost is not in Kiln, so there is nothing to preview.')).toBeInTheDocument()
+  })
+
+  it('清理确认对话框打开时切换语言：对话框保持打开，范围的文字立即切换', async () => {
+    renderPage(envelope(previewFixture), '/runners/cache/mini-01?preview=1')
+    await userEvent.click(screen.getByRole('button', { name: '清理…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/^范围：/)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('alertdialog')).toBe(dialog)
+    expect(within(dialog).getByText(/^Scope: /)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Purge' })).toBeInTheDocument()
+  })
+})
+

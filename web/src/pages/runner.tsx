@@ -9,6 +9,7 @@ import { ConfirmForm, Form, SubmitButton } from '../components/Form'
 import { PageHeader } from '../components/PageHeader'
 import {
   requestStateText,
+  runnerKindLabel,
   runnerViewSchema,
   upgradeRequestSchema,
   upgradeStateText,
@@ -20,6 +21,8 @@ import {
 } from '../components/RunnerSchema'
 import { RunnerLabels } from '../components/RunnerStatus'
 import { Ago } from '../components/Time'
+import { Msg, Trans, useT, type Tags } from '../i18n/locale'
+import { isEmpty } from '../i18n/messages'
 import { list } from '../lib/envelope'
 import { Facts, Work } from './runners'
 import css from './runner.module.css'
@@ -35,8 +38,9 @@ const schema = z.object({
   /** Runner 查询和下载升级包用的 registry；RegistryDefault 表示是官方 registry（没有设置）。 */
   Registry: z.string(),
   RegistryDefault: z.boolean(),
-  OfflineAfter: z.string(),
-  LongPoll: z.string(),
+  /** 页面说明中用到的时长（秒）。 */
+  OfflineAfter: z.number(),
+  LongPoll: z.number(),
 })
 type Data = z.infer<typeof schema>
 
@@ -51,46 +55,52 @@ interface UpgradeProps {
   running: number
   registry: string
   registryDefault: boolean
-  longPoll: string
+  longPoll: number
   admin: boolean
 }
 
+const rich: Tags = { code: (c) => <code>{c}</code> }
+
 function UpgradeFacts({ p, u }: { p: UpgradeProps; u: RunnerUpgrade }) {
+  const t = useT()
   const r = p.runner
   return (
     <dl className={css.kv}>
-      <dt>当前版本</dt>
+      <dt>{t('runner.current')}</dt>
       <dd className="mono">{r.Version || '—'}</dd>
-      <dt>npm 包</dt>
-      <dd className={u.Package ? 'mono' : css.muted}>{u.Package || 'Runner 还没有上报'}</dd>
-      <dt>最新版本</dt>
+      <dt>{t('runner.package')}</dt>
+      <dd className={u.Package ? 'mono' : css.muted}>{u.Package || t('runner.packageUnknown')}</dd>
+      <dt>{t('runner.latest')}</dt>
       <dd>
-        {u.Latest ? <span className="mono">{u.Latest}</span> : <span className={css.muted}>还没有查到</span>}
+        {u.Latest ? <span className="mono">{u.Latest}</span> : <span className={css.muted}>{t('runner.latestUnknown')}</span>}
         {u.CheckPending ? (
-          <span className={css.muted}>，等待 Runner 检查（在线时最长约 {p.longPoll}）</span>
+          <span className={css.muted}>{t('runner.checkPending', { poll: p.longPoll })}</span>
         ) : (
           u.CheckedAt && (
             <span className={css.muted}>
-              ，<Ago t={u.CheckedAt} />
-              查询
+              <Trans id="runner.checkedAt" tags={{ ago: () => <Ago t={u.CheckedAt} /> }} />
             </span>
           )
         )}
-        {u.CheckError && <div className={css.err}>最近一次查询失败：{u.CheckError}</div>}
+        {u.CheckError && <div className={css.err}>{t('runner.checkError', { error: u.CheckError })}</div>}
       </dd>
       <dt>registry</dt>
       <dd>
         <span className="mono">{p.registry}</span>
-        {p.registryDefault && <span className={css.muted}>（官方）</span>}
+        {p.registryDefault && <span className={css.muted}>{t('runner.registryDefault')}</span>}
       </dd>
-      <dt>启动器</dt>
+      <dt>{t('runner.launcher')}</dt>
       <dd>
-        {u.Launcher ? '经过启动器运行，可以切换版本' : <span className={css.muted}>没有经过启动器运行</span>}
-        {u.Disabled && <span className={css.muted}>；config.toml 中 upgrade = false</span>}
+        {u.Launcher ? t('runner.launcherYes') : <span className={css.muted}>{t('runner.launcherNo')}</span>}
+        {u.Disabled && (
+          <span className={css.muted}>
+            <Trans id="runner.disabled" tags={rich} />
+          </span>
+        )}
       </dd>
       {u.Previous && (
         <>
-          <dt>可回滚到</dt>
+          <dt>{t('runner.previous')}</dt>
           <dd className="mono">{u.Previous}</dd>
         </>
       )}
@@ -100,30 +110,33 @@ function UpgradeFacts({ p, u }: { p: UpgradeProps; u: RunnerUpgrade }) {
 
 /** UpgradeStatus 是升级的当前情况和管理员的操作：进行中可以取消，可以升级时"升级到 vX"，否则说明原因。 */
 function UpgradeStatus({ p, u }: { p: UpgradeProps; u: RunnerUpgrade }) {
+  const t = useT()
   const { runner: r, running, admin } = p
   const req = upgrading(u)
   const tone = upgradeTone(r, u)
-  const text = upgradeStateText(r, u)
+  const text = upgradeStateText(r, u, t)
   if (req) {
     return (
       <Callout tone="info" title={text}>
         <p className={css.p}>
-          {req.Actor} <Ago t={req.Created} />
-          请求从 {req.From || '—'} 升级到 {req.Version}。Runner 下载、核对后等正在执行的任务结束再切换，新版本启动并连上 Server 后完成；
-          {r.Online ? '' : `它目前离线，重新连接后执行；`}新版本连续启动失败会回滚到原来的版本。
+          <Trans
+            id={r.Online ? 'runner.pendingText' : 'runner.pendingTextOffline'}
+            params={{ actor: req.Actor, from: req.From || '—', version: req.Version }}
+            tags={{ ago: () => <Ago t={req.Created} /> }}
+          />
         </p>
         {admin && (
           <div className={css.actions}>
             <ConfirmForm
               action={upgradeAction(r.Name, 'cancel')}
-              button="取消升级…"
+              button={t('runner.cancel')}
               buttonProps={{ size: 'small' }}
               danger={false}
-              title={`取消 ${r.Name} 升级到 ${req.Version}？`}
-              confirmLabel="取消升级"
-              cancelLabel="返回"
+              title={t('runner.cancelTitle', { name: r.Name, version: req.Version })}
+              confirmLabel={t('runner.cancelConfirm')}
+              cancelLabel={t('runner.cancelBack')}
             >
-              已经下载的包保留，之后再升级时直接使用。正在切换版本时不能取消。
+              {t('runner.cancelText')}
             </ConfirmForm>
           </div>
         )}
@@ -134,15 +147,15 @@ function UpgradeStatus({ p, u }: { p: UpgradeProps; u: RunnerUpgrade }) {
     <div className={css.status}>
       {tone === 'bad' && u.Request && (
         <Callout tone="critical" title={text}>
-          {u.Request.Error || '没有给出原因。'}
+          {u.Request.Error || t('runner.noReason')}
         </Callout>
       )}
       {u.CanUpgrade ? (
         <p className={`${css.p} ${css.upWarn}`}>
-          可以升级到 <span className="mono">{u.Latest}</span>。
+          <Trans id="runner.canUpgrade" params={{ version: u.Latest }} tags={{ v: (v) => <span className="mono">{v}</span> }} />
         </p>
       ) : (
-        <p className={`${css.p} ${tone === 'ok' ? '' : css.muted}`}>{u.Reason || text}</p>
+        <p className={`${css.p} ${tone === 'ok' ? '' : css.muted}`}>{isEmpty(u.Reason) ? text : <Msg text={u.Reason} />}</p>
       )}
       {admin && !r.Revoked && (
         <div className={css.actions}>
@@ -150,28 +163,29 @@ function UpgradeStatus({ p, u }: { p: UpgradeProps; u: RunnerUpgrade }) {
             <ConfirmForm
               action={upgradeAction(r.Name, 'start')}
               fields={{ version: u.Latest }}
-              button={`升级到 ${u.Latest}…`}
+              button={t('runner.upgradeButton', { version: u.Latest })}
               buttonProps={{ size: 'small', variant: 'primary' }}
               danger={false}
-              title={`把 ${r.Name} 升级到 ${u.Latest}？`}
-              confirmLabel="升级"
+              title={t('runner.upgradeTitle', { name: r.Name, version: u.Latest })}
+              confirmLabel={t('runner.upgradeConfirm')}
             >
               <ul className={css.list}>
                 <li>
-                  {r.Name} 从 {p.registry} 下载 <span className="mono">{u.Package}</span> 的 {u.Latest}，按 registry 记录的 integrity 核对。
+                  <Trans
+                    id="runner.upgradeNote1"
+                    params={{ name: r.Name, registry: p.registry, pkg: u.Package, version: u.Latest }}
+                    tags={{ pkg: (c) => <span className="mono">{c}</span> }}
+                  />
                 </li>
-                <li>
-                  {running > 0 ? `等正在执行的 ${running} 个任务结束后切换，` : '它现在没有正在执行的任务，下载后立即切换，'}
-                  切换期间不领取新任务。
-                </li>
-                <li>新版本连续启动失败会自动回滚到 {r.Version || '原来的版本'}。</li>
-                {!r.Online && <li>它目前离线，重新连接后执行。</li>}
+                <li>{running > 0 ? t('runner.upgradeNoteBusy', { count: running }) : t('runner.upgradeNoteIdle')}</li>
+                <li>{t('runner.upgradeNoteRollback', { version: r.Version || t('runner.originalVersion') })}</li>
+                {!r.Online && <li>{t('runner.upgradeNoteOffline')}</li>}
               </ul>
             </ConfirmForm>
           )}
-          <Form action={upgradeAction(r.Name, 'check')} aria-label={`让 ${r.Name} 检查更新`}>
+          <Form action={upgradeAction(r.Name, 'check')} aria-label={t('runner.checkLabel', { name: r.Name })}>
             <SubmitButton size="small" leadingVisual={SyncIcon} disabled={u.CheckPending}>
-              检查更新
+              {t('runner.check')}
             </SubmitButton>
           </Form>
         </div>
@@ -182,34 +196,42 @@ function UpgradeStatus({ p, u }: { p: UpgradeProps; u: RunnerUpgrade }) {
 
 /** UpgradeHistory 是最近的升级请求（新的在前）。 */
 function UpgradeHistory({ items }: { items: UpgradeRequest[] }) {
+  const t = useT()
+  const cols = {
+    version: t('runner.colVersion'),
+    state: t('runner.colState'),
+    actor: t('runner.colActor'),
+    created: t('runner.colCreated'),
+    finished: t('runner.colFinished'),
+  }
   return (
     <table className={table.table} aria-labelledby="history-title">
       <thead>
         <tr>
-          <th scope="col">版本</th>
-          <th scope="col">状态</th>
-          <th scope="col">请求人</th>
-          <th scope="col">请求时间</th>
-          <th scope="col">结束</th>
+          <th scope="col">{cols.version}</th>
+          <th scope="col">{cols.state}</th>
+          <th scope="col">{cols.actor}</th>
+          <th scope="col">{cols.created}</th>
+          <th scope="col">{cols.finished}</th>
         </tr>
       </thead>
       <tbody>
         {items.map((q) => (
           <tr key={q.ID}>
-            <td data-label="版本" className={table.mono}>
+            <td data-label={cols.version} className={table.mono}>
               {q.From || '—'} → {q.Version}
             </td>
-            <td data-label="状态">
+            <td data-label={cols.state}>
               <Label variant={q.State === 'failed' ? 'danger' : q.State === 'succeeded' ? 'success' : q.State === 'pending' ? 'accent' : 'secondary'}>
-                {requestStateText(q.State)}
+                {requestStateText(q.State, t)}
               </Label>
               {q.Error && <div className={q.State === 'failed' ? table.err : css.muted}>{q.Error}</div>}
             </td>
-            <td data-label="请求人">{q.Actor}</td>
-            <td data-label="请求时间" className={table.nowrap}>
+            <td data-label={cols.actor}>{q.Actor}</td>
+            <td data-label={cols.created} className={table.nowrap}>
               <Ago t={q.Created} />
             </td>
-            <td data-label="结束" className={table.nowrap}>
+            <td data-label={cols.finished} className={table.nowrap}>
               <Ago t={q.Finished} fallback="—" />
             </td>
           </tr>
@@ -221,10 +243,11 @@ function UpgradeHistory({ items }: { items: UpgradeRequest[] }) {
 
 /** UpgradeSection 是按台升级（PLAN #27.14）：版本、npm 包、最新版本，进行中的请求和管理员的操作。 */
 function UpgradeSection(p: UpgradeProps) {
+  const t = useT()
   const u = p.runner.Upgrade
   return (
     <Box as="section" aria-labelledby="upgrade-title">
-      <BoxHeader title="升级" id="upgrade-title" />
+      <BoxHeader title={t('runner.upgradeSection')} id="upgrade-title" />
       {u ? (
         <>
           <BoxRow className={css.block}>
@@ -232,17 +255,18 @@ function UpgradeSection(p: UpgradeProps) {
           </BoxRow>
           <BoxRow className={css.block}>
             <UpgradeStatus p={p} u={u} />
-            {!p.admin && !p.runner.Revoked && <p className={`${css.p} ${css.muted}`}>升级需要管理员。</p>}
+            {!p.admin && !p.runner.Revoked && <p className={`${css.p} ${css.muted}`}>{t('runner.needAdmin')}</p>}
           </BoxRow>
         </>
       ) : (
-        <BoxRow className={css.muted}>没有升级状态。</BoxRow>
+        <BoxRow className={css.muted}>{t('runner.noUpgrade')}</BoxRow>
       )}
     </Box>
   )
 }
 
 function Runner({ data, env }: PageProps<Data>) {
+  const t = useT()
   const admin = env.Session?.Admin ?? false
   const r: RunnerView = data.Runner
   const u = r.Upgrade
@@ -252,21 +276,21 @@ function Runner({ data, env }: PageProps<Data>) {
     <div className={css.page}>
       <PageHeader
         title={r.Name}
-        description={`${r.KindLabel}，pool ${r.Pool}`}
+        description={t('runner.description', { kind: runnerKindLabel(r.Kind, r.Role, t), pool: r.Pool })}
         actions={
           <>
             <LinkButton href="/runners" leadingVisual={ArrowLeftIcon}>
-              Runner 列表
+              {t('runner.backToList')}
             </LinkButton>
             <LinkButton href={`/runners/cache/${encodeURIComponent(r.Name)}`} leadingVisual={DatabaseIcon}>
-              本地缓存
+              {t('runner.cache')}
             </LinkButton>
           </>
         }
       />
 
       <Box as="section" aria-labelledby="summary-title">
-        <BoxHeader title="概况" id="summary-title">
+        <BoxHeader title={t('runner.summary')} id="summary-title">
           <span className={css.labels}>
             <RunnerLabels runner={r} />
           </span>
@@ -275,8 +299,7 @@ function Runner({ data, env }: PageProps<Data>) {
           <Facts runner={r} upgrade={false} />
           <Work runner={r} />
           <p className={`${css.p} ${css.muted}`}>
-            暂停接单、吊销、删除在 <a href="/runners">Runner 列表</a> 中操作；{data.OfflineAfter}
-            没有联系 Server 时显示为离线。
+            <Trans id="runner.opsHint" params={{ offline: data.OfflineAfter }} tags={{ link: (c) => <a href="/runners">{c}</a> }} />
           </p>
         </BoxRow>
       </Box>
@@ -291,8 +314,8 @@ function Runner({ data, env }: PageProps<Data>) {
       />
 
       <Box as="section" aria-labelledby="history-title">
-        <BoxHeader title="升级记录" id="history-title" />
-        {data.History.length > 0 ? <UpgradeHistory items={data.History} /> : <BoxRow className={css.muted}>还没有升级过。</BoxRow>}
+        <BoxHeader title={t('runner.history')} id="history-title" />
+        {data.History.length > 0 ? <UpgradeHistory items={data.History} /> : <BoxRow className={css.muted}>{t('runner.historyEmpty')}</BoxRow>}
       </Box>
     </div>
   )

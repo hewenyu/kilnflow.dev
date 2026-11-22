@@ -5,7 +5,9 @@ import { definePage, type PageProps } from '../app/definePage'
 import { useLive } from '../app/live'
 import { Box, BoxHeader, BoxRow } from '../components/Box'
 import { PageHeader } from '../components/PageHeader'
+import { runnerKindLabel } from '../components/RunnerSchema'
 import { RunnerLabels } from '../components/RunnerStatus'
+import { Trans, useT } from '../i18n/locale'
 import { AIRunnerFacts, AIWork, RoleLabel } from './ai/runner'
 import { aiRunnerSchema } from './ai/schema'
 import css from './ai/ai.module.css'
@@ -15,27 +17,29 @@ import css from './ai/ai.module.css'
 
 const schema = z.object({
   Runner: aiRunnerSchema,
-  OfflineAfter: z.string(),
-  LongPoll: z.string(),
+  /** 页面说明中用到的时长（秒）。 */
+  OfflineAfter: z.number(),
+  LongPoll: z.number(),
 })
 type Data = z.infer<typeof schema>
 
 function AIRunnerPage({ data }: PageProps<Data>) {
+  const t = useT()
   const r = data.Runner
   useLive(r.Tasks.length > 0)
   return (
     <div className={css.page}>
       <PageHeader
         title={r.Name}
-        description={r.RoleLabel}
+        description={runnerKindLabel('ai', r.Role, t)}
         actions={
           <LinkButton href="/ai/runners" leadingVisual={ArrowLeftIcon}>
-            AI 执行节点列表
+            {t('aiRunners.backToList')}
           </LinkButton>
         }
       />
       <Box as="section" aria-labelledby="summary-title">
-        <BoxHeader title="概况" id="summary-title">
+        <BoxHeader title={t('runner.summary')} id="summary-title">
           <span className={css.labels}>
             <RoleLabel runner={r} />
             <RunnerLabels runner={r} />
@@ -45,9 +49,11 @@ function AIRunnerPage({ data }: PageProps<Data>) {
           <AIRunnerFacts runner={r} />
           <AIWork runner={r} />
           <p className={`${css.p} ${css.muted}`}>
-            暂停接单、吊销、删除在 <a href="/ai/runners">AI 执行节点列表</a> 中操作；{data.OfflineAfter}没有联系 Server 时显示为离线。
-            升级连接器在节点上执行 <code>npm install -g @yuebanlaosiji/kilnflow-orca@latest &amp;&amp; kiln-orca service restart</code>
-            ，Orca 中正在执行的任务不受影响。
+            <Trans
+              id="aiRunner.opsHint"
+              params={{ offline: data.OfflineAfter, command: 'npm install -g @yuebanlaosiji/kilnflow-orca@latest && kiln-orca service restart' }}
+              tags={{ link: (c) => <a href="/ai/runners">{c}</a>, code: (c) => <code>{c}</code> }}
+            />
           </p>
         </BoxRow>
       </Box>

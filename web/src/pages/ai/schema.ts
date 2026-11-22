@@ -214,9 +214,8 @@ export type AIAgent = z.infer<typeof aiAgentSchema>
 export const aiRunnerSchema = z.object({
   ID: z.number(),
   Name: z.string(),
-  /** review（审计）或 development（开发）；RoleLabel 是显示名称。 */
+  /** review（审计）或 development（开发）；名称见 RunnerSchema 的 runnerKindLabel。 */
   Role: z.string(),
-  RoleLabel: z.string(),
   /** 连接器（kiln-orca）的版本。 */
   Version: z.string(),
   Platform: z.string(),
@@ -245,7 +244,7 @@ export const aiRunnerSchema = z.object({
   Agents: list(aiAgentSchema),
   Tasks: list(aiRunningTaskSchema),
   Accepting: z.boolean(),
-  ConnLabel: z.string(),
+  /** 连接状态的样式（ok、warn、bad）；文字见 RunnerSchema 的 connLabel。 */
   ConnClass: z.string(),
 })
 export type AIRunner = z.infer<typeof aiRunnerSchema>

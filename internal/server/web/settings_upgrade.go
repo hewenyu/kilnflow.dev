@@ -2,12 +2,14 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/hewenyu/kilnflow.dev/internal/npm"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
+	"github.com/hewenyu/kilnflow.dev/internal/server/upgradectl"
 	"github.com/hewenyu/kilnflow.dev/internal/upgrade"
 )
 
@@ -81,7 +83,7 @@ func (d *Dashboard) postRunnerUpgradeRegistry(w http.ResponseWriter, r *http.Req
 	}
 	if !f.Failed() {
 		if err := d.admin.SetRunnerUpgradeRegistry(r.Context(), registry, se.Login); err != nil {
-			f.fail("registry", d.upgradeFailure(r, err))
+			f.fail("registry", d.upgradeSettingFailure(r, err))
 		}
 	}
 	if f.Failed() {
@@ -99,8 +101,20 @@ func (d *Dashboard) postRunnerUpgradeRegistry(w http.ResponseWriter, r *http.Req
 func (d *Dashboard) postRunnerUpgradeCheck(w http.ResponseWriter, r *http.Request, se *session) {
 	n, err := d.admin.CheckRunnerUpgrade(r.Context(), "", se.Login)
 	if err != nil {
-		d.flashBack(w, r, runnerUpgradeURL, "没有检查："+d.upgradeFailure(r, err))
+		d.flashBack(w, r, runnerUpgradeURL, "没有检查："+d.upgradeSettingFailure(r, err))
 		return
 	}
 	d.flashBack(w, r, runnerUpgradeURL, fmt.Sprintf("已请求 %d 台 Runner 查询最新版本：在线的 Runner 下一次连接 Server 时查询（最长约 %s）", n, humanDuration(d.longPoll())))
+}
+
+// upgradeSettingFailure 返回升级设置页（还没有迁移成消息，Issue #7）上操作失败的说明：参数错误、当前状态不允许时
+// 显示 upgradectl 的中文说明，其他错误按 failure 处理。
+func (d *Dashboard) upgradeSettingFailure(r *http.Request, err error) string {
+	if re, ok := errors.AsType[*upgradectl.RefusedError](err); ok {
+		return re.Msg
+	}
+	if ie, ok := errors.AsType[*upgradectl.InvalidError](err); ok {
+		return ie.Msg
+	}
+	return d.failure(r, err)
 }

@@ -1,6 +1,11 @@
 {
  "Page": "runner_cache",
- "Title": "mini-01 · 本地缓存",
+ "Title": {
+  "id": "runnerCache.pageTitle",
+  "params": {
+   "name": "mini-01"
+  }
+ },
  "Nav": "runners",
  "Status": 200,
  "Session": {
@@ -53,28 +58,42 @@
     }
    ],
    "Accepting": true,
-   "ConnLabel": "在线",
    "ConnClass": "ok",
    "Capacity": {
-    "Machine": "10 核 / 16.0 GiB",
-    "Reserved": "2 核 / 4.0 GiB",
-    "Allocatable": "8 核 / 12.0 GiB",
-    "Allocated": "2 核 / 2.0 GiB",
+    "Machine": {
+     "CPU": "10",
+     "Memory": "16.0 GiB"
+    },
+    "Reserved": {
+     "CPU": "2",
+     "Memory": "4.0 GiB"
+    },
+    "Allocatable": {
+     "CPU": "8",
+     "Memory": "12.0 GiB"
+    },
+    "Allocated": {
+     "CPU": "2",
+     "Memory": "2.0 GiB"
+    },
     "Limits": [
-     "oci 上限 8 核 / 7.7 GiB"
+     {
+      "CPU": "8",
+      "Memory": "7.7 GiB",
+      "Executor": "oci"
+     }
     ],
     "MaxJobs": 4
    },
    "CacheBytes": 3412000000,
    "CacheReportedAt": "2026-11-05T04:41:10-08:00",
-   "KindLabel": "CI Runner",
-   "URL": "/runners/detail/mini-01"
+   "URL": "/runners/detail/mini-01",
+   "Kind": "ci"
   },
   "Generated": "2026-11-05T04:41:10-08:00",
   "Entries": [
    {
     "Kind": "toolcache",
-    "KindLabel": "toolcache",
     "Repo": "acme/kiln",
     "Platform": "darwin/arm64",
     "Domain": "host",
@@ -86,7 +105,6 @@
    },
    {
     "Kind": "toolcache",
-    "KindLabel": "toolcache",
     "Repo": "acme/kiln",
     "Platform": "darwin/arm64",
     "Domain": "host",
@@ -98,7 +116,6 @@
    },
    {
     "Kind": "toolcache",
-    "KindLabel": "toolcache",
     "Repo": "acme/kiln",
     "Platform": "linux/arm64",
     "Domain": "oci-root",
@@ -110,7 +127,6 @@
    },
    {
     "Kind": "toolcache",
-    "KindLabel": "toolcache",
     "Repo": "acme/notes",
     "Platform": "darwin/arm64",
     "Domain": "host",
@@ -122,7 +138,6 @@
    },
    {
     "Kind": "git",
-    "KindLabel": "git 镜像",
     "Repo": "acme/kiln",
     "Platform": "",
     "Domain": "",
@@ -134,7 +149,6 @@
    },
    {
     "Kind": "git",
-    "KindLabel": "git 镜像",
     "Repo": "acme/notes",
     "Platform": "",
     "Domain": "",
@@ -146,7 +160,6 @@
    },
    {
     "Kind": "runtime",
-    "KindLabel": "runtime",
     "Repo": "",
     "Platform": "darwin/arm64",
     "Domain": "",
@@ -158,7 +171,6 @@
    },
    {
     "Kind": "runtime",
-    "KindLabel": "runtime",
     "Repo": "",
     "Platform": "darwin/arm64",
     "Domain": "",
@@ -170,7 +182,6 @@
    },
    {
     "Kind": "cas",
-    "KindLabel": "CAS 缓存",
     "Repo": "",
     "Platform": "",
     "Domain": "",
@@ -182,7 +193,6 @@
    },
    {
     "Kind": "image",
-    "KindLabel": "镜像",
     "Repo": "",
     "Platform": "linux/arm64",
     "Domain": "",
@@ -241,38 +251,14 @@
    }
   ],
   "Kinds": [
-   {
-    "Value": "toolcache",
-    "Label": "toolcache"
-   },
-   {
-    "Value": "runtime",
-    "Label": "runtime"
-   },
-   {
-    "Value": "git",
-    "Label": "git 镜像"
-   },
-   {
-    "Value": "cas",
-    "Label": "CAS 缓存"
-   },
-   {
-    "Value": "buildkit",
-    "Label": "buildctl"
-   },
-   {
-    "Value": "work",
-    "Label": "保留的工作区"
-   },
-   {
-    "Value": "image",
-    "Label": "镜像"
-   },
-   {
-    "Value": "legacy",
-    "Label": "旧布局的 toolcache"
-   }
+   "toolcache",
+   "runtime",
+   "git",
+   "cas",
+   "buildkit",
+   "work",
+   "image",
+   "legacy"
   ],
   "Repos": [
    "acme/kiln",
@@ -292,7 +278,6 @@
    "Matched": [
     {
      "Kind": "toolcache",
-     "KindLabel": "toolcache",
      "Repo": "acme/kiln",
      "Platform": "darwin/arm64",
      "Domain": "host",
@@ -304,7 +289,6 @@
     },
     {
      "Kind": "toolcache",
-     "KindLabel": "toolcache",
      "Repo": "acme/kiln",
      "Platform": "darwin/arm64",
      "Domain": "host",
@@ -316,7 +300,6 @@
     },
     {
      "Kind": "toolcache",
-     "KindLabel": "toolcache",
      "Repo": "acme/kiln",
      "Platform": "linux/arm64",
      "Domain": "oci-root",
@@ -328,7 +311,6 @@
     },
     {
      "Kind": "git",
-     "KindLabel": "git 镜像",
      "Repo": "acme/kiln",
      "Platform": "",
      "Domain": "",
@@ -343,7 +325,6 @@
    "Shared": [
     {
      "Kind": "runtime",
-     "KindLabel": "runtime",
      "Repo": "",
      "Platform": "darwin/arm64",
      "Domain": "",
@@ -355,7 +336,6 @@
     },
     {
      "Kind": "runtime",
-     "KindLabel": "runtime",
      "Repo": "",
      "Platform": "darwin/arm64",
      "Domain": "",
@@ -367,7 +347,6 @@
     },
     {
      "Kind": "cas",
-     "KindLabel": "CAS 缓存",
      "Repo": "",
      "Platform": "",
      "Domain": "",
@@ -379,7 +358,6 @@
     },
     {
      "Kind": "image",
-     "KindLabel": "镜像",
      "Repo": "",
      "Platform": "linux/arm64",
      "Domain": "",
@@ -391,9 +369,22 @@
     }
    ],
    "Notes": [
-    "预览依据 2026-11-05 04:41:10 上报的清单，执行时以 Runner 上的实际内容为准",
-    "mini-01 正在执行 2 个 job：清理在它们结束后进行，期间不领取新任务",
-    "runtime、CAS、镜像等不属于单个仓库的共享缓存继续保留，按各自的到期时间清理"
+    {
+     "id": "cacheNote.report",
+     "params": {
+      "at": 1793882470
+     }
+    },
+    {
+     "id": "cacheNote.busy",
+     "params": {
+      "name": "mini-01",
+      "count": 2
+     }
+    },
+    {
+     "id": "cacheNote.sharedKept"
+    }
    ],
    "Error": ""
   },

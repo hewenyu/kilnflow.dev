@@ -450,10 +450,9 @@
      }
     ],
     "Accepting": true,
-    "ConnLabel": "在线",
     "ConnClass": "ok",
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/mini-01"
+    "URL": "/runners/detail/mini-01",
+    "Kind": "ci"
    },
    {
     "ID": 2,
@@ -482,10 +481,9 @@
      }
     ],
     "Accepting": false,
-    "ConnLabel": "在线",
     "ConnClass": "ok",
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/mini-02"
+    "URL": "/runners/detail/mini-02",
+    "Kind": "ci"
    },
    {
     "ID": 3,
@@ -505,10 +503,9 @@
     "LastSeen": "2026-11-05T04:08:46-08:00",
     "Jobs": null,
     "Accepting": false,
-    "ConnLabel": "离线",
     "ConnClass": "warn",
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/linux-01"
+    "URL": "/runners/detail/linux-01",
+    "Kind": "ci"
    }
   ],
   "RunnerCounts": {

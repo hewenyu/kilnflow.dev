@@ -91,12 +91,11 @@ func (t releaseTargetView) MarshalJSON() ([]byte, error) {
 
 func (v *runnerView) MarshalJSON() ([]byte, error) {
 	type plain runnerView
-	label, class := v.Conn()
 	return json.Marshal(struct {
 		*plain
-		Accepting            bool
-		ConnLabel, ConnClass string
-	}{(*plain)(v), v.Accepting(), label, class})
+		Accepting bool
+		ConnClass string
+	}{(*plain)(v), v.Accepting(), v.ConnClass()})
 }
 
 func (p *runnersPage) MarshalJSON() ([]byte, error) {
@@ -104,7 +103,7 @@ func (p *runnersPage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		*plain
 		Filtered   bool
-		StateLabel string
+		StateLabel uiText
 	}{(*plain)(p), p.Filtered(), p.StateLabel()})
 }
 

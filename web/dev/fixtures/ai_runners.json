@@ -1,6 +1,8 @@
 {
   "Page": "ai_runners",
-  "Title": "AI 执行节点",
+  "Title": {
+    "id": "aiRunners.pageTitle"
+  },
   "Nav": "ai_runners",
   "Status": 200,
   "Session": {
@@ -19,7 +21,6 @@
         "ID": 7,
         "Name": "ai-node-01",
         "Role": "review",
-        "RoleLabel": "AI 审计节点",
         "Version": "0.3.0",
         "Platform": "darwin/arm64",
         "Protocol": 2,
@@ -83,14 +84,12 @@
           }
         ],
         "Accepting": true,
-        "ConnLabel": "在线",
         "ConnClass": "ok"
       },
       {
         "ID": 8,
         "Name": "mini-dev",
         "Role": "development",
-        "RoleLabel": "AI 开发节点",
         "Version": "0.3.0",
         "Platform": "darwin/arm64",
         "Protocol": 1,
@@ -113,7 +112,6 @@
         "Agents": [],
         "Tasks": [],
         "Accepting": false,
-        "ConnLabel": "离线",
         "ConnClass": "warn"
       }
     ],
@@ -127,8 +125,8 @@
       "Tasks": 1
     },
     "Self": "/ai/runners",
-    "OfflineAfter": "2 分钟",
-    "LeaseTTL": "5 分钟",
-    "LongPoll": "30 秒"
+    "OfflineAfter": 120,
+    "LeaseTTL": 300,
+    "LongPoll": 30
   }
 }

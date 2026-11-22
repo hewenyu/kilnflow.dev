@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/ai_runners.json'
 import detailFixture from '../../dev/fixtures/ai_runner.json'
 import { clock } from '../lib/format'
-import { envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, envelope, renderPage, switchLocale, withData } from '../test/render'
 import { shortAgentVersion } from './ai/runner'
 
 // AI 执行节点列表和详情页。
@@ -195,3 +195,37 @@ describe('AI 执行节点详情页', () => {
     expect(document.querySelector('form[action^="/runners/upgrade/"]')).toBeNull()
   })
 })
+
+describe('AI 执行节点（英文与切换语言）', () => {
+  /** rawZH 是节点上报的原因和进度说明，原样显示。 */
+  const rawZH = ['docker 没有运行', '没有安装', '运行 go test ./...']
+
+  it('英文：列表的角色、状态、本机状态和任务都按英文显示，没有残留的中文界面文字', () => {
+    renderPage(envelope(fixture), '/ai/runners', { locale: 'en' })
+    expect(screen.getAllByText('AI review runner').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Online').length).toBeGreaterThan(0)
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('英文：详情页的概况、Orca 进度和升级说明按英文显示', () => {
+    renderPage(envelope(detailFixture), '/ai/runners/ai-node-01', { locale: 'en' })
+    const region = screen.getByRole('region', { name: 'Summary' })
+    expect(dd(region, 'Concurrency')).toHaveTextContent(/^1 \/ 2$/)
+    expect(dd(region, 'Orca')).toHaveTextContent('Ready')
+    expect(within(region).getByText(/^Running: /)).toBeInTheDocument()
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('吊销对话框打开时切换语言：对话框保持打开，文字立即切换', async () => {
+    renderPage(envelope(fixture), '/ai/runners')
+    const name = fixture.Data.Runners[0]?.Name ?? ''
+    await userEvent.click(row(name).getByRole('button', { name: '吊销…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(`吊销 ${name}？`)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('alertdialog')).toBe(dialog)
+    expect(within(dialog).getByText(`Revoke ${name}?`)).toBeInTheDocument()
+    expect(within(dialog).getByText(/its kiln-orca exits/)).toBeInTheDocument()
+  })
+})
+

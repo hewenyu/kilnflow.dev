@@ -1,6 +1,11 @@
 {
  "Page": "runner_cache",
- "Title": "mac-02 · 本地缓存",
+ "Title": {
+  "id": "runnerCache.pageTitle",
+  "params": {
+   "name": "mac-02"
+  }
+ },
  "Nav": "runners",
  "Status": 200,
  "Session": {
@@ -31,13 +36,12 @@
    "LastSeen": "2026-10-27T04:55:46-08:00",
    "Jobs": null,
    "Accepting": false,
-   "ConnLabel": "已吊销",
    "ConnClass": "bad",
    "Capacity": null,
    "CacheBytes": 0,
    "CacheReportedAt": null,
-   "KindLabel": "CI Runner",
-   "URL": "/runners/detail/mac-02"
+   "URL": "/runners/detail/mac-02",
+   "Kind": "ci"
   },
   "Generated": null,
   "Entries": null,
@@ -47,38 +51,14 @@
   "GC": null,
   "Purges": null,
   "Kinds": [
-   {
-    "Value": "toolcache",
-    "Label": "toolcache"
-   },
-   {
-    "Value": "runtime",
-    "Label": "runtime"
-   },
-   {
-    "Value": "git",
-    "Label": "git 镜像"
-   },
-   {
-    "Value": "cas",
-    "Label": "CAS 缓存"
-   },
-   {
-    "Value": "buildkit",
-    "Label": "buildctl"
-   },
-   {
-    "Value": "work",
-    "Label": "保留的工作区"
-   },
-   {
-    "Value": "image",
-    "Label": "镜像"
-   },
-   {
-    "Value": "legacy",
-    "Label": "旧布局的 toolcache"
-   }
+   "toolcache",
+   "runtime",
+   "git",
+   "cas",
+   "buildkit",
+   "work",
+   "image",
+   "legacy"
   ],
   "Repos": null,
   "Domains": [

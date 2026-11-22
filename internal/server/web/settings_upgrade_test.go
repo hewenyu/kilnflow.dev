@@ -26,7 +26,7 @@ func testRunnerUpgradePage(now time.Time) *runnerUpgradePage {
 func testRunnerPage(now time.Time) *runnerPage {
 	r := testRunners(now)[0]
 	return &runnerPage{
-		Runner: r, Registry: "https://registry.npmjs.org/", RegistryDefault: true, OfflineAfter: "2 分钟", LongPoll: "25 秒",
+		Runner: r, Registry: "https://registry.npmjs.org/", RegistryDefault: true, OfflineAfter: 120, LongPoll: 25,
 		History: []*upgradeRequestView{
 			r.Upgrade.Request,
 			{ID: 1000, Version: "0.1.11", From: "0.1.10", State: "failed", Error: "下载失败：503", Actor: "alice", Created: now.Add(-time.Hour), Finished: &now},
@@ -60,7 +60,7 @@ func TestRunnerUpgradePage(t *testing.T) {
 	p := pageData[runnerUpgradePage](t, w.Body.String())
 	expect(t, "初始页面", p, p.Section == sectionUpgrade, p.Registry == "", p.DefaultRegistry == "https://registry.npmjs.org/",
 		len(p.Runners) == 1 && p.Runners[0].Name == "mini-01", p.Runners[0].Upgrade != nil, p.Form != nil,
-		p.Runners[0].KindLabel == ciKindLabel && p.Runners[0].URL == runnerURL("mini-01"),
+		p.Runners[0].Kind == store.RunnerKindCI && p.Runners[0].URL == runnerURL("mini-01"),
 		// AI 执行节点不在这个页面
 		aiNode != 0, !slices.ContainsFunc(p.Runners, func(r *runnerView) bool { return r.Name == "reviewer" }))
 
@@ -118,32 +118,32 @@ func TestRunnerDetail(t *testing.T) {
 	wantStatus(t, "成员升级", e.post(e.bob, "/runners/upgrade/mini-01/start", nil), http.StatusForbidden)
 
 	// 页面确认的是 0.1.8，期间 Runner 查到了 0.1.9：拒绝，不创建请求
-	flash := wantRedirect(t, "确认之后 latest 变了", e.post(e.alice, "/runners/upgrade/mini-01/start", url.Values{"version": {"0.1.8"}}), "/runners/detail/mini-01")
+	flash := flashZH(t, wantRedirect(t, "确认之后 latest 变了", e.post(e.alice, "/runners/upgrade/mini-01/start", url.Values{"version": {"0.1.8"}}), "/runners/detail/mini-01"))
 	if !strings.Contains(flash, "最新版本是 0.1.9") || e.count(`SELECT count(*) FROM runner_upgrade_requests`) != 0 {
 		t.Errorf("确认的版本与 latest 不同时应拒绝：%q", flash)
 	}
-	flash = wantRedirect(t, "升级", e.post(e.alice, "/runners/upgrade/mini-01/start", url.Values{"version": {"0.1.9"}}), "/runners/detail/mini-01")
+	flash = flashZH(t, wantRedirect(t, "升级", e.post(e.alice, "/runners/upgrade/mini-01/start", url.Values{"version": {"0.1.9"}}), "/runners/detail/mini-01"))
 	if !strings.Contains(flash, "升级到 0.1.9") || !strings.Contains(flash, "离线") {
 		t.Errorf("升级的提示（这台测试 Runner 离线）：%q", flash)
 	}
-	flash = wantRedirect(t, "重复点击", e.post(e.alice, "/runners/upgrade/mini-01/start", nil), "/runners/detail/mini-01")
+	flash = flashZH(t, wantRedirect(t, "重复点击", e.post(e.alice, "/runners/upgrade/mini-01/start", nil), "/runners/detail/mini-01"))
 	if !strings.Contains(flash, "已经在升级到 0.1.9") || e.count(`SELECT count(*) FROM runner_upgrade_requests`) != 1 {
 		t.Errorf("重复点击：%q", flash)
 	}
 	p = pageData[runnerPage](t, e.get(e.alice, "/runners/detail/mini-01").Body.String())
 	u = p.Runner.Upgrade
 	expect(t, "进行中", p, len(p.History) == 1, u.Request != nil && u.Request.State == "pending" && u.Request.Version == "0.1.9" && u.Request.Actor == "alice",
-		!u.CanUpgrade, strings.Contains(u.Reason, "正在升级"))
+		!u.CanUpgrade, u.Reason.id == msgUpgradeReasonUpgrading && textZH(t, u.Reason) == "正在升级到 0.1.9")
 
-	flash = wantRedirect(t, "取消", e.post(e.alice, "/runners/upgrade/mini-01/cancel", nil), "/runners/detail/mini-01")
+	flash = flashZH(t, wantRedirect(t, "取消", e.post(e.alice, "/runners/upgrade/mini-01/cancel", nil), "/runners/detail/mini-01"))
 	if !strings.Contains(flash, "已取消") {
 		t.Errorf("取消：%q", flash)
 	}
-	flash = wantRedirect(t, "再取消", e.post(e.alice, "/runners/upgrade/mini-01/cancel", nil), "/runners/detail/mini-01")
+	flash = flashZH(t, wantRedirect(t, "再取消", e.post(e.alice, "/runners/upgrade/mini-01/cancel", nil), "/runners/detail/mini-01"))
 	if !strings.Contains(flash, "没有进行中的升级请求") {
 		t.Errorf("没有进行中的请求时：%q", flash)
 	}
-	flash = wantRedirect(t, "检查更新", e.post(e.alice, "/runners/upgrade/mini-01/check", nil), "/runners/detail/mini-01")
+	flash = flashZH(t, wantRedirect(t, "检查更新", e.post(e.alice, "/runners/upgrade/mini-01/check", nil), "/runners/detail/mini-01"))
 	if !strings.Contains(flash, "查询最新版本") {
 		t.Errorf("检查更新：%q", flash)
 	}
@@ -151,8 +151,8 @@ func TestRunnerDetail(t *testing.T) {
 		t.Errorf("请求检查后应显示检查中：%+v", p.Runner.Upgrade)
 	}
 	// 不经过启动器运行：给出处理步骤，不创建请求
-	flash = wantRedirect(t, "不能升级", e.post(e.alice, "/runners/upgrade/old/start", nil), "/runners/detail/old")
-	if !strings.Contains(flash, "没有升级") || !strings.Contains(flash, "service install") {
+	flash = flashZH(t, wantRedirect(t, "不能升级", e.post(e.alice, "/runners/upgrade/old/start", nil), "/runners/detail/old"))
+	if !strings.Contains(flash, "不能自动切换") || !strings.Contains(flash, "kiln-runner service install") {
 		t.Errorf("不能升级时的原因：%q", flash)
 	}
 	wantStatus(t, "未知操作", e.post(e.alice, "/runners/upgrade/mini-01/bogus", nil), http.StatusNotFound)
@@ -181,8 +181,9 @@ func TestRunnersUpgradeState(t *testing.T) {
 		t.Fatalf("应有升级状态：%+v", byName)
 	}
 	expect(t, "上报了状态的 Runner", m, m.State == "rolled_back", m.Target == "0.1.9", m.Error == "连续 3 次启动失败", m.Launcher, m.Disabled,
-		m.Current == "0.1.3", m.Previous == "0.1.2", !m.CanUpgrade, strings.Contains(m.Reason, "upgrade = false"))
-	expect(t, "没有上报的 Runner", old, old.State == "", !old.Launcher, !old.CanUpgrade, strings.Contains(old.Reason, "service install"))
+		m.Current == "0.1.3", m.Previous == "0.1.2", !m.CanUpgrade, m.Reason.id == msgUpgradeReasonDisabled && strings.Contains(textZH(t, m.Reason), "upgrade = false"))
+	expect(t, "没有上报的 Runner", old, old.State == "", !old.Launcher, !old.CanUpgrade,
+		old.Reason.id == msgUpgradeReasonUnsupported && strings.Contains(textZH(t, old.Reason), "kiln-runner service install"))
 }
 
 // 名称与其他页面的地址相同的 Runner（new、cache、enroll 等都是合法名称）也能进入详情页并按台升级：
@@ -198,7 +199,7 @@ func TestRunnerDetailReservedNames(t *testing.T) {
 		if pg := parsePage(t, w.Body.String()); pg.Page != "runner" || pageData[runnerPage](t, w.Body.String()).Runner.Name != name {
 			t.Errorf("%s：页面 = %q", name, pg.Page)
 		}
-		flash := wantRedirect(t, name+" 升级", e.post(e.alice, "/runners/upgrade/"+name+"/start", nil), runnerURL(name))
+		flash := flashZH(t, wantRedirect(t, name+" 升级", e.post(e.alice, "/runners/upgrade/"+name+"/start", nil), runnerURL(name)))
 		if !strings.Contains(flash, "升级到 0.1.9") {
 			t.Errorf("%s 升级：%q", name, flash)
 		}

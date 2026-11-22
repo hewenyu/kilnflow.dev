@@ -5,8 +5,8 @@ import fixture from '../../dev/fixtures/runners.json'
 import emptyFixture from '../../dev/fixtures/runners.empty.json'
 import noAcceptFixture from '../../dev/fixtures/runners.noaccept.json'
 import offlineFixture from '../../dev/fixtures/runners.offline.json'
-import { envelope, renderPage, withData } from '../test/render'
-import { runnersURL } from './runners'
+import { chineseLeft, envelope, renderPage, switchLocale, tFor, withData } from '../test/render'
+import { filteredText, runnersURL } from './runners'
 
 let posts: { url: string; body: string }[] = []
 
@@ -213,3 +213,49 @@ describe('Runner 列表', () => {
     expect(runnersURL('offline', 'linux')).toBe('/runners?state=offline&pool=linux')
   })
 })
+
+describe('Runner 列表（英文与切换语言）', () => {
+  /** rawZH 是页面数据中原样显示的中文（Runner 上报的升级失败原因），不是界面文字。 */
+  const rawZH = ['0.4.3 连续 3 次启动后没有连上 Server，已回滚到 0.4.2']
+
+  it('英文：统计、筛选、状态、规格、升级状态和说明都按英文显示，没有残留的中文界面文字', () => {
+    renderPage(envelope(fixture), '/runners', { locale: 'en' })
+    expect(screen.getByRole('button', { name: 'State: All states' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '2 online' })).toHaveAttribute('href', '/runners?state=online')
+    expect(screen.getByText('What the states, fields, and actions mean')).toBeInTheDocument()
+    const r = row('mini-01')
+    expect(r.getByText('Online')).toBeInTheDocument()
+    expect(r.getByText('Accepting jobs')).toBeInTheDocument()
+    expect(r.getByText('10 CPU / 16.0 GiB')).toBeInTheDocument()
+    expect(r.getByText(/oci limit 8 CPU \/ 7\.7 GiB/)).toBeInTheDocument()
+    expect(r.getByRole('link', { name: 'Upgrade of mini-01: Downloading: 0.4.3' })).toBeInTheDocument()
+    // 服务端按原因码给出的不能升级的原因，参数（程序名）原样
+    expect(screen.getAllByText(/run kiln-runner service install once on the machine/).length).toBeGreaterThan(0)
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('吊销对话框打开时切换语言：对话框保持打开，文字立即切换', async () => {
+    renderPage(envelope(fixture), '/runners', { locale: 'en' })
+    await userEvent.click(row('mini-01').getByRole('button', { name: 'Revoke…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('Revoke mini-01?')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Its 2 running jobs \(build \(darwin\/arm64\), test\) are interrupted; after about 1 minute/)).toBeInTheDocument()
+    await switchLocale('简体中文')
+    expect(screen.getByRole('alertdialog')).toBe(dialog)
+    expect(within(dialog).getByText('吊销 mini-01？')).toBeInTheDocument()
+    expect(within(dialog).getByText(/正在执行的 2 个任务（build \(darwin\/arm64\)、test）会被中断，约 1 分钟后/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '确认吊销 mini-01' })).toBeInTheDocument()
+    // chineseLeft 能发现中文：英文测试中的空结果不是因为检查失效
+    expect(chineseLeft(dialog)).not.toEqual([])
+  })
+
+  it('筛选说明按语言写，状态的文字来自服务端的消息', () => {
+    const data = { Pool: 'linux', Runners: [] }
+    expect(filteredText(data, tFor('zh-CN'), '离线')).toBe('已筛选，状态：离线，pool：linux；显示 0 台。')
+    expect(filteredText(data, tFor('en'), 'Offline')).toBe('Filtered, state: Offline, pool: linux; showing 0 runners.')
+    renderPage(envelope(offlineFixture), '/runners?state=offline', { locale: 'en' })
+    expect(screen.getByRole('button', { name: 'State: Offline' })).toBeInTheDocument()
+    expect(screen.getByText(/^Filtered, state: Offline; showing \d+ runners?\.$/)).toBeInTheDocument()
+  })
+})
+

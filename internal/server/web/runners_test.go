@@ -17,6 +17,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/server/auth"
 	"github.com/hewenyu/kilnflow.dev/internal/server/ci/cistore"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
+	"github.com/hewenyu/kilnflow.dev/internal/server/upgradectl"
 )
 
 // testRunners 覆盖连接和接单的各种组合：在线接单、在线暂停且忙碌、离线（暂停标记仍在）、离线接单、已吊销。
@@ -28,7 +29,8 @@ func testRunners(now time.Time) []*runnerView {
 			Version: "v0.1.11", Online: true, LastSeen: ago(5 * time.Second),
 			Upgrade: &runnerUpgradeView{
 				State: "downloading", Target: "0.1.12", Launcher: true, Current: "0.1.11", Previous: "0.1.10",
-				Package: "@yuebanlaosiji/kilnflow-runner-darwin-arm64", Latest: "0.1.12", CheckedAt: ago(time.Minute), Reason: "正在升级到 0.1.12",
+				Package: "@yuebanlaosiji/kilnflow-runner-darwin-arm64", Latest: "0.1.12", CheckedAt: ago(time.Minute),
+				Reason:  upgradeReasonText(upgradectl.Reason{Code: upgradectl.ReasonUpgrading, Version: "0.1.12"}),
 				Request: &upgradeRequestView{ID: 1001, Version: "0.1.12", From: "0.1.11", State: "pending", Actor: "alice", Created: now},
 			},
 		},
@@ -60,7 +62,7 @@ func testRunnersPage(now time.Time) *runnersPage {
 	return &runnersPage{
 		Runners: testRunners(now), Counts: runnerCounts{Total: 5, Online: 2, Accepting: 1, Paused: 1, Offline: 2, Revoked: 1, Jobs: 2},
 		States: runnerStateOptions, Pools: []string{"default", "linux"}, Self: "/runners", Now: now,
-		OfflineAfter: "2 分钟", LeaseTTL: "1 分钟", LongPoll: "25 秒",
+		OfflineAfter: 120, LeaseTTL: 60, LongPoll: 25,
 	}
 }
 
@@ -94,8 +96,8 @@ func renderAs(t *testing.T, page, role string, data any) string {
 // runnerData 是页面数据中的一台 Runner（runnerView），另带计算的连接状态和是否接单。
 type runnerData struct {
 	runnerView
-	Accepting            bool
-	ConnLabel, ConnClass string
+	Accepting bool
+	ConnClass string
 }
 
 // runnersData 是 Runners 页面的页面数据（runnersPage），另带计算的 Filtered、StateLabel。
@@ -103,15 +105,16 @@ type runnersData struct {
 	runnersPage
 	Runners    []runnerData
 	Filtered   bool
-	StateLabel string
+	StateLabel uiText
 }
 
 // runnerNewData 是注册新的 Runner 页面的页面数据（runnerNewPage），另带计算的注册命令和表单的 Failed。
 type runnerNewData struct {
 	runnerNewPage
 	Form struct {
-		Values, Errors map[string]string
-		Failed         bool
+		Values map[string]string
+		Errors map[string]uiText
+		Failed bool
 	}
 	Reveal *struct {
 		enrollView
@@ -127,20 +130,21 @@ func TestRunnersRender(t *testing.T) {
 		t.Errorf("管理员（前端据此显示暂停、恢复、吊销和注册入口）：%+v", se)
 	}
 	p := pageData[runnersData](t, body)
-	// 连接和接单分开：ConnLabel、ConnClass 是连接状态，Accepting 表示在线并接单
+	// 连接和接单分开：ConnClass 是连接状态的样式（文字由前端按 Revoked、Online 显示），Accepting 表示在线并接单
 	type conn struct {
-		label, class string
-		accepting    bool
+		online, revoked bool
+		class           string
+		accepting       bool
 	}
 	want := map[string]conn{
-		"mini-01": {"在线", "ok", true}, "mini-02": {"在线", "ok", false}, "linux-01": {"离线", "warn", false},
-		"mac-01": {"离线", "warn", false}, "retired": {"已吊销", "bad", false},
+		"mini-01": {true, false, "ok", true}, "mini-02": {true, false, "ok", false}, "linux-01": {false, false, "warn", false},
+		"mac-01": {false, false, "warn", false}, "retired": {false, true, "bad", false},
 	}
 	if len(p.Runners) != len(want) {
 		t.Fatalf("Runner 列表：%+v", p.Runners)
 	}
 	for _, v := range p.Runners {
-		if got := (conn{v.ConnLabel, v.ConnClass, v.Accepting}); got != want[v.Name] {
+		if got := (conn{v.Online, v.Revoked, v.ConnClass, v.Accepting}); got != want[v.Name] {
 			t.Errorf("%s 的连接状态 %+v，应为 %+v", v.Name, got, want[v.Name])
 		}
 	}
@@ -153,7 +157,8 @@ func TestRunnersRender(t *testing.T) {
 		}
 	}
 	expect(t, "统计和说明", p.runnersPage, p.Counts == (runnerCounts{Total: 5, Online: 2, Accepting: 1, Paused: 1, Offline: 2, Revoked: 1, Jobs: 2}), !p.Filtered,
-		p.LeaseTTL == "1 分钟", p.LongPoll == "25 秒", p.OfflineAfter == "2 分钟", slices.Equal(p.Pools, []string{"default", "linux"}))
+		p.LeaseTTL == 60, p.LongPoll == 25, p.OfflineAfter == 120, slices.Equal(p.Pools, []string{"default", "linux"}),
+		textsZH(t, textOptionLabels(p.States))[2] == "已暂停接单")
 
 	// 普通用户：数据相同，前端按 Session.Admin 不显示操作和注册入口
 	if se := parsePage(t, renderAs(t, "runners", "user", testRunnersPage(now))).Session; se == nil || se.Admin {
@@ -169,7 +174,7 @@ func TestRunnersRender(t *testing.T) {
 		States: runnerStateOptions, Pools: []string{"default"}, State: "revoked", Pool: "default", Self: "/runners?pool=default&state=revoked", Now: now,
 		Counts: runnerCounts{Total: 1, Offline: 1},
 	}))
-	expect(t, "筛选无结果", p, p.Filtered, p.StateLabel == "已吊销", p.Pool == "default", len(p.Runners) == 0, p.Counts.Accepting == 0, p.Counts.Total == 1)
+	expect(t, "筛选无结果", p, p.Filtered, textZH(t, p.StateLabel) == "已吊销", p.Pool == "default", len(p.Runners) == 0, p.Counts.Accepting == 0, p.Counts.Total == 1)
 }
 
 func TestRunnerNewRender(t *testing.T) {
@@ -180,7 +185,7 @@ func TestRunnerNewRender(t *testing.T) {
 	f.fail("pool", "pool 只能包含字母")
 	f.fail("name", "名称只能包含字母")
 	p := pageData[runnerNewData](t, renderAs(t, "runner_new", "admin", &runnerNewPage{Form: f, RequestID: "r1", PublicURL: "https://kiln.example.com", ServerVersion: "v0.1.11", Pools: []string{"default"}}))
-	expect(t, "生成令牌的表单", p, p.Form.Failed, p.Form.Values["pool"] == "bad pool", p.Form.Errors["pool"] != "", p.Form.Errors["name"] != "",
+	expect(t, "生成令牌的表单", p, p.Form.Failed, p.Form.Values["pool"] == "bad pool", !p.Form.Errors["pool"].IsZero(), !p.Form.Errors["name"].IsZero(),
 		p.RequestID == "r1", p.PublicURL == "https://kiln.example.com", p.Reveal == nil, p.Command == "")
 
 	// reveal 返回展示页的页面数据和其中的 Reveal（不能为 nil）。
@@ -221,10 +226,10 @@ func TestRunnerNewRender(t *testing.T) {
 	ep.Reveal.UsedAt, ep.Reveal.Runner = &used, testRunners(now)[0]
 	p, _ = reveal(ep)
 	v := p.Reveal
-	expect(t, "已使用", v, v.Status == enrollUsed, v.UsedAt != nil, v.Runner != nil && v.Runner.Name == "mini-01" && v.Runner.ConnLabel == "在线" && v.Runner.Accepting)
+	expect(t, "已使用", v, v.Status == enrollUsed, v.UsedAt != nil, v.Runner != nil && v.Runner.Name == "mini-01" && v.Runner.ConnClass == "ok" && v.Runner.Accepting)
 	ep.Reveal.Runner = testRunners(now)[3]
 	p, _ = reveal(ep)
-	expect(t, "已使用但离线", p.Reveal, p.Reveal.Runner != nil && !p.Reveal.Runner.Online && p.Reveal.Runner.ConnLabel == "离线")
+	expect(t, "已使用但离线", p.Reveal, p.Reveal.Runner != nil && !p.Reveal.Runner.Online && p.Reveal.Runner.ConnClass == "warn")
 
 	// 同名 Runner 已存在
 	ep = testEnrollPage(now, enrollUnused, "kiln-enroll-x")
@@ -297,7 +302,7 @@ func TestRunnerMatch(t *testing.T) {
 			t.Errorf("状态 %q：%v，应为 %v", state, got, names)
 		}
 	}
-	if runnerStateLabel("bogus") != "" || runnerStateLabel("paused") != "已暂停接单" {
+	if !runnerStateLabel("bogus").IsZero() || textZH(t, runnerStateLabel("paused")) != "已暂停接单" {
 		t.Error("runnerStateLabel")
 	}
 }
@@ -331,7 +336,7 @@ func TestRunnerOpResult(t *testing.T) {
 		{rs[0], "revoke", []string{"已吊销 mini-01"}, "中断"},
 		{rs[0], "delete", []string{"已删除 mini-01", "名称可以重新注册"}, "中断"},
 	} {
-		got := runnerOpResult(&opTarget{Name: c.v.Name, Revoked: c.v.Revoked, Online: c.v.Online, Running: len(c.v.Jobs)}, c.op, time.Minute, 25*time.Second)
+		got := textZH(t, runnerOpResult(&opTarget{Name: c.v.Name, Revoked: c.v.Revoked, Online: c.v.Online, Running: len(c.v.Jobs)}, c.op, time.Minute, 25*time.Second))
 		for _, w := range c.wants {
 			if !strings.Contains(got, w) {
 				t.Errorf("%s %s：%q 中没有 %q", c.op, c.v.Name, got, w)
@@ -479,7 +484,7 @@ func TestPageRunners_Filters(t *testing.T) {
 				t.Errorf("列出 %v，应为 %v", got, c.want)
 			}
 			p := pageData[runnersData](t, body)
-			if p.State != c.state || p.Pool != c.pool || p.StateLabel != c.label || p.Filtered != (c.state != "" || c.pool != "") {
+			if p.State != c.state || p.Pool != c.pool || textZH(t, p.StateLabel) != c.label || p.Filtered != (c.state != "" || c.pool != "") {
 				t.Errorf("筛选条件：State %q Pool %q StateLabel %q Filtered %v", p.State, p.Pool, p.StateLabel, p.Filtered)
 			}
 			// 统计不受筛选影响
@@ -525,21 +530,21 @@ func TestPostRunnerOp(t *testing.T) {
 
 	// 暂停：回到原来的筛选条件，提示正在执行的任务会继续
 	keep := url.Values{"state": {"online"}, "pool": {"default"}}
-	flash := wantRedirect(t, "暂停 mac-1", e.post(e.alice, "/runners/mac-1/drain", keep), "/runners?pool=default&state=online")
+	flash := flashZH(t, wantRedirect(t, "暂停 mac-1", e.post(e.alice, "/runners/mac-1/drain", keep), "/runners?pool=default&state=online"))
 	mustHave(t, "操作结果", flash, "已暂停 mac-1 接收新任务", "最长约 20 秒", "正在执行的 1 个任务会继续执行到结束")
 	if !drain("mac-1") {
 		t.Error("mac-1 应已暂停接单")
 	}
 	// 恢复：离线的 Runner 提示重新连接后才会领取
-	flash = wantRedirect(t, "恢复 linux-1", e.post(e.alice, "/runners/linux-1/undrain", nil), "/runners")
+	flash = flashZH(t, wantRedirect(t, "恢复 linux-1", e.post(e.alice, "/runners/linux-1/undrain", nil), "/runners"))
 	mustHave(t, "操作结果", flash, "linux-1 已恢复接单，但它目前离线")
-	flash = wantRedirect(t, "恢复 mac-1", e.post(e.alice, "/runners/mac-1/undrain", nil), "/runners")
+	flash = flashZH(t, wantRedirect(t, "恢复 mac-1", e.post(e.alice, "/runners/mac-1/undrain", nil), "/runners"))
 	mustHave(t, "操作结果", flash, "mac-1 已恢复接单，有空闲时会领取新任务")
 	if drain("mac-1") {
 		t.Error("mac-1 应已恢复接单")
 	}
 	// 吊销：提示正在执行的任务会被中断
-	flash = wantRedirect(t, "吊销 mac-1", e.post(e.alice, "/runners/mac-1/revoke", nil), "/runners")
+	flash = flashZH(t, wantRedirect(t, "吊销 mac-1", e.post(e.alice, "/runners/mac-1/revoke", nil), "/runners"))
 	mustHave(t, "操作结果", flash, "已吊销 mac-1", "正在执行的 1 个任务会被中断", "约 90 秒后")
 	if state("mac-1") != store.RunnerRevoked {
 		t.Error("mac-1 应已吊销")
@@ -554,27 +559,27 @@ func TestPostRunnerOp(t *testing.T) {
 	// 已吊销、不存在的 Runner：不执行任何操作，也不写审计
 	before := e.count(`SELECT count(*) FROM audit_log`)
 	for _, op := range []string{"drain", "undrain", "revoke"} {
-		flash = wantRedirect(t, op+" 已吊销的 old-1", e.post(e.alice, "/runners/old-1/"+op, nil), "/runners")
+		flash = flashZH(t, wantRedirect(t, op+" 已吊销的 old-1", e.post(e.alice, "/runners/old-1/"+op, nil), "/runners"))
 		mustHave(t, "操作结果", flash, "old-1 已经被吊销，没有执行任何操作")
 	}
 	if drain("old-1") {
 		t.Error("已吊销的 Runner 不应被暂停")
 	}
-	flash = wantRedirect(t, "不存在的 Runner", e.post(e.alice, "/runners/ghost/drain", nil), "/runners")
+	flash = flashZH(t, wantRedirect(t, "不存在的 Runner", e.post(e.alice, "/runners/ghost/drain", nil), "/runners"))
 	mustHave(t, "操作结果", flash, "没有名为 ghost 的 Runner")
 	if n := e.count(`SELECT count(*) FROM audit_log`); n != before {
 		t.Errorf("没有执行的操作不应写审计：%d → %d", before, n)
 	}
 
 	// 删除：没有吊销的、还有未结束任务的不删除；已吊销的删除后名称不再出现
-	flash = wantRedirect(t, "删除没有吊销的 mac-2", e.post(e.alice, "/runners/mac-2/delete", nil), "/runners")
+	flash = flashZH(t, wantRedirect(t, "删除没有吊销的 mac-2", e.post(e.alice, "/runners/mac-2/delete", nil), "/runners"))
 	mustHave(t, "操作结果", flash, "mac-2 没有吊销，没有执行任何操作")
-	flash = wantRedirect(t, "删除有任务的 mac-1", e.post(e.alice, "/runners/mac-1/delete", nil), "/runners")
+	flash = flashZH(t, wantRedirect(t, "删除有任务的 mac-1", e.post(e.alice, "/runners/mac-1/delete", nil), "/runners"))
 	mustHave(t, "操作结果", flash, "操作 mac-1 失败", "1 个任务没有结束")
 	if n := e.count(`SELECT count(*) FROM audit_log`); n != before {
 		t.Errorf("没有执行的删除不应写审计：%d → %d", before, n)
 	}
-	flash = wantRedirect(t, "删除 old-1", e.post(e.alice, "/runners/old-1/delete", keep), "/runners?pool=default&state=online")
+	flash = flashZH(t, wantRedirect(t, "删除 old-1", e.post(e.alice, "/runners/old-1/delete", keep), "/runners?pool=default&state=online"))
 	mustHave(t, "操作结果", flash, "已删除 old-1")
 	if n := e.count(`SELECT count(*) FROM runners WHERE name='old-1'`); n != 0 {
 		t.Error("old-1 应已删除")
@@ -586,7 +591,7 @@ func TestPostRunnerOp(t *testing.T) {
 	// 不认识的操作、成员、CSRF 不对、未登录：都不执行
 	w := e.post(e.alice, "/runners/mac-2/explode", nil)
 	wantStatus(t, "不认识的操作", w, http.StatusNotFound)
-	mustHave(t, "页面", w.Body.String(), "没有这个 Runner 操作")
+	mustHave(t, "页面", pageTextZH(t, w.Body.String()), "没有这个 Runner 操作")
 	w = e.post(e.bob, "/runners/mac-2/undrain", nil)
 	wantStatus(t, "成员", w, http.StatusForbidden)
 	mustHave(t, "页面", pageTextZH(t, w.Body.String()), "需要管理员权限")
@@ -624,12 +629,12 @@ func TestPostRunnerToken(t *testing.T) {
 	// 表单校验失败：422，保留输入，不生成令牌
 	w := e.post(e.alice, "/runners/token", url.Values{"pool": {"-bad"}, "name": {"ok-name"}})
 	wantStatus(t, "pool 不合法", w, http.StatusUnprocessableEntity)
-	mustHave(t, "页面", w.Body.String(), "pool 只能包含字母")
 	p := pageData[runnerNewData](t, w.Body.String())
+	mustHave(t, "页面", textZH(t, p.Form.Errors["pool"]), "pool 只能包含字母")
 	expect(t, "校验失败应保留输入", p.Form, p.Form.Values["pool"] == "-bad", p.Form.Values["name"] == "ok-name", p.Form.Failed)
 	w = e.post(e.alice, "/runners/token", url.Values{"name": {"has space"}})
 	wantStatus(t, "名称不合法", w, http.StatusUnprocessableEntity)
-	mustHave(t, "页面", w.Body.String(), "名称只能包含字母")
+	mustHave(t, "页面", textZH(t, pageData[runnerNewData](t, w.Body.String()).Form.Errors["name"]), "名称只能包含字母")
 	if n := tokens(); n != 0 {
 		t.Fatalf("校验失败时不应生成令牌：%d", n)
 	}
@@ -749,7 +754,7 @@ func TestPostRunnerTokenRole(t *testing.T) {
 	e := newWebEnv(t)
 	w := e.post(e.alice, "/runners/token", url.Values{"kind": {"ai-admin"}})
 	wantStatus(t, "类型无效", w, http.StatusUnprocessableEntity)
-	mustHave(t, "页面", w.Body.String(), "AI 开发节点")
+	mustHave(t, "页面", textZH(t, pageData[runnerNewData](t, w.Body.String()).Form.Errors["kind"]), "AI 开发节点")
 	if n := e.count(`SELECT count(*) FROM enrollment_tokens`); n != 0 {
 		t.Fatalf("类型无效时不应生成令牌：%d", n)
 	}
@@ -770,4 +775,13 @@ func TestPostRunnerTokenRole(t *testing.T) {
 			t.Errorf("%q：令牌 = %s/%s，应为 %s/%s", tc.form, kind, role, tc.kind, tc.role)
 		}
 	}
+}
+
+// textOptionLabels 返回选项的文字。
+func textOptionLabels(opts []textOption) []uiText {
+	out := make([]uiText, 0, len(opts))
+	for _, o := range opts {
+		out = append(out, o.Label)
+	}
+	return out
 }

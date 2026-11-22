@@ -9,6 +9,8 @@ import { runnerViewSchema, upgradeStateText, upgradeTone, type RunnerView } from
 import { SettingsLayout } from '../components/SettingsLayout'
 import { Subhead } from '../components/Subhead'
 import { Ago } from '../components/Time'
+import { Msg, useT } from '../i18n/locale'
+import { isEmpty } from '../i18n/messages'
 import { formStateSchema, list } from '../lib/envelope'
 import { shortVersion } from '../lib/format'
 import { FormAlert, TextField, settingsCss } from './settings/common'
@@ -87,13 +89,18 @@ function LatestCell({ r }: { r: RunnerView }) {
 }
 
 function StateCell({ r }: { r: RunnerView }) {
+  const t = useT()
   const u = r.Upgrade
   if (!u) return <span className={settingsCss.muted}>—</span>
   const tone = upgradeTone(r, u)
   return (
     <>
-      <span className={tone === 'bad' ? table.err : tone === 'warn' ? css.warn : undefined}>{upgradeStateText(r, u)}</span>
-      {tone === 'muted' && u.Reason && <div className={settingsCss.muted}>{u.Reason}</div>}
+      <span className={tone === 'bad' ? table.err : tone === 'warn' ? css.warn : undefined}>{upgradeStateText(r, u, t)}</span>
+      {tone === 'muted' && !isEmpty(u.Reason) && (
+        <div className={settingsCss.muted}>
+          <Msg text={u.Reason} />
+        </div>
+      )}
     </>
   )
 }

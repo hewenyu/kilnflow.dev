@@ -1,6 +1,8 @@
 {
  "Page": "runners",
- "Title": "Runners",
+ "Title": {
+  "id": "runners.pageTitle"
+ },
  "Nav": "runners",
  "Status": 200,
  "Session": {
@@ -29,27 +31,39 @@
   "States": [
    {
     "Value": "online",
-    "Label": "在线"
+    "Label": {
+     "id": "runnerFilter.online"
+    }
    },
    {
     "Value": "accepting",
-    "Label": "在线并接单"
+    "Label": {
+     "id": "runnerFilter.accepting"
+    }
    },
    {
     "Value": "paused",
-    "Label": "已暂停接单"
+    "Label": {
+     "id": "runnerFilter.paused"
+    }
    },
    {
     "Value": "busy",
-    "Label": "正在执行任务"
+    "Label": {
+     "id": "runnerFilter.busy"
+    }
    },
    {
     "Value": "offline",
-    "Label": "离线"
+    "Label": {
+     "id": "runnerFilter.offline"
+    }
    },
    {
     "Value": "revoked",
-    "Label": "已吊销"
+    "Label": {
+     "id": "runnerFilter.revoked"
+    }
    }
   ],
   "Pools": [
@@ -57,9 +71,9 @@
   ],
   "Self": "/runners",
   "Now": "2026-11-05T04:55:46-08:00",
-  "OfflineAfter": "2 分钟",
-  "LeaseTTL": "1 分钟",
-  "LongPoll": "25 秒",
+  "OfflineAfter": 120,
+  "LeaseTTL": 60,
+  "LongPoll": 25,
   "Filtered": false,
   "StateLabel": ""
  }

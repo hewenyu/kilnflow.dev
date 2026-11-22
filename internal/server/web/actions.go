@@ -82,13 +82,13 @@ func (d *Dashboard) postRunnerToken(w http.ResponseWriter, r *http.Request, se *
 	f.Values["kind"] = formKind
 	kind, role, ok := runnerKindRole(formKind)
 	if !ok {
-		f.fail("kind", "Runner 类型只能是 CI Runner、AI 审计节点 或 AI 开发节点")
+		f.failText("kind", message(msgRunnerNewErrKind))
 	}
 	if pool != "" && !enrollNamePattern.MatchString(pool) {
-		f.fail("pool", "pool 只能包含字母、数字、点、下划线和连字符，以字母或数字开头，最长 64 个字符")
+		f.failText("pool", message(msgRunnerNewErrPool))
 	}
 	if name != "" && !enrollNamePattern.MatchString(name) {
-		f.fail("name", "名称只能包含字母、数字、点、下划线和连字符，以字母或数字开头，最长 64 个字符")
+		f.failText("name", message(msgRunnerNewErrName))
 	}
 	id := r.PostFormValue("request_id")
 	if !requestIDPattern.MatchString(id) {
@@ -117,7 +117,8 @@ func (d *Dashboard) postRunnerToken(w http.ResponseWriter, r *http.Request, se *
 			d.redirect(w, r, "/runners/enroll/"+id)
 			return
 		}
-		f.fail(formGeneral, "生成注册令牌失败："+d.failure(r, err))
+		// 表单上方的标题已经说明"没有生成令牌"：这里只给原因（内部错误是错误编号）
+		f.failText(formGeneral, d.failureText(r, err))
 	}
 	p, err := d.newRunnerPage(ctx, f)
 	if err != nil {
@@ -133,7 +134,7 @@ func (d *Dashboard) postRunnerOp(w http.ResponseWriter, r *http.Request, se *ses
 	ctx := r.Context()
 	name, op := r.PathValue("name"), r.PathValue("op")
 	if op != runnerOpDrain && op != runnerOpUndrain && op != runnerOpRevoke && op != runnerOpDelete {
-		d.notFound(w, r, "没有这个 Runner 操作，没有执行任何操作。")
+		d.notFoundText(w, r, message(msgRunnerOpUnknown))
 		return
 	}
 	back := runnersURL(r.PostFormValue("state"), r.PostFormValue("pool"))
@@ -143,7 +144,7 @@ func (d *Dashboard) postRunnerOp(w http.ResponseWriter, r *http.Request, se *ses
 		return
 	}
 	if v == nil {
-		d.flashBack(w, r, back, fmt.Sprintf("没有名为 %s 的 Runner，没有执行任何操作。", name))
+		d.flashMsg(w, r, back, message(msgRunnerOpNotFound, strArg(argName, name)))
 		return
 	}
 	if v.AI {
@@ -151,10 +152,10 @@ func (d *Dashboard) postRunnerOp(w http.ResponseWriter, r *http.Request, se *ses
 	}
 	switch {
 	case op == runnerOpDelete && !v.Revoked:
-		d.flashBack(w, r, back, name+" 没有吊销，没有执行任何操作。先吊销再删除。")
+		d.flashMsg(w, r, back, message(msgRunnerOpNotRevoked, strArg(argName, name)))
 		return
 	case op != runnerOpDelete && v.Revoked:
-		d.flashBack(w, r, back, name+" 已经被吊销，没有执行任何操作。要继续使用这台机器，请重新注册。")
+		d.flashMsg(w, r, back, message(msgRunnerOpRevokedAlready, strArg(argName, name)))
 		return
 	}
 	switch op {
@@ -166,40 +167,37 @@ func (d *Dashboard) postRunnerOp(w http.ResponseWriter, r *http.Request, se *ses
 		err = d.admin.DeleteRunner(ctx, name, se.Login)
 	}
 	if err != nil {
-		d.flashBack(w, r, back, fmt.Sprintf("操作 %s 失败：%s", name, d.failure(r, err)))
+		d.flashMsg(w, r, back, d.failureFlash(r, err, msgRunnerOpFailed, msgRunnerOpFailedRef, strArg(argName, name)))
 		return
 	}
-	d.flashBack(w, r, back, runnerOpResult(v, op, d.leaseTTL(), d.longPoll()))
+	d.flashMsg(w, r, back, runnerOpResult(v, op, d.leaseTTL(), d.longPoll()))
 }
 
-// runnerOpResult 返回操作成功后的说明；v 是操作前的 Runner，lease 是租约有效期，poll 是一轮领取的最长时间。
-func runnerOpResult(v *opTarget, op string, lease, poll time.Duration) string {
-	n := v.Running
+// runnerOpResult 返回操作成功后的提示；v 是操作前的 Runner，lease 是租约有效期，poll 是一轮领取的最长时间。
+func runnerOpResult(v *opTarget, op string, lease, poll time.Duration) uiText {
+	n, name := int64(v.Running), strArg(argName, v.Name)
 	switch op {
 	case runnerOpDrain:
-		msg := fmt.Sprintf("已暂停 %s 接收新任务（它正在进行的一轮领取结束后生效，最长约 %s）。", v.Name, humanDuration(poll))
 		if n > 0 {
-			return msg + fmt.Sprintf("正在执行的 %d 个任务会继续执行到结束；需要时点“恢复接单”。", n)
+			return message(msgRunnerOpDrainedBusy, name, intArg(argPoll, seconds(poll)), intArg(argCount, n))
 		}
-		return msg + "它现在没有正在执行的任务；需要时点“恢复接单”。"
+		return message(msgRunnerOpDrained, name, intArg(argPoll, seconds(poll)))
 	case runnerOpUndrain:
 		if !v.Online {
-			return v.Name + " 已恢复接单，但它目前离线，重新连接后才会领取任务。"
+			return message(msgRunnerOpUndrainedOff, name)
 		}
-		return v.Name + " 已恢复接单，有空闲时会领取新任务。"
+		return message(msgRunnerOpUndrained, name)
+	case runnerOpDelete:
+		return message(msgRunnerOpDeleted, name)
 	}
-	if op == runnerOpDelete {
-		return fmt.Sprintf("已删除 %s：不再显示在列表中，名称可以重新注册；它执行过的尝试仍显示这个名称。", v.Name)
+	switch {
+	case n == 0:
+		return message(msgRunnerOpRevoked, name)
+	case v.AI:
+		// AI 任务领取后不自动重试（PLAN #33.6）
+		return message(msgRunnerOpRevokedBusyAI, name, intArg(argCount, n), intArg(argLease, seconds(lease)))
 	}
-	msg := fmt.Sprintf("已吊销 %s，它之后的请求都会被拒绝。", v.Name)
-	if n > 0 {
-		if v.AI {
-			// AI 任务领取后不自动重试（PLAN #33.6）
-			return msg + fmt.Sprintf("它正在执行的 %d 个 AI 任务会被中断，约 %s后判为 Runner 失联并结束。要恢复这台机器，请为它重新注册。", n, humanDuration(lease))
-		}
-		msg += fmt.Sprintf("它正在执行的 %d 个任务会被中断，约 %s后判为 Runner 失联，按基础设施错误处理（多数会重新排队）。", n, humanDuration(lease))
-	}
-	return msg + "要恢复这台机器，请为它重新注册。"
+	return message(msgRunnerOpRevokedBusy, name, intArg(argCount, n), intArg(argLease, seconds(lease)))
 }
 
 func (d *Dashboard) postOutboxRetry(w http.ResponseWriter, r *http.Request, se *session) {
