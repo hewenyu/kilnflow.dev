@@ -1,0 +1,130 @@
+/* AI 请求、AI 任务和 AI 执行节点页面共用的样式（布局沿用 job 和 Runner 页面）。 */
+.page > * + * {
+  margin-top: 16px;
+}
+
+.block {
+  display: block;
+}
+
+.labels {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.kv dt {
+  color: var(--fgColor-muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.p {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.muted {
+  color: var(--fgColor-muted);
+}
+
+.bad {
+  color: var(--fgColor-danger);
+}
+
+.warn {
+  color: var(--fgColor-attention);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tasks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tasks li + li {
+  margin-top: 4px;
+}
+
+.tasks a {
+  margin: 0 4px 0 6px;
+}
+
+.pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.nav {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.nav li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.nav li[aria-current='page'] {
+  background: var(--bgColor-neutral-muted);
+  font-weight: 600;
+}
+
+/* 一次执行的进度和在 Orca 中的关联（orca.tsx）；taskMeta 是它在节点页面上的位置（任务名称下面一行，与名称对齐）。 */
+.orcaLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.taskMeta {
+  margin: 2px 0 0 20px;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.orca {
+  overflow-wrap: anywhere;
+}

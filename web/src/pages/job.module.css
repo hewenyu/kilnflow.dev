@@ -1,0 +1,452 @@
+/* job 详情页：顶部是与 run 详情页相同的标题区（RunHeader），下面左侧是 job 列表，右侧是 job 的信息、日志和结果（GitHub Actions 的 job 页）。 */
+.page {
+  display: grid;
+  gap: 16px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.side {
+  min-width: 0;
+}
+
+.content {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* job 的标题：名称和状态、耗时等 */
+.header {
+  display: grid;
+  gap: 4px;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.titleText {
+  overflow-wrap: anywhere;
+}
+
+.titleID {
+  color: var(--fgColor-muted);
+  font-weight: 300;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.meta li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meta code {
+  font-size: 12px;
+}
+
+/* 与标题文字左对齐（状态图标 20px + 间距 8px） */
+.header .meta {
+  padding-left: 28px;
+}
+
+.metaState {
+  color: var(--fgColor-default);
+  font-weight: 600;
+}
+
+.actionNote {
+  max-width: 360px;
+  margin: 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.notices {
+  display: grid;
+  gap: 8px;
+}
+
+.notices:empty {
+  display: none;
+}
+
+/* 日志不可用时 */
+.logBlocked {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--fgColor-muted);
+  text-align: center;
+  border: 1px dashed var(--borderColor-default);
+  border-radius: 6px;
+}
+
+.noLog {
+  padding: 16px;
+  color: var(--kiln-log-muted);
+  background-color: var(--kiln-log-bg);
+  border: 1px solid var(--kiln-log-border);
+  border-radius: 6px;
+}
+
+.noLog p {
+  margin: 8px 0 0;
+}
+
+.noLogTitle {
+  margin: 0;
+  color: var(--kiln-log-fg);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 对话框 */
+.dialogText {
+  margin: 0 0 16px;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.effects {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.effects li + li {
+  margin-top: 4px;
+}
+
+/* 产物 */
+.introBody {
+  padding-bottom: 0;
+}
+
+.intro,
+.emptyText {
+  margin: 0;
+  color: var(--fgColor-muted);
+}
+
+.output {
+  padding: 12px 16px 16px;
+}
+
+.output + .output {
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.outputHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.outputName {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.outputNote {
+  margin: 8px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--borderColor-muted);
+  border-radius: 6px;
+}
+
+.file {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 80px 120px 88px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.file + .file {
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.fileIcon {
+  color: var(--fgColor-muted);
+}
+
+.filePath {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.filePath code {
+  overflow-wrap: anywhere;
+}
+
+.fileSize {
+  color: var(--fgColor-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.fileDigest {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.fileAction {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 12px;
+}
+
+/* 发布 */
+.kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 24px;
+  margin: 0;
+}
+
+.kv dt {
+  color: var(--fgColor-muted);
+}
+
+.kv dd {
+  margin: 0;
+}
+
+.kvRow {
+  display: contents;
+}
+
+.target {
+  align-items: flex-start;
+}
+
+.targetMain {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.targetName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.targetError {
+  margin: 0;
+  color: var(--fgColor-danger);
+}
+
+.targetResult:empty {
+  display: none;
+}
+
+.asset {
+  display: block;
+}
+
+.block {
+  display: block;
+}
+
+/* 尝试 */
+.attempt {
+  align-items: flex-start;
+}
+
+.attemptViewing {
+  background-color: var(--bgColor-accent-muted);
+}
+
+.attemptMain {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.attemptTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.attemptMeta {
+  margin: 4px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.attemptMeta code {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.attemptMsg {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.attemptAction {
+  flex: none;
+  font-size: 12px;
+}
+
+.footNote {
+  font-size: 12px;
+}
+
+/* job spec */
+.spec summary {
+  cursor: pointer;
+  color: var(--fgColor-muted);
+  font-size: 14px;
+}
+
+.spec pre {
+  max-height: 480px;
+  margin: 8px 0 0;
+  padding: 16px;
+  overflow: auto;
+  font-size: 12px;
+  background-color: var(--bgColor-muted);
+  border: 1px solid var(--borderColor-default);
+  border-radius: 6px;
+}
+
+.muted {
+  color: var(--fgColor-muted);
+}
+
+.bad {
+  color: var(--fgColor-danger);
+}
+
+.wrap {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1011px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 767px) {
+  .file {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+  }
+
+  .fileSize {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  /* 窄屏只显示大小，sha256 在宽屏和下载的文件中核对 */
+  .fileDigest {
+    display: none;
+  }
+
+  .fileAction {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+/* 执行中的 job 的当前阶段与进度（JobProgress） */
+.progress {
+  display: grid;
+  gap: 4px;
+}
+
+.progress p {
+  margin: 0;
+}
+
+.progressMeta {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.progressBar {
+  max-width: 480px;
+  margin: 4px 0;
+}
+
+.progressWarn {
+  color: var(--fgColor-attention);
+}
+
+/* AI 审计的结果 */
+.finding {
+  display: block;
+}
+
+.findingTitle {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-8);
+  align-items: center;
+}
+
+.findingLoc {
+  color: var(--fgColor-muted);
+  font-size: var(--text-body-size-small);
+}
+
+.findingBody {
+  margin: var(--base-size-8) 0 0;
+}
+.preWrap {
+  white-space: pre-wrap;
+}
+
+.aiList {
+  margin: var(--base-size-8) 0 0;
+  padding-left: var(--base-size-20);
+}

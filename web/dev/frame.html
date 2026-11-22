@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- 截取窄屏用：dev/frame.html?w=390&src=/runs 把页面放在指定宽度的 iframe 中（Chrome 窗口最窄约 500px）。 -->
+<meta charset="utf-8">
+<body style="margin:0">
+<script>
+  const q = new URLSearchParams(location.search)
+  const f = document.createElement('iframe')
+  f.src = q.get('src') || '/'
+  f.width = q.get('w') || '390'
+  f.height = q.get('h') || '1100'
+  f.style.cssText = 'border:0;display:block'
+  document.body.append(f)
+</script>
+</body>

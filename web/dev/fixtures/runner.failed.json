@@ -1,0 +1,112 @@
+{
+ "Page": "runner",
+ "Title": "Runner · mini-02",
+ "Nav": "runners",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Runner": {
+   "ID": 2,
+   "Name": "mini-02",
+   "Pool": "default",
+   "Platforms": [
+    "darwin/arm64"
+   ],
+   "Executors": [
+    "host"
+   ],
+   "Version": "0f3c9a7d21e84b6c55aa90d1e3f7b2c4a8d6e0f1",
+   "Revoked": false,
+   "Drain": true,
+   "Online": true,
+   "LastSeen": "2026-11-05T04:55:28-08:00",
+   "Jobs": [
+    {
+     "RunnerID": 2,
+     "JobID": 9809,
+     "Name": "lint",
+     "RunID": 411,
+     "Workflow": "CI",
+     "Repo": "acme/notes-app",
+     "Started": "2026-11-05T04:49:46-08:00"
+    }
+   ],
+   "Accepting": false,
+   "ConnLabel": "在线",
+   "ConnClass": "ok",
+   "Capacity": {
+    "Machine": "10 核 / 16.0 GiB",
+    "Reserved": "2 核 / 4.0 GiB",
+    "Allocatable": "8 核 / 12.0 GiB",
+    "Allocated": "1 核 / 1.0 GiB",
+    "Limits": [],
+    "MaxJobs": 4
+   },
+   "CacheBytes": 812000000,
+   "CacheReportedAt": "2026-11-05T03:12:00-08:00",
+   "Upgrade": {
+    "State": "rolled_back",
+    "Target": "0.4.3",
+    "Error": "0.4.3 连续 3 次启动后没有连上 Server，已回滚到 0.4.2",
+    "Launcher": true,
+    "Disabled": false,
+    "Current": "0.4.2",
+    "Previous": "",
+    "Package": "@yuebanlaosiji/kilnflow-runner-darwin-arm64",
+    "Latest": "0.4.3",
+    "CheckedAt": "2026-11-05T04:12:40-08:00",
+    "CheckError": "",
+    "CheckPending": false,
+    "CanUpgrade": true,
+    "Reason": "",
+    "Request": {
+     "ID": 1002,
+     "Version": "0.4.3",
+     "From": "0.4.2",
+     "State": "failed",
+     "Error": "0.4.3 连续 3 次启动后没有连上 Server，已回滚到 0.4.2",
+     "Actor": "octocat",
+     "Created": "2026-11-05T03:40:00-08:00",
+     "Finished": "2026-11-05T03:52:13-08:00"
+    }
+   },
+   "KindLabel": "CI Runner",
+   "URL": "/runners/detail/mini-02"
+  },
+  "History": [
+   {
+    "ID": 1002,
+    "Version": "0.4.3",
+    "From": "0.4.2",
+    "State": "failed",
+    "Error": "0.4.3 连续 3 次启动后没有连上 Server，已回滚到 0.4.2",
+    "Actor": "octocat",
+    "Created": "2026-11-05T03:40:00-08:00",
+    "Finished": "2026-11-05T03:52:13-08:00"
+   },
+   {
+    "ID": 1000,
+    "Version": "0.4.2",
+    "From": "0.4.1",
+    "State": "succeeded",
+    "Error": "",
+    "Actor": "octocat",
+    "Created": "2026-11-03T10:00:00-08:00",
+    "Finished": "2026-11-03T10:06:31-08:00"
+   }
+  ],
+  "Registry": "https://registry.npmjs.org/",
+  "RegistryDefault": true,
+  "OfflineAfter": "2 分钟",
+  "LongPoll": "25 秒"
+ }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "00000000-0000-4000-8000-000000000507",
+  "ok": false,
+  "error": {
+    "code": "runtime_error",
+    "message": "Failed to delete worktree at /Users/kiln/orca/workspaces/target/kiln-a9155-e1. M a.txt\n?? untracked.txt"
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000506"
+  }
+}

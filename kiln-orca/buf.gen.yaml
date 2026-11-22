@@ -1,0 +1,6 @@
+# kiln-orca 的 TS 协议代码（make generate 调用）：只生成连接器用到的 kiln.runner.v1（注册、认证）和 kiln.airunner.v2。
+version: v2
+plugins:
+  - local: ["kiln-orca/node_modules/.bin/protoc-gen-es"]
+    out: kiln-orca/src/gen
+    opt: target=ts

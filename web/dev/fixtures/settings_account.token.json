@@ -1,0 +1,31 @@
+{
+ "Page": "settings_account",
+ "Title": "登录与身份",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": true,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "account",
+  "Binding": {
+   "GitHubID": 1234567,
+   "GitHubLogin": "octocat",
+   "TokenLogin": true,
+   "BoundBy": "admin",
+   "BoundAt": "2026-10-24T04:55:46-08:00",
+   "UpdatedAt": "2026-10-24T04:55:46-08:00"
+  },
+  "OAuth": true,
+  "SignedInAsBound": false,
+  "GitHubLogin": "/auth/github?next=%2Fsettings%2Faccount",
+  "Step": 2
+ }
+}

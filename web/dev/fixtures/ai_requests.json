@@ -1,0 +1,136 @@
+{
+  "Page": "ai_requests",
+  "Title": "AI 请求",
+  "Nav": "ai_requests",
+  "Status": 200,
+  "Session": {
+    "Login": "octocat",
+    "Admin": true,
+    "ViaToken": false,
+    "Bound": true
+  },
+  "CSRF": "csrf-preview",
+  "OAuth": true,
+  "Active": 0,
+  "Flash": "",
+  "Data": {
+    "Requests": [
+      {
+        "ID": 90,
+        "Type": "develop",
+        "TypeLabel": "AI 开发",
+        "Repo": "acme/kiln",
+        "Event": "issues",
+        "Ref": "refs/heads/master",
+        "SHA": "8d74cb0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708",
+        "Trigger": "labeled",
+        "Sender": "octocat",
+        "State": "active",
+        "PRNumber": 0,
+        "WorkItemID": 4,
+        "WorkItemURL": "/ai-dev/4",
+        "DevMode": "select",
+        "DevRound": 0,
+        "RerunOf": 0,
+        "ConfigError": "",
+        "Warnings": "",
+        "Created": "2026-11-05T14:00:00Z",
+        "Finished": null,
+        "Purged": null
+      },
+      {
+        "ID": 91,
+        "Type": "review",
+        "TypeLabel": "AI 审计",
+        "Repo": "acme/kiln",
+        "Event": "pull_request",
+        "Ref": "refs/pull/74/head",
+        "SHA": "8d74cb0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708",
+        "Trigger": "rerun",
+        "Sender": "octocat",
+        "State": "succeeded",
+        "PRNumber": 74,
+        "WorkItemID": 0,
+        "WorkItemURL": "",
+        "DevMode": "",
+        "DevRound": 0,
+        "RerunOf": 88,
+        "ConfigError": "",
+        "Warnings": "",
+        "Created": "2026-11-05T13:00:00Z",
+        "Finished": "2026-11-05T13:06:00Z",
+        "Purged": null
+      },
+      {
+        "ID": 88,
+        "Type": "review",
+        "TypeLabel": "AI 审计",
+        "Repo": "acme/kiln",
+        "Event": "pull_request",
+        "Ref": "refs/pull/74/head",
+        "SHA": "8d74cb0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708",
+        "Trigger": "synchronize",
+        "Sender": "octocat",
+        "State": "failed",
+        "PRNumber": 74,
+        "WorkItemID": 0,
+        "WorkItemURL": "",
+        "DevMode": "",
+        "DevRound": 0,
+        "RerunOf": 0,
+        "ConfigError": "",
+        "Warnings": "",
+        "Created": "2026-11-05T12:10:02Z",
+        "Finished": "2026-11-05T12:18:21Z",
+        "Purged": null
+      }
+    ],
+    "Filter": {
+      "Repo": "",
+      "Type": "",
+      "State": "",
+      "PR": 0
+    },
+    "Repos": [
+      "acme/kiln",
+      "acme/web"
+    ],
+    "Types": [
+      {
+        "Value": "review",
+        "Label": "AI 审计"
+      },
+      {
+        "Value": "develop",
+        "Label": "AI 开发"
+      }
+    ],
+    "States": [
+      {
+        "Value": "queued",
+        "Label": "排队中"
+      },
+      {
+        "Value": "active",
+        "Label": "进行中"
+      },
+      {
+        "Value": "succeeded",
+        "Label": "成功"
+      },
+      {
+        "Value": "failed",
+        "Label": "失败"
+      },
+      {
+        "Value": "cancelled",
+        "Label": "已取消"
+      },
+      {
+        "Value": "skipped",
+        "Label": "已跳过"
+      }
+    ],
+    "Limit": 100
+  }
+}

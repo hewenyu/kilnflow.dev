@@ -1,0 +1,91 @@
+{
+ "Page": "runner_new",
+ "Title": "注册新的 Runner",
+ "Nav": "runners",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Form": {
+   "Values": {
+    "pool": "default",
+    "name": "mini-03"
+   },
+   "Errors": {},
+   "Failed": false
+  },
+  "RequestID": "3f1c2a9b8e7d6c5b4a39281706f5e4d3",
+  "PublicURL": "https://kiln.example.com",
+  "ServerVersion": "v0.4.2",
+  "Pools": [
+   "default",
+   "linux"
+  ],
+  "Reveal": {
+   "ID": "3f1c2a9b8e7d6c5b4a39281706f5e4d3",
+   "Token": "kiln_enroll_7Hq2xV9pLmN4cR8sT1wY6zB3",
+   "Pool": "default",
+   "Name": "mini-01",
+   "Created": "2026-11-05T04:53:46-08:00",
+   "Expires": "2026-11-05T05:53:46-08:00",
+   "Status": "unused",
+   "UsedAt": null,
+   "Runner": null,
+   "Existing": {
+    "ID": 1,
+    "Name": "mini-01",
+    "Pool": "default",
+    "Platforms": [
+     "darwin/arm64",
+     "linux/arm64"
+    ],
+    "Executors": [
+     "host",
+     "oci",
+     "buildkit"
+    ],
+    "Version": "v0.4.2",
+    "Revoked": false,
+    "Drain": false,
+    "Online": true,
+    "LastSeen": "2026-11-05T04:55:28-08:00",
+    "Jobs": [
+     {
+      "RunnerID": 1,
+      "JobID": 9812,
+      "Name": "build (darwin/arm64)",
+      "RunID": 412,
+      "Workflow": "Release",
+      "Repo": "acme/kiln",
+      "Started": "2026-11-05T04:52:46-08:00"
+     },
+     {
+      "RunnerID": 1,
+      "JobID": 9815,
+      "Name": "test",
+      "RunID": 413,
+      "Workflow": "CI",
+      "Repo": "acme/kiln",
+      "Started": "2026-11-05T04:54:46-08:00"
+     }
+    ],
+    "Accepting": true,
+    "ConnLabel": "在线",
+    "ConnClass": "ok",
+    "KindLabel": "CI Runner",
+    "URL": "/runners/detail/mini-01"
+   }
+  },
+  "Missing": false,
+  "RegenID": "9a8b7c6d5e4f30211203a4b5c6d7e8f9",
+  "Command": "kiln-runner enroll --server https://kiln.example.com --token kiln_enroll_7Hq2xV9pLmN4cR8sT1wY6zB3 --name mini-01\nkiln-runner doctor\nkiln-runner service install"
+ }
+}

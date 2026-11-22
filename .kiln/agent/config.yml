@@ -1,0 +1,32 @@
+# Kiln 自己的 AI 审计与开发配置（PLAN #26、PLAN #33）：PR 打开或推送时，由审计角色的 AI 执行节点（Orca + kiln-orca）
+# 用 Codex 审计；有 kiln:ready 的 Issue 由开发角色的节点用 Claude Code 开发（审计 Agent 与开发 Agent 不同，#33.7）。
+# 审计说明在同目录的 review.md，开发说明在 development.md；格式由 internal/agentcfg 校验（TestRepoConfig 会解析这个文件）。
+version: 1
+agent: codex
+requirements:
+  # internal/pgtest 需要 Postgres；节点拉起后在说明中给出连接串，Agent 设置 KILN_TEST_DATABASE_URL，make test 不会跳过数据库测试。
+  services: [pg]
+  # 受管理的工具链（PLAN #33.12）：版本来自 .kiln/runtimes.lock，Agent 经 kiln-orca task exec 使用，不用本机的版本。
+  tools: [go, node, pnpm]
+review:
+  instructions: .kiln/agent/review.md
+  max_concurrency: 1         # 同一时间只审计一个 PR
+  timeout: 60m               # 要跑完整的 make lint、make test（含 race 和前端）
+  # 一组平台：组内哪台审计机先来领就由哪台审计，只审计一次（PLAN #26.1）；实际执行的平台和节点在 Check Run、PR review 中。
+  required_platforms:
+    - id: any
+      any_of:
+        - { os: macos, arch: arm64 }
+        - { os: linux, arch: amd64 }
+  triggers: { pull_request: true, manual: true }
+  publish: { review_comments: true }
+development:
+  agent: claude-code
+  # 一组平台：组内哪台开发机有空闲槽位就由哪台执行（PLAN #26.7）；每一轮都从远端新建工作区，可以换机器接着做。
+  platform:
+    any_of:
+      - { os: macos, arch: arm64 }
+      - { os: linux, arch: amd64 }
+  timeout: 3h
+  max_fix_rounds: 10
+  dry_run: false              # 先试运行：只选题、写计划，确认选题合理后改为 false

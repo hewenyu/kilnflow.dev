@@ -1,0 +1,19 @@
+# Kiln 的合并配置（PLAN #28.5）：给 PR 加 label kiln:merge 即加入 Kiln 的合并队列，
+# PR run 全部通过（含 AI 审计）且不落后于默认分支时由 Kiln 合并；落后时先更新分支、CI 重跑后再合并。
+# 只从默认分支读取，PR 不能修改自己的合并方式；格式由 internal/mergecfg 校验（kiln lint 会检查这个文件）。
+method: squash
+# 合并前必须存在并成功的验证（PLAN #28.3）：PR 删掉或改名其中的 workflow / job 时不合并。
+required:
+  - ci/web
+  - ci/kiln-orca
+  - ci/test
+  - ci/build
+  - ai-review
+# 自动入队（PLAN #29.5）：PR 的 head 验证全部通过（含 AI 审计）后由 Kiln 加 kiln:merge 入队，不用手动打 label；
+# 不想自动合并的 PR 加 kiln:hold。要求 required 中有 ai-review。
+auto: true
+# 合并后自动打 tag（PLAN #29.4）：经过 PR 合入默认分支的 commit 由 Kiln 打下一个版本 tag 并直接规划发布；
+# 默认递增补丁号，PR 带 release:minor / release:major 时递增次版本号 / 主版本号，release:skip 不打。
+tag:
+  prefix: v
+  initial: 0.1.0

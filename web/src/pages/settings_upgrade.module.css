@@ -1,0 +1,13 @@
+/* 设置 · Runner 升级：registry 表单、各 Runner 的表格和"全部检查更新"。 */
+.warn {
+  color: var(--fgColor-attention);
+}
+
+.check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 16px;
+  font-size: 12px;
+}

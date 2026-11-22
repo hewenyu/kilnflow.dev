@@ -1,0 +1,56 @@
+{
+  "id": "00000000-0000-4000-8000-00000000050b",
+  "ok": true,
+  "result": {
+    "terminals": [
+      {
+        "handle": "term_00000000-0000-4000-8000-00000000050c",
+        "ptyId": "00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9156-e1@@99321729",
+        "incarnationId": "00000000-0000-4000-8000-00000000050d",
+        "orphaned": false,
+        "worktreeId": "00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9156-e1",
+        "worktreePath": "/Users/kiln/orca/workspaces/target/kiln-a9156-e1",
+        "branch": "",
+        "tabId": "00000000-0000-4000-8000-00000000050e",
+        "leafId": "00000000-0000-4000-8000-00000000050f",
+        "title": "Terminal 1",
+        "connected": true,
+        "writable": true,
+        "lastOutputAt": 1794816870312,
+        "preview": "kiln@host kiln-a9156-e1 %",
+        "executionHostId": "local"
+      },
+      {
+        "handle": "term_00000000-0000-4000-8000-000000000510",
+        "ptyId": "00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9156-e1@@f8b9b2a5",
+        "incarnationId": "00000000-0000-4000-8000-000000000511",
+        "orphaned": false,
+        "worktreeId": "00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9156-e1",
+        "worktreePath": "/Users/kiln/orca/workspaces/target/kiln-a9156-e1",
+        "branch": "",
+        "tabId": "00000000-0000-4000-8000-000000000512",
+        "leafId": "00000000-0000-4000-8000-000000000513",
+        "title": "verify",
+        "connected": true,
+        "writable": true,
+        "lastOutputAt": 1794816870633,
+        "preview": "kiln@host kiln-a9156-e1 %",
+        "executionHostId": "local"
+      }
+    ],
+    "hostScope": {
+      "hostIds": [
+        "local"
+      ],
+      "omittedHostIds": []
+    },
+    "topologyRevisions": {
+      "00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9156-e1": 5
+    },
+    "totalCount": 2,
+    "truncated": false
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000506"
+  }
+}

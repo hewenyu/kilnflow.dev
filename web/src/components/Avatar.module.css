@@ -1,0 +1,29 @@
+.av {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+  box-shadow: 0 0 0 1px var(--avatar-borderColor, var(--borderColor-translucent));
+}
+
+.av img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* admin token：没有 GitHub 头像，用方形钥匙底色区分 */
+.token {
+  border-radius: 6px;
+  background-color: var(--bgColor-neutral-emphasis) !important;
+}

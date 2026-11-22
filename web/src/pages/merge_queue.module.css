@@ -1,0 +1,78 @@
+/* 合并队列：每个仓库一个 Box，排队中的 PR 带顺序号，下方是最近结束的项。 */
+.page > * + * {
+  margin-top: 16px;
+}
+
+.add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.prInput {
+  width: 120px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pos {
+  flex: none;
+  width: 24px;
+  color: var(--fgColor-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.pr {
+  font-weight: 600;
+}
+
+.status {
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  margin: 4px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.reason {
+  color: var(--fgColor-default);
+}
+
+.muted {
+  color: var(--fgColor-muted);
+}
+
+.subhead {
+  background-color: var(--bgColor-muted);
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  font-weight: 600;
+}

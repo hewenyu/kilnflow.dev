@@ -1,0 +1,49 @@
+{
+ "Page": "runner_new",
+ "Title": "注册新的 Runner",
+ "Nav": "runners",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Form": {
+   "Values": {
+    "pool": "default",
+    "name": "mini-03"
+   },
+   "Errors": {},
+   "Failed": false
+  },
+  "RequestID": "3f1c2a9b8e7d6c5b4a39281706f5e4d3",
+  "PublicURL": "https://kiln.example.com",
+  "ServerVersion": "v0.4.2",
+  "Pools": [
+   "default",
+   "linux"
+  ],
+  "Reveal": {
+   "ID": "3f1c2a9b8e7d6c5b4a39281706f5e4d3",
+   "Token": "kiln_enroll_7Hq2xV9pLmN4cR8sT1wY6zB3",
+   "Pool": "default",
+   "Name": "mini-03",
+   "Created": "2026-11-05T04:53:46-08:00",
+   "Expires": "2026-11-05T05:53:46-08:00",
+   "Status": "unused",
+   "UsedAt": null,
+   "Runner": null,
+   "Existing": null,
+   "Kind": "ai"
+  },
+  "Missing": false,
+  "RegenID": "9a8b7c6d5e4f30211203a4b5c6d7e8f9",
+  "Command": "kiln-orca enroll --server https://kiln.example.com --token kiln_enroll_7Hq2xV9pLmN4cR8sT1wY6zB3 --name mini-03\nkiln-orca doctor\nkiln-orca service install"
+ }
+}

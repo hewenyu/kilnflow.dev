@@ -1,0 +1,42 @@
+.row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: start;
+}
+
+.icon {
+  padding-top: 2px;
+  color: var(--fgColor-muted);
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.title a {
+  font-weight: 600;
+}
+
+.meta {
+  margin: 2px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.warn {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 0;
+  color: var(--fgColor-attention);
+  font-size: 12px;
+}
+
+.warn svg {
+  flex: none;
+  margin-top: 2px;
+}

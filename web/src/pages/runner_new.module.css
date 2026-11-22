@@ -1,0 +1,168 @@
+/* 注册新的 Runner：GitHub 新建 self-hosted runner 页的样式——分步骤的说明和可以复制的命令块。 */
+.page {
+  max-width: 880px;
+}
+
+.title {
+  margin: 16px 0 4px;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.lead {
+  margin: 0 0 24px;
+  color: var(--fgColor-muted);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 16px;
+  padding: 24px 0;
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--borderColor-default);
+  border-radius: 50%;
+  background-color: var(--bgColor-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.numDone {
+  border-color: transparent;
+  background: none;
+  color: var(--fgColor-success);
+}
+
+.todo .num {
+  color: var(--fgColor-muted);
+}
+
+.todo .stepTitle {
+  color: var(--fgColor-muted);
+}
+
+.stepBody {
+  min-width: 0;
+}
+
+.stepTitle {
+  margin: 4px 0 12px;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.list li + li {
+  margin-top: 8px;
+}
+
+.list,
+.p,
+.facts {
+  max-width: 72ch;
+}
+
+.p,
+.facts {
+  margin: 0 0 12px;
+}
+
+.code {
+  display: flex;
+  align-items: flex-start;
+  margin: 8px 0 12px;
+  border: 1px solid var(--borderColor-default);
+  border-radius: 6px;
+  background-color: var(--bgColor-muted);
+}
+
+.code pre {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 8px 12px 16px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.copy {
+  flex: none;
+  padding: 6px 6px 0 0;
+}
+
+.fields {
+  display: grid;
+  gap: 16px;
+  max-width: 440px;
+}
+
+.actions {
+  margin-top: 16px;
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.muted {
+  margin: 0;
+  color: var(--fgColor-muted);
+}
+
+.gap {
+  margin-bottom: 16px;
+}
+
+.gapTop {
+  margin-top: 12px;
+}
+
+.left {
+  color: var(--fgColor-attention);
+}
+
+.expired {
+  color: var(--fgColor-danger);
+}
+
+.labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.ok {
+  margin: 0;
+  color: var(--fgColor-success);
+}
+
+@media (max-width: 767px) {
+  .step {
+    gap: 12px;
+  }
+
+  .list {
+    padding-left: 16px;
+  }
+}

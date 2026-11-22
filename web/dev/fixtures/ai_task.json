@@ -1,0 +1,314 @@
+{
+  "Page": "ai_task",
+  "Title": "codex · macos-arm64 · AI 审计请求 #88",
+  "Nav": "ai_requests",
+  "Status": 200,
+  "Session": {
+    "Login": "octocat",
+    "Admin": true,
+    "ViaToken": false,
+    "Bound": true
+  },
+  "CSRF": "csrf-preview",
+  "OAuth": true,
+  "Active": 0,
+  "Flash": "",
+  "Data": {
+    "Task": {
+      "ID": 520,
+      "RequestID": 88,
+      "Key": "review-macos-arm64",
+      "DisplayName": "codex · macos-arm64",
+      "Platforms": [
+        "darwin/arm64"
+      ],
+      "Platform": "darwin/arm64",
+      "Agent": "codex",
+      "State": "failed",
+      "StateTitle": "失败",
+      "Reason": "审计发现问题：2 个",
+      "ReusedFrom": 0,
+      "AttemptCount": 1,
+      "Runner": "ai-node-01",
+      "CancelRequested": false,
+      "Created": "2026-11-05T12:10:02Z",
+      "Started": "2026-11-05T12:10:05Z",
+      "Finished": "2026-11-05T12:18:20Z"
+    },
+    "Request": {
+      "ID": 88,
+      "Type": "review",
+      "TypeLabel": "AI 审计",
+      "Repo": "acme/kiln",
+      "Event": "pull_request",
+      "Ref": "refs/pull/74/head",
+      "SHA": "8d74cb0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708",
+      "Trigger": "synchronize",
+      "Sender": "octocat",
+      "State": "failed",
+      "PRNumber": 74,
+      "WorkItemID": 0,
+      "WorkItemURL": "",
+      "DevMode": "",
+      "DevRound": 0,
+      "RerunOf": 0,
+      "ConfigError": "",
+      "Warnings": "",
+      "Created": "2026-11-05T12:10:02Z",
+      "Finished": "2026-11-05T12:18:21Z",
+      "Purged": null
+    },
+    "Tasks": [
+      {
+        "ID": 520,
+        "RequestID": 88,
+        "Key": "review-macos-arm64",
+        "DisplayName": "codex · macos-arm64",
+        "Platforms": [
+          "darwin/arm64"
+        ],
+        "Platform": "darwin/arm64",
+        "Agent": "codex",
+        "State": "failed",
+        "StateTitle": "失败",
+        "Reason": "审计发现问题：2 个",
+        "ReusedFrom": 0,
+        "AttemptCount": 1,
+        "Runner": "ai-node-01",
+        "CancelRequested": false,
+        "Created": "2026-11-05T12:10:02Z",
+        "Started": "2026-11-05T12:10:05Z",
+        "Finished": "2026-11-05T12:18:20Z"
+      },
+      {
+        "ID": 521,
+        "RequestID": 88,
+        "Key": "review-linux-amd64",
+        "DisplayName": "claude · linux-amd64",
+        "Platforms": [
+          "linux/amd64"
+        ],
+        "Platform": "linux/amd64",
+        "Agent": "claude",
+        "State": "succeeded",
+        "StateTitle": "成功",
+        "Reason": "",
+        "ReusedFrom": 0,
+        "AttemptCount": 1,
+        "Runner": "ai-node-01",
+        "CancelRequested": false,
+        "Created": "2026-11-05T12:10:02Z",
+        "Started": "2026-11-05T12:10:05Z",
+        "Finished": "2026-11-05T12:18:20Z"
+      }
+    ],
+    "Attempts": [
+      {
+        "ID": 31,
+        "Epoch": 1,
+        "N": 1,
+        "Runner": "ai-node-01",
+        "Platform": "darwin/arm64",
+        "Outcome": "failed",
+        "ErrorClass": "",
+        "Message": "审计发现问题：2 个",
+        "RunnerVersion": "0.3.0",
+        "AgentVersion": "codex-cli 0.58.0",
+        "AgentModel": "gpt-5.1-codex",
+        "Orca": {
+          "runtime_id": "rt-7f3a9c",
+          "start_request_id": "5b2e1c7a-3d4f-4a8b-9c0d-1e2f3a4b5c6d",
+          "run_id": "run-12",
+          "dispatch_id": "dsp-31-1",
+          "worktree_path": "/Users/me/orca/workspaces/kiln/kiln-a31-e1",
+          "worktree_name": "kiln-a31-e1"
+        },
+        "Stage": "finishing",
+        "Text": "提交审计报告",
+        "Started": 1793967005,
+        "Finished": 1793967500,
+        "Current": true
+      }
+    ],
+    "Attempt": 31,
+    "Explicit": false,
+    "Viewing": null,
+    "AttemptErr": "",
+    "Terminal": true,
+    "RequestTerminal": true,
+    "CanRerun": true,
+    "NoLog": false,
+    "LogEmpty": "这次 attempt 没有输出日志。",
+    "AttemptKey": "current",
+    "Spec": "{\n  \"agent\": \"codex\",\n  \"platform\": \"darwin/arm64\",\n  \"pr\": 74\n}",
+    "Review": {
+      "Agent": "codex",
+      "Verdict": "issues_found",
+      "PRNumber": 74,
+      "HeadSHA": "8d74cb0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708",
+      "BaseSHA": "df16426a1b2c3d4e5f60718293a4b5c6d7e8f901",
+      "ReviewState": "published",
+      "ReviewURL": "https://github.com/acme/kiln/pull/74#pullrequestreview-3123456789",
+      "ReviewError": "",
+      "Created": "2026-11-05T12:18:20Z",
+      "Report": {
+        "version": 2,
+        "verdict": "issues_found",
+        "summary": "PR #74 的 8 个 bug 修复中，日志缓冲的修复引入了新问题；其余修复验证通过。",
+        "scope": "8 个变更文件及相关调用链",
+        "findings": [
+          {
+            "title": "safeBoundary 在没有换行的长输出下缓冲区无限增长",
+            "severity": "high",
+            "evidence": "reproduced",
+            "path": "internal/runner/logs.go",
+            "line": 157,
+            "scenario": "注册 secret \"abcd\"，job 持续写入以 \"abc\" 结尾、没有换行的数据。",
+            "actual": "k 总是回退到同一位置，partial 永远不会发出，缓冲区线性增长。",
+            "expected": "超过上限后按安全边界发出，缓冲区有界。",
+            "impact": "长时间运行的 job 会耗尽 Runner 的内存。",
+            "proof": "go test ./internal/runner/ -run TestLogShipper\n--- FAIL: TestLogShipper/no_newline (0.31s)\n    logs_test.go:212: partial = 1048576 字节，应不超过 65536",
+            "fix": "partial 超过上限时强制在安全边界之前发出。",
+            "body": ""
+          },
+          {
+            "title": "fetch.matrix 使用了未求值的 environment 名称",
+            "severity": "medium",
+            "evidence": "code_evidence",
+            "path": "internal/workflow/expand_job.go",
+            "line": 98,
+            "scenario": "job 的 environment 为 ${{ matrix.env }}，matrix.env 取 prod。",
+            "actual": "按原始表达式过滤 fetch，永远匹配不到。",
+            "expected": "按求值后的 prod 过滤。",
+            "impact": "使用 matrix environment 的仓库拿不到对应的变量。",
+            "proof": "expandJob → fetchFor(env.Name)：env.Name 在 expand_job.go:98 读取时还没有求值。",
+            "fix": "",
+            "body": ""
+          }
+        ],
+        "checks": [
+          {
+            "kind": "change",
+            "title": "多行密钥跨日志分片泄露",
+            "result": "passed",
+            "detail": ""
+          },
+          {
+            "kind": "suite",
+            "title": "go build ./...",
+            "result": "passed",
+            "detail": ""
+          },
+          {
+            "kind": "suite",
+            "title": "go test ./internal/server/...",
+            "result": "passed",
+            "detail": "使用 KILN_TEST_DATABASE_URL"
+          },
+          {
+            "kind": "suite",
+            "title": "前端测试",
+            "result": "not_run",
+            "detail": "需要 pnpm install"
+          },
+          {
+            "kind": "mutation",
+            "title": "撤掉密钥分片的修复",
+            "result": "passed",
+            "detail": "TestScrubSplit 按预期失败"
+          }
+        ],
+        "unverified": [
+          "前端测试需要 pnpm install，未运行"
+        ],
+        "env_notes": [
+          "golangci-lint 版本过旧，临时升级后通过"
+        ],
+        "preexisting": [
+          {
+            "title": "retention 删除日志时没有分批",
+            "path": "internal/server/retention/logs.go",
+            "line": 40,
+            "detail": "大仓库一次删除大量行"
+          }
+        ],
+        "commands_run": [
+          {
+            "command": "go build ./...",
+            "exit_code": 0,
+            "outcome": "passed",
+            "note": ""
+          },
+          {
+            "command": "make lint",
+            "exit_code": 2,
+            "outcome": "env_resolved",
+            "note": "golangci-lint 版本过旧"
+          },
+          {
+            "command": "go test ./internal/runner/ -run TestLogShipper",
+            "exit_code": 1,
+            "outcome": "failed",
+            "note": "新增的复现测试失败：缓冲区持续增长"
+          },
+          {
+            "command": "go test -run TestScrubSplit ./internal/runner/",
+            "exit_code": 1,
+            "outcome": "expected_failure",
+            "note": "变异：撤掉修复"
+          },
+          {
+            "command": "go test ./internal/server/...",
+            "exit_code": 0,
+            "outcome": "passed",
+            "note": "使用 KILN_TEST_DATABASE_URL"
+          }
+        ]
+      }
+    },
+    "Develop": null,
+    "DesignBasis": {
+      "TaskID": 520,
+      "RequestID": 88,
+      "Type": "review",
+      "DeclaredSource": "snapshot_set",
+      "BasisSource": "snapshot_set",
+      "RequestURL": "/ai/requests/88",
+      "Basis": {
+        "Source": "snapshot_set",
+        "Frozen": true,
+        "FrozenAt": "2026-11-10T06:40:00-08:00",
+        "Provider": "outline",
+        "SiteURL": "https://outline.example.com",
+        "CollectionID": "col-design",
+        "CollectionName": "Kiln 设计",
+        "CollectionURL": "https://outline.example.com/collection/col-design",
+        "SourceKnown": true,
+        "BindingGeneration": 3,
+        "DocCount": 2,
+        "ManifestDigest": "d8344d814a904f420f312c0dd6f35d67bbad83af52a0e4b9ce0706c681819820",
+        "ContentPurgedAt": null,
+        "Docs": [
+          {
+            "DocID": "doc-api",
+            "Title": "Runner 升级协议",
+            "Revision": 4,
+            "SHA256": "d7f4274a59730a9a3ebf033cc49fb7c5ed92ddff5d834125e61bd43b4531085c",
+            "URL": "https://outline.example.com/doc/doc-api",
+            "Purged": false
+          },
+          {
+            "DocID": "doc-ui",
+            "Title": "Runner 详情页",
+            "Revision": 2,
+            "SHA256": "d661c3d96d53ebc0ca8a55aae24b5df4a4d1bf28d37337b982fe8ebf54846eeb",
+            "URL": "https://outline.example.com/doc/doc-ui",
+            "Purged": false
+          }
+        ],
+        "IntegrityError": ""
+      },
+      "Error": ""
+    }
+  }
+}

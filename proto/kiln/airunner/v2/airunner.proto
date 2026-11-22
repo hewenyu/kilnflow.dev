@@ -1,0 +1,468 @@
+syntax = "proto3";
+
+package kiln.airunner.v2;
+
+// AIRunnerService 是 AI 执行节点（Orca Server + kiln-orca 连接器，PLAN #33）与 Server 之间的接口。注册和认证仍用
+// kiln.runner.v1.RunnerService 的 Enroll / Authenticate；这里的调用都需要 Authorization: Bearer <access token>，
+// 并且只接受 AI Runner（runners.kind = ai）。Server 只支持当前的协议版本（AIRunnerState.protocol），上报其他版本的节点
+// 不派任务。
+//
+// 一次任务的执行在 Orca 中：连接器领取后在 Orca 中启动一个主 Agent（Orca 的 orchestration worker），Agent 怎么分工、
+// 是否派生子 Agent 由 Orca 决定；Agent 通过连接器提供的本机工具（kiln-orca task …）与 Kiln 交互（选题领取、校验报告、
+// 查询 CI），这些工具调用下面 attempt 级的 RPC。Agent 结束（worker_done）后连接器校验、推送并 Complete。
+service AIRunnerService {
+  // 长轮询领取一个 AI 任务：领取即 running；同一个 request_id 重试时返回同一个任务。
+  rpc Acquire(AcquireRequest) returns (AcquireResponse);
+  // 续约、上报阶段和 Orca 中的执行关联、接收取消指令。
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc AppendLog(AppendLogRequest) returns (AppendLogResponse);
+  // 提交结果：同一个 attempt 只接受一次；用相同内容重试时返回同一个回执（replayed），内容不同时返回 ALREADY_EXISTS。
+  rpc Complete(CompleteRequest) returns (CompleteResponse);
+  // AI 开发选题前要候选（PLAN #26.10 第 2 步）。
+  rpc OfferDevCandidates(OfferDevCandidatesRequest) returns (OfferDevCandidatesResponse);
+  // AI 开发选题后原子领取 Issue（PLAN #26.11）：只有当前 epoch 的执行能领取，同一个 attempt 重复请求返回同一结果。
+  rpc ClaimDevIssues(ClaimDevIssuesRequest) returns (ClaimDevIssuesResponse);
+  // 校验 Agent 写出的报告（审计报告、选题报告、交付报告），不改变任何状态：规则只在 Server 中定义一次，
+  // 连接器据此当场告诉 Agent 哪里不对（PLAN #33.5）。
+  rpc ValidateReport(ValidateReportRequest) returns (ValidateReportResponse);
+  // 查询这个任务所在 PR（或 commit）最新的 CI 验证：状态、失败的 job 和日志尾部（PLAN #33.9）。只读。
+  rpc GetVerification(GetVerificationRequest) returns (GetVerificationResponse);
+  // 为执行中的 attempt 的一个操作（op_id）签发短期凭据（PLAN #33.13）：与其它 attempt 级的调用一样校验节点、epoch、状态和
+  // 租约，每次签发记一条审计日志。现在只有 git（GitHub App installation token）：读凭据限定在请求的那一个仓库（任务仓库或
+  // 任务声明的依赖仓库，contents: read），
+  // 写凭据只限任务仓库（contents: write），只签给开发任务（连接器只用它推 kiln/attempt-<n>），审计任务要写凭据时拒绝
+  // （PERMISSION_DENIED）。依赖仓库不在任务仓库的 installation 中时拒绝（FAILED_PRECONDITION，说明哪个仓库）。
+  rpc IssueCredential(IssueCredentialRequest) returns (IssueCredentialResponse);
+  // 关闭这个 attempt 的一个操作并吊销它的凭据（尽力而为：节点在操作结束、attempt 结束时调用）。只校验节点和 epoch
+  // （不要求租约有效：吊销只会收回权限）；凭据已经失效时同样成功。
+  rpc RevokeCredential(RevokeCredentialRequest) returns (RevokeCredentialResponse);
+  // 读取这个任务的不可变外部设计文档快照：只读、与 attempt 级调用一样校验节点、epoch、状态和租约。执行节点
+  // 用它把仓库绑定的设计文档交给 Agent（kiln-orca task doc list/get），执行机器上不需要外部文档凭据。
+  rpc ListTaskDocs(ListTaskDocsRequest) returns (ListTaskDocsResponse);
+  rpc GetTaskDoc(GetTaskDocRequest) returns (GetTaskDocResponse);
+}
+
+// TaskRef 是一次领取（attempt）和它的 epoch。attempt 级的调用 epoch 不是当前值、attempt 已经结束或租约已经过期时
+// 返回 FAILED_PRECONDITION（STALE_EPOCH）。
+message TaskRef {
+  int64 attempt_id = 1;
+  int64 epoch = 2;
+}
+
+// AIRunnerState 是节点每次领取时上报的状态。Server 只把任务派给就绪、有空闲容量的节点。
+message AIRunnerState {
+  // 连接器（kiln-orca）的版本。
+  string version = 1;
+  // 协议版本（agentcfg.AIProtocol）：不是 Server 支持的版本时不派任务。
+  int32 protocol = 2;
+  // 本机平台，例如 darwin/arm64。
+  string platform = 3;
+  // 机器标识（展示用）：本机硬件 UUID 的 sha256；拿不到时为空。
+  string host_id = 4;
+  // 正在执行的任务数（Orca 中还没有确认停止的也算）。
+  int32 running = 5;
+  // 同时执行的任务数上限（连接器配置 max_tasks）。running >= capacity 时不派任务。
+  int32 capacity = 6;
+  // 这个节点提供的 Agent 的检测结果；没有提供的 Agent 不上报。
+  repeated AgentStatus agents = 7;
+  // Orca Server 是否就绪。
+  OrcaState orca = 8;
+  // Docker / Compose（任务需要标准测试服务时）是否就绪。
+  Readiness docker = 9;
+  // 受管理的工具链（任务声明了 requirements.tools 时，PLAN #33.12）是否就绪：连接器找到了可用的安装程序
+  // （kiln-runner toolchain）。没有上报（不支持的旧连接器）或没有就绪时，Server 不把带 tools 的任务派给这个节点。
+  Readiness toolchain = 10;
+}
+
+// OrcaState 是节点上 Orca Server 的状态。
+message OrcaState {
+  bool ready = 1;
+  // 没有就绪的原因。
+  string reason = 2;
+  // Orca 的版本（orca status 的 appVersion）和 runtime id。
+  string version = 3;
+  string runtime_id = 4;
+}
+
+// Readiness 是一项基础设施的就绪状态。
+message Readiness {
+  bool ready = 1;
+  string reason = 2;
+}
+
+// AgentStatus 是一个 Agent 的检测结果（--version，不做付费探测）。
+message AgentStatus {
+  // Kiln 中的名字：codex | claude-code；Server 不认识的忽略。
+  string name = 1;
+  bool installed = 2;
+  string version = 3;
+  // available | unavailable
+  string state = 4;
+  string reason = 5;
+  int64 checked_at = 6;
+  // 退避截止时间（Unix 秒，0 表示没有退避）：最近一次任务以 infra.agent 失败后，这段时间内本机不用它。
+  int64 backoff_until = 7;
+}
+
+message AcquireRequest {
+  AIRunnerState state = 1;
+  // 幂等键：同一个 request_id 重试时返回同一个任务。
+  string request_id = 2;
+  // 长轮询的最长等待秒数，0 表示用 Server 的默认值。
+  int32 wait_seconds = 3;
+  // 为 true 时这一轮不接任务（本地 drain、正在恢复上次的任务）：Server 只记录状态、下发指令。
+  bool standby = 4;
+}
+
+message AcquireResponse {
+  AITask task = 1;
+  AIDirectives directives = 2;
+}
+
+// AIDirectives 是 Server 下发的指令。
+message AIDirectives {
+  // 管理员暂停了这个节点：不再领取新任务，正在执行的任务照常完成。
+  bool drain = 1;
+}
+
+// AITask 是一个 AI 任务。连接器准备仓库（检出 sha）、按需拉起测试服务，在 Orca 中用 prompt 启动 agent。
+message AITask {
+  TaskRef ref = 1;
+  int64 task_id = 2;
+  int64 request_id = 3;
+  string display_name = 4;
+  int64 repo_id = 5;
+  string repository = 6;
+  string clone_url = 7;
+  string sha = 8;
+  int32 timeout_seconds = 9;
+  int32 lease_ttl_seconds = 10;
+  // Kiln 中的 Agent 名字：codex | claude-code（连接器映射为 Orca 的 Agent id）。
+  string agent = 11;
+  // 需要的标准测试服务：pg、redis。
+  repeated string services = 12;
+  // Server 生成的 prompt（PLAN #33.5）。其中的占位符由连接器替换：{{KILN_TASK_DIR}}（任务目录的绝对路径，报告和数据
+  // 文件在这里）、{{KILN_TOOL}}（调用本机工具的命令前缀，例如 /usr/local/bin/kiln-orca task --attempt 12）、
+  // {{KILN_SERVICES}}（测试服务的连接说明，没有时说明不可用）、{{KILN_SKILL}}（连接器安装的 kiln-task skill 的入口文件，
+  // AI 协议 10 起）。prompt 要求 Agent 用 `{{KILN_TOOL}} done` 结束（AI 协议 7 起连接器提供这个命令，由它在 Agent 的进程中
+  // 向 Orca 发送 worker_done）。命令的用法只在 skill 中，prompt 只指向它；{{KILN_SKILL}} 只出现在启动 Agent 的 prompt 中，
+  // ClaimDevIssuesResponse.message 可能发给在途的协议 9 任务，不含这个占位符。
+  string prompt = 13;
+  // prompt 模板的 sha256（记录实际交给 Agent 的规则版本）。
+  string prompt_digest = 14;
+  oneof kind {
+    ReviewTask review = 15;
+    DevTask develop = 16;
+  }
+  // 受管理的工具链（PLAN #33.12）：按 requirements.tools 的顺序，版本和摘要来自任务 commit 上的 .kiln/runtimes.lock。
+  // 连接器在准备阶段装到自己的数据目录（已装好的直接复用），Agent 经 kiln-orca task exec 使用。为空时任务不用受管理的
+  // 工具链。只派给 AIRunnerState.toolchain 就绪的节点。
+  repeated ToolRef tools = 17;
+  // 任务声明的依赖仓库（.kiln/agent/config.yml 的 requirements.repositories，owner/name，PLAN #33.13）：审计从 PR 的 base
+  // 读取，开发从默认分支读取。读凭据（IssueCredential）覆盖任务仓库和它们；连接器给 Agent 的 git credential helper 只对
+  // 任务仓库和这些仓库应答。
+  repeated string repositories = 18;
+}
+
+// ToolRef 是任务使用的一个工具（内置 runtime），与 kiln.runner.v1.RuntimeRef 相同。
+message ToolRef {
+  string name = 1;
+  string version = 2;
+  // 发行包所属平台，例如 darwin/arm64（与平台无关的为 any）。
+  string platform = 3;
+  // 上游发行包的 sha256，例如 "sha256:…"。
+  string digest = 4;
+}
+
+// ReviewTask 是一次 AI 审计：Agent 把结构化报告写到 {{KILN_TASK_DIR}}/report.json。
+message ReviewTask {
+  string trigger = 1;
+  int32 pr_number = 2;
+  string base_ref = 3;
+  string base_sha = 4;
+  string head_ref = 5;
+  int32 report_version = 6;
+  int64 work_item_id = 7;
+  string phase = 8;
+}
+
+// DevTask 是一次 AI 开发（select | implement | fix），与 airunner.v1 的语义相同；Agent 的说明已在 prompt 中。
+message DevTask {
+  string mode = 1;
+  string config_sha = 2;
+  int32 max_issues = 3;
+  bool dry_run = 4;
+  int64 work_item_id = 5;
+  // implement、fix：正式分支（开发从它的期望 head 开始）、目标分支和 PR。
+  string branch = 6;
+  string base_ref = 7;
+  int32 pr_number = 8;
+  int32 report_version = 9;
+  // implement、fix：工作项的阶段（design | implement）：设计阶段只能改 Markdown。
+  string phase = 10;
+  int32 impl_round = 11;
+  int32 round = 12;
+  // 工作项的数据（Issue、待处理的问题、失败的 CI、上一轮的交接等），连接器原样写到 {{KILN_TASK_DIR}}/work.json。
+  bytes work_data = 13;
+}
+
+// DevIssue 是一个候选或已领取的 Issue。
+message DevIssue {
+  int32 number = 1;
+  string title = 2;
+  string body = 3;
+  repeated string labels = 4;
+  string digest = 5;
+  string url = 6;
+}
+
+// DevWorkInProgress 是一个未结束的工作项。
+message DevWorkInProgress {
+  int64 work_item_id = 1;
+  string state = 2;
+  repeated DevIssue issues = 3;
+  string plan = 4;
+}
+
+// OrcaBinding 是 attempt 在 Orca 中的执行关联（PLAN #33.4）：用于恢复、取消和从 Dashboard 定位。
+message OrcaBinding {
+  // Orca 的 runtime id。
+  string runtime_id = 1;
+  // 启动请求的幂等键（连接器预先生成的 UUID，Orca 的 --retry-request）。
+  string start_request_id = 2;
+  string run_id = 3;
+  string task_id = 4;
+  string dispatch_id = 5;
+  // worktree 的路径和名字（kiln-a<attempt>-e<epoch>）。
+  string worktree_path = 6;
+  string worktree_name = 7;
+}
+
+message HeartbeatRequest {
+  TaskRef ref = 1;
+  // 当前阶段：prepare | start | running | finishing；text 是说明（最多 200 字节）。
+  string stage = 2;
+  string text = 3;
+  // 已知的 Orca 执行关联（启动前为空；启动请求发出后至少有 start_request_id）。
+  OrcaBinding binding = 4;
+}
+
+message HeartbeatResponse {
+  bool cancel_requested = 1;
+  int64 lease_expires_at = 2;
+}
+
+message AppendLogRequest {
+  TaskRef ref = 1;
+  int64 offset = 2;
+  bytes data = 3;
+}
+
+message AppendLogResponse {
+  int64 committed = 1;
+}
+
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_SUCCEEDED = 1;
+  OUTCOME_FAILED = 2;
+  OUTCOME_INFRA_ERROR = 3;
+  OUTCOME_CANCELLED = 4;
+  OUTCOME_TIMED_OUT = 5;
+}
+
+message CompleteRequest {
+  TaskRef ref = 1;
+  Outcome outcome = 2;
+  // timeout | infra.prepare | infra.credential | infra.toolchain | infra.agent | infra.orca | infra.lost | …
+  string error_class = 3;
+  string message = 4;
+  string agent_version = 5;
+  string agent_model = 6;
+  oneof result {
+    bytes review_report = 7;
+    DevDelivery delivery = 8;
+  }
+  OrcaBinding binding = 9;
+}
+
+// DevDelivery 是一次 AI 开发执行的结果。
+message DevDelivery {
+  bytes report = 1;
+  // 推到远端的 attempt 分支和 commit（连接器用 git ls-remote 确认过）。
+  string branch = 2;
+  string sha = 3;
+  // 为 true 时 branch / sha 是中断时保存的 checkpoint，不是交付。
+  bool checkpoint = 4;
+}
+
+message CompleteResponse {
+  // 为 true 时这是对已经接受的同一结果的重试，Server 没有再次处理。
+  bool replayed = 1;
+}
+
+message OfferDevCandidatesRequest {
+  TaskRef ref = 1;
+}
+
+message OfferDevCandidatesResponse {
+  int32 wait_seconds = 1;
+  repeated DevIssue candidates = 2;
+  repeated DevWorkInProgress in_progress = 3;
+}
+
+message ClaimDevIssuesRequest {
+  TaskRef ref = 1;
+  repeated int32 issues = 2;
+  bytes selection = 3;
+}
+
+message ClaimDevIssuesResponse {
+  bool claimed = 1;
+  int64 work_item_id = 2;
+  string branch = 3;
+  string reason = 4;
+  repeated DevIssue candidates = 5;
+  repeated DevWorkInProgress in_progress = 6;
+  string phase = 7;
+  // 给 Agent 的下一步说明（Server 生成，占位符同 AITask.prompt）：领取后开始设计或开发；没有领取时重新选题或结束。
+  string message = 8;
+}
+
+// ReportKind 是 Agent 写出的报告的种类。
+enum ReportKind {
+  REPORT_KIND_UNSPECIFIED = 0;
+  REPORT_KIND_REVIEW = 1;
+  REPORT_KIND_SELECTION = 2;
+  REPORT_KIND_DELIVERY = 3;
+}
+
+message ValidateReportRequest {
+  TaskRef ref = 1;
+  ReportKind kind = 2;
+  bytes report = 3;
+}
+
+message ValidateReportResponse {
+  bool valid = 1;
+  // 不合格的原因（给 Agent 看的说明）。
+  repeated string problems = 2;
+}
+
+message GetVerificationRequest {
+  TaskRef ref = 1;
+  // 要查询的 commit；为空时是任务的 PR 的当前 head（没有 PR 时是任务的 sha）。
+  string sha = 2;
+  // 每个失败 job 返回的日志尾部的最大字节数（0 表示默认，上限 64 KiB）。
+  int32 log_tail_bytes = 3;
+}
+
+message GetVerificationResponse {
+  string sha = 1;
+  // none（还没有验证）| pending | succeeded | failed | cancelled
+  string state = 2;
+  repeated FailedJob failed_jobs = 3;
+}
+
+// FailedJob 是验证中失败的一个 job。
+message FailedJob {
+  string name = 1;
+  string reason = 2;
+  // 错误分类（infra.* 是基础设施的问题，不需要改代码）。
+  string error_class = 3;
+  // 日志尾部（已脱敏）；日志已过保留期时为空且 log_expired 为 true。
+  bytes log_tail = 4;
+  bool log_expired = 5;
+  // Dashboard 中这个 job 的地址。
+  string url = 6;
+}
+
+// CredentialKind 是凭据的种类。
+enum CredentialKind {
+  CREDENTIAL_KIND_UNSPECIFIED = 0;
+  // git：GitHub App installation token，用户名 x-access-token，HTTPS 的 git 用（clone、fetch、push）。
+  CREDENTIAL_KIND_GIT = 1;
+}
+
+// CredentialAccess 是凭据的权限。
+enum CredentialAccess {
+  CREDENTIAL_ACCESS_UNSPECIFIED = 0;
+  CREDENTIAL_ACCESS_READ = 1;
+  CREDENTIAL_ACCESS_WRITE = 2;
+}
+
+message IssueCredentialRequest {
+  TaskRef ref = 1;
+  CredentialKind kind = 2;
+  CredentialAccess access = 3;
+  // 这次签发所属的操作（连接器为每个网络操作随机生成，PLAN #33.13）：每个操作至多一枚凭据，同一 op_id 的重复请求返回
+  // 同一枚（仓库和权限须与第一次一致），操作关闭之后的签发一律拒绝。必填。
+  string op_id = 4;
+  // 这个操作访问的仓库（owner/name）：任务仓库，或任务声明的依赖仓库之一（只读）。凭据只覆盖这一个仓库。
+  string repository = 5;
+}
+
+// Credential 是一份短期凭据：种类 + 用户名 + 密钥 + 过期时间，以及适用的范围。以后的其它种类（例如模型的认证）用同一个
+// 消息，不按种类另起字段。
+message Credential {
+  CredentialKind kind = 1;
+  CredentialAccess access = 2;
+  string username = 3;
+  // 密钥本身（git 时是 installation token）。连接器只放在内存中，日志和上报中替换掉。
+  string secret = 4;
+  // 过期时间（Unix 秒）。
+  int64 expires_at = 5;
+  // 适用范围：git 时是仓库（owner/name，任务仓库在第一个）。
+  repeated string scopes = 6;
+}
+
+message IssueCredentialResponse {
+  Credential credential = 1;
+}
+
+message RevokeCredentialRequest {
+  TaskRef ref = 1;
+  CredentialKind kind = 2;
+  // 要吊销的密钥（IssueCredential 给出的 secret）。可选：连接器收到过凭据时一并带上，只用于 Server 丢了签发登记
+  // （重启）之后补吊销。
+  string secret = 3;
+  // 要关闭的操作（IssueCredentialRequest.op_id）。关闭是终态：吊销这个操作已经签发的凭据（包括连接器没有收到的），
+  // 之后同一 op_id 的签发一律拒绝。必填。
+  string op_id = 4;
+}
+
+message RevokeCredentialResponse {}
+
+// TaskDocRef 是一篇冻结设计文档的元数据（不含正文）。
+message TaskDocRef {
+  string id = 1;
+  string title = 2;
+  // 提供方的单调修订号（Outline documents.revision）。
+  int64 revision = 3;
+  // 正文的 sha256（十六进制）。
+  string sha256 = 4;
+  string url = 5;
+}
+
+message ListTaskDocsRequest {
+  TaskRef ref = 1;
+}
+
+message ListTaskDocsResponse {
+  repeated TaskDocRef docs = 1;
+}
+
+message GetTaskDocRequest {
+  TaskRef ref = 1;
+  string doc_id = 2;
+}
+
+message GetTaskDocResponse {
+  string id = 1;
+  string title = 2;
+  int64 revision = 3;
+  string sha256 = 4;
+  // Markdown 正文（冻结时的内容）。
+  string content = 5;
+  string url = 6;
+}

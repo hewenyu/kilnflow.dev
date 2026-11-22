@@ -1,0 +1,32 @@
+.steps {
+  margin: 0 0 24px;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+
+.summary {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tokenSet {
+  margin: 0;
+}
+
+.replace > summary {
+  margin-top: 8px;
+  cursor: pointer;
+  color: var(--fgColor-accent);
+}
+
+.replaceBody {
+  margin-top: 12px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}

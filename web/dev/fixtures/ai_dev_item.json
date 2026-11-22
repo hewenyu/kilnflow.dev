@@ -1,0 +1,299 @@
+{
+ "Page": "ai_dev_item",
+ "Title": "工作项 #14 · acme/kiln",
+ "Nav": "ai_dev",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 1,
+ "Flash": "",
+ "Data": {
+  "Item": {
+   "ID": 14,
+   "Repo": "acme/kiln",
+   "State": "blocked",
+   "Active": true,
+   "Retryable": true,
+   "Issues": [
+    {
+     "Number": 128,
+     "Title": "Runner 详情页显示升级历史",
+     "Resolution": "partial",
+     "Active": true,
+     "Closed": false
+    },
+    {
+     "Number": 129,
+     "Title": "升级失败时保留旧版本的日志",
+     "Resolution": "full",
+     "Active": true,
+     "Closed": false
+    }
+   ],
+   "PR": 131,
+   "Branch": "kiln/dev-14",
+   "HeadSHA": "9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f6a7b8c9d0e",
+   "FixRounds": 2,
+   "ConflictRounds": 0,
+   "MaxFixRounds": 2,
+   "Agent": "claude-code",
+   "Phase": "implement",
+   "DesignFirst": false,
+   "DesignPR": 0,
+   "ImplRound": 1,
+   "NextRound": false,
+   "Hold": true,
+   "RequirementsChanged": true,
+   "Reason": "返修 2 轮后 CI 仍未通过：test（internal/server/web）",
+   "Created": "2026-11-10T08:02:00-08:00",
+   "Updated": "2026-11-10T09:40:00-08:00",
+   "Finished": null,
+   "URL": "/ai-dev/14"
+  },
+  "BaseRef": "master",
+  "BaseSHA": "c0ffee1234567890abcdef1234567890abcdef12",
+  "Plan": "1. 在 runner_detail.go 加升级历史\n2. 升级失败时把日志保留到 attempt 目录\n3. 补测试",
+  "TaskURL": "/ai/tasks/215",
+  "DeliveryBranch": "",
+  "DeliverySHA": "",
+  "FixedHead": "9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f6a7b8c9d0e",
+  "Reports": [
+   {
+    "Kind": "selection",
+    "TaskID": 201,
+    "TaskURL": "/ai/tasks/201",
+    "Selection": {
+     "version": 1,
+     "selected": [
+      128,
+      129
+     ],
+     "batch_reason": "两个 Issue 都改 Runner 详情页和升级记录，一起做避免冲突",
+     "plan": "1. 在 runner_detail.go 加升级历史\n2. 升级失败时把日志保留到 attempt 目录\n3. 补测试",
+     "skipped": [
+      {
+       "number": 130,
+       "reason": "需求不清：没有说明要显示多少条",
+       "reconsider": "补充显示条数后"
+      }
+     ]
+    },
+    "Delivery": null,
+    "Raw": "",
+    "RunnerVersion": "0.1.45",
+    "AgentVersion": "2.1.3",
+    "Model": "",
+    "Created": "2026-11-10T08:05:00-08:00"
+   },
+   {
+    "Kind": "delivery",
+    "TaskID": 201,
+    "TaskURL": "/ai/tasks/201",
+    "Selection": null,
+    "Delivery": {
+     "version": 1,
+     "status": "delivered",
+     "summary": "实现了升级历史；失败时保留旧版本日志。",
+     "pr_title": "Runner 详情页显示升级历史",
+     "issues": [
+      {
+       "number": 128,
+       "resolution": "partial",
+       "acceptance": [
+        {
+         "item": "显示最近 10 次升级",
+         "done": true,
+         "evidence": "runner_detail.go + TestPageRunner_History"
+        },
+        {
+         "item": "按状态筛选",
+         "done": false,
+         "evidence": ""
+        }
+       ],
+       "notes": "筛选需要新的查询参数，留给下一轮"
+      },
+      {
+       "number": 129,
+       "resolution": "full",
+       "acceptance": [
+        {
+         "item": "失败时保留日志",
+         "done": true,
+         "evidence": "upgrade.go + TestRollbackKeepsLog"
+        }
+       ],
+       "notes": ""
+      }
+     ],
+     "verification": [
+      {
+       "command": "make test",
+       "outcome": "passed",
+       "note": ""
+      },
+      {
+       "command": "make lint",
+       "outcome": "failed",
+       "note": "gofumpt 版本不一致，与改动无关"
+      }
+     ],
+     "dispositions": [
+      {
+       "finding": "F212-1",
+       "action": "fixed",
+       "commit": "3a1b5c7d9e0f2a4b6c8d0e1f3a5b7c9d1e3f5a7b",
+       "duplicate_of": "",
+       "reason": "加了锁"
+      },
+      {
+       "finding": "F212-2",
+       "action": "rejected",
+       "commit": "",
+       "duplicate_of": "",
+       "reason": "调用方已经保证顺序"
+      }
+     ],
+     "handoff": {
+      "done": "升级历史、失败保留日志",
+      "remaining": "按状态筛选",
+      "decisions": "历史只保留 12 小时内的日志链接",
+      "next": "在 #128 补充筛选的需求"
+     }
+    },
+    "Raw": "",
+    "RunnerVersion": "0.1.45",
+    "AgentVersion": "2.1.3",
+    "Model": "claude-opus-5-5",
+    "Created": "2026-11-10T08:41:00-08:00"
+   }
+  ],
+  "Comments": [
+   {
+    "Number": 128,
+    "Kind": "claimed",
+    "State": "done",
+    "Error": "",
+    "Updated": "2026-11-10T08:06:00-08:00"
+   },
+   {
+    "Number": 129,
+    "Kind": "claimed",
+    "State": "unknown",
+    "Error": "响应丢失（502）",
+    "Updated": "2026-11-10T08:06:00-08:00"
+   },
+   {
+    "Number": 131,
+    "Kind": "blocked",
+    "State": "failed",
+    "Error": "403：没有 Issues 写权限",
+    "Updated": "2026-11-10T09:40:00-08:00"
+   }
+  ],
+  "Branches": [
+   {
+    "Branch": "kiln/attempt-3301",
+    "SHA": "9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f6a7b8c9d0e",
+    "Kind": "delivery",
+    "Created": "2026-11-10T08:40:00-08:00",
+    "Deleted": "2026-11-10T08:42:00-08:00",
+    "Expires": null
+   },
+   {
+    "Branch": "kiln/attempt-3388",
+    "SHA": "3a1b5c7d9e0f2a4b6c8d0e1f3a5b7c9d1e3f5a7b",
+    "Kind": "checkpoint",
+    "Created": "2026-11-10T09:30:00-08:00",
+    "Deleted": null,
+    "Expires": "2026-11-10T21:30:00-08:00"
+   }
+  ],
+  "RepoURL": "/ai-dev?repo=acme%2Fkiln",
+  "Ready": "kiln:ready",
+  "HoldLabel": "kiln:hold",
+  "GitHub": "https://github.com",
+  "DesignBasis": {
+   "Source": "work_item",
+   "Frozen": true,
+   "FrozenAt": "2026-11-10T07:55:00-08:00",
+   "Provider": "outline",
+   "SiteURL": "https://outline.example.com",
+   "CollectionID": "col-design",
+   "CollectionName": "Kiln 设计",
+   "CollectionURL": "https://outline.example.com/collection/col-design",
+   "SourceKnown": true,
+   "BindingGeneration": 3,
+   "DocCount": 2,
+   "ManifestDigest": "c65b615b7d9de7e3141fbba34ed1fa88686e466c3f98dfdeb2617a661b0f19c5",
+   "ContentPurgedAt": null,
+   "Docs": [
+    {
+     "DocID": "doc-api",
+     "Title": "Runner 升级协议",
+     "Revision": 4,
+     "SHA256": "d7f4274a59730a9a3ebf033cc49fb7c5ed92ddff5d834125e61bd43b4531085c",
+     "URL": "https://outline.example.com/doc/doc-api",
+     "Purged": false
+    },
+    {
+     "DocID": "doc-ui",
+     "Title": "Runner 详情页",
+     "Revision": 2,
+     "SHA256": "d661c3d96d53ebc0ca8a55aae24b5df4a4d1bf28d37337b982fe8ebf54846eeb",
+     "URL": "https://outline.example.com/doc/doc-ui",
+     "Purged": true
+    }
+   ],
+   "IntegrityError": ""
+  },
+  "RelatedTasks": [
+   {
+    "TaskID": 210,
+    "RequestID": 140,
+    "Type": "develop",
+    "Mode": "select",
+    "Relation": "claimed_dynamic",
+    "Note": "任务没有在 spec 中固定文档；领取后按工作项冻结快照解析",
+    "TaskURL": "/ai/tasks/210",
+    "RequestURL": "/ai/requests/140"
+   },
+   {
+    "TaskID": 211,
+    "RequestID": 140,
+    "Type": "develop",
+    "Mode": "implement",
+    "Relation": "refs_match",
+    "Note": "任务记录的文档引用与当前工作项的冻结依据逐篇一致；任务没有记录整批摘要",
+    "TaskURL": "/ai/tasks/211",
+    "RequestURL": "/ai/requests/140"
+   },
+   {
+    "TaskID": 212,
+    "RequestID": 141,
+    "Type": "develop",
+    "Mode": "fix",
+    "Relation": "mismatch",
+    "Note": "任务记录中的文档引用与当前工作项的冻结依据不一致",
+    "TaskURL": "/ai/tasks/212",
+    "RequestURL": "/ai/requests/141"
+   },
+   {
+    "TaskID": 213,
+    "RequestID": 142,
+    "Type": "review",
+    "Mode": "",
+    "Relation": "legacy_pinned",
+    "Note": "迁移前没有记录依据；重跑时按任务记录中的引用核对了工作项冻结快照，逐篇一致",
+    "TaskURL": "/ai/tasks/213",
+    "RequestURL": "/ai/requests/142"
+   }
+  ]
+ }
+}

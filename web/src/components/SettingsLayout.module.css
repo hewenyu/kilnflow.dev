@@ -1,0 +1,35 @@
+/* 设置页：左侧分区导航（GitHub 设置页的 NavList），右侧内容。 */
+.layout {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.side {
+  position: sticky;
+  top: 16px;
+}
+
+.menu {
+  display: none;
+}
+
+.content {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .side {
+    display: none;
+  }
+
+  .menu {
+    display: block;
+  }
+}

@@ -1,0 +1,78 @@
+/* 设计依据（DesignBasis.tsx）：冻结元数据、文档表格和按需读取正文的对话框。 */
+.block > * + * {
+  margin-top: 8px;
+}
+
+.p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.muted {
+  margin: 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.kv dt {
+  color: var(--fgColor-muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.digest {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fileIcon {
+  margin-right: 4px;
+  color: var(--fgColor-muted);
+  vertical-align: text-bottom;
+}
+
+.ext {
+  margin-left: 6px;
+  color: var(--fgColor-muted);
+}
+
+.docID {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dialog {
+  display: grid;
+  gap: 12px;
+}
+
+.content {
+  max-height: 60vh;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--borderColor-default);
+  border-radius: 6px;
+  background-color: var(--bgColor-muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

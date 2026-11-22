@@ -1,0 +1,4 @@
+/* Primer Banner 的紧凑样式只有 4px 内边距，左侧靠图标的 8px 内边距凑成 12px；没有关闭按钮时右侧也补到 12px，文字不贴边。 */
+.callout:not([data-dismissible]) {
+  padding-right: 12px;
+}

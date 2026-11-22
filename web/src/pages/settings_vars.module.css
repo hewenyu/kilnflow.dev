@@ -1,0 +1,52 @@
+.row {
+  justify-content: space-between;
+}
+
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+.name svg {
+  flex: none;
+  color: var(--fgColor-muted);
+}
+
+.name a {
+  font-weight: 600;
+}
+
+.counts {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--fgColor-muted);
+}
+
+.search {
+  display: flex;
+  gap: 8px;
+  max-width: 480px;
+  margin-bottom: 12px;
+}
+
+.search > :first-child {
+  flex: 1 1 auto;
+}
+
+.hint {
+  margin: 0 0 8px;
+  color: var(--fgColor-muted);
+}
+
+.note {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}

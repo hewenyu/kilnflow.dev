@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "result": {
+    "workers": [],
+    "counts": {},
+    "page": {
+      "limit": 100,
+      "total": 0,
+      "hasMore": false,
+      "nextCursor": null
+    },
+    "scope": {
+      "run": "run_000000000600",
+      "source": "bound"
+    }
+  }
+}

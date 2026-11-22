@@ -1,0 +1,83 @@
+{
+ "Page": "overview",
+ "Title": "总览",
+ "Nav": "overview",
+ "Status": 200,
+ "Session": {
+  "Login": "admin",
+  "Admin": true,
+  "ViaToken": true,
+  "Bound": false
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 0,
+ "Flash": "",
+ "Data": {
+  "Me": "",
+  "Running": null,
+  "Queued": null,
+  "Failures": null,
+  "Mine": null,
+  "Stats": {
+   "Total": 0,
+   "Succeeded": 0,
+   "Failed": 0,
+   "Cancelled": 0,
+   "Active": 0,
+   "Rate": ""
+  },
+  "Runners": null,
+  "RunnerCounts": {
+   "Total": 0,
+   "Online": 0,
+   "Accepting": 0,
+   "Paused": 0,
+   "Offline": 0,
+   "Revoked": 0,
+   "Jobs": 0
+  },
+  "AIRunnerCounts": {
+   "Total": 0,
+   "Online": 0,
+   "Accepting": 0,
+   "Paused": 0,
+   "Offline": 0,
+   "Revoked": 0,
+   "Tasks": 0
+  },
+  "MoreRunners": 0,
+  "Setup": [
+   {
+    "Title": "同步仓库",
+    "Text": "安装 GitHub App 后同步一次，Kiln 才知道要构建哪些仓库。",
+    "URL": "/settings/repos",
+    "Action": "查看仓库",
+    "Done": false
+   },
+   {
+    "Title": "注册 Runner",
+    "Text": "Runner 运行在你自己的机器上，只向 Server 发出连接。至少需要一台才能开始构建。",
+    "URL": "/runners/new",
+    "Action": "注册 Runner",
+    "Done": false
+   },
+   {
+    "Title": "绑定你的 GitHub 账号",
+    "Text": "绑定后用 GitHub 登录即为管理员，操作记录也记在这个账号名下。",
+    "URL": "/settings/account",
+    "Action": "去绑定",
+    "Done": false
+   },
+   {
+    "Title": "关闭 admin token 登录",
+    "Text": "确认 GitHub 登录可用后关闭，Dashboard 只接受 GitHub 登录。",
+    "URL": "/settings/account",
+    "Action": "去关闭",
+    "Done": false
+   }
+  ],
+  "SetupDone": 0,
+  "MineURL": ""
+ }
+}

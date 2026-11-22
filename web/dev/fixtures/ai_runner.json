@@ -1,0 +1,91 @@
+{
+  "Page": "ai_runner",
+  "Title": "AI 执行节点 · ai-node-01",
+  "Nav": "ai_runners",
+  "Status": 200,
+  "Session": {
+    "Login": "octocat",
+    "Admin": true,
+    "ViaToken": false,
+    "Bound": true
+  },
+  "CSRF": "csrf-preview",
+  "OAuth": true,
+  "Active": 0,
+  "Flash": "",
+  "Data": {
+    "Runner": {
+      "ID": 7,
+      "Name": "ai-node-01",
+      "Role": "review",
+      "RoleLabel": "AI 审计节点",
+      "Version": "0.3.0",
+      "Platform": "darwin/arm64",
+      "Protocol": 2,
+      "NeedsUpgrade": false,
+      "HostID": "host-1",
+      "Revoked": false,
+      "Drain": false,
+      "Online": true,
+      "Capacity": 2,
+      "LastSeen": "2026-11-05T12:18:30Z",
+      "OrcaState": "ready",
+      "OrcaReason": "",
+      "OrcaVersion": "1.4.2",
+      "OrcaRuntimeID": "rt-7f3a9c",
+      "DockerState": "unavailable",
+      "DockerReason": "docker 没有运行",
+      "ToolchainState": "ready",
+      "ToolchainReason": "",
+      "ReportedAt": "2026-11-05T12:18:00Z",
+      "Agents": [
+        {
+          "Agent": "codex",
+          "Name": "Codex",
+          "Version": "codex-cli 0.58.0",
+          "State": "available",
+          "Reason": "",
+          "CheckedAt": "2026-11-05T12:00:00Z",
+          "BackoffUntil": null
+        },
+        {
+          "Agent": "claude",
+          "Name": "Claude Code",
+          "Version": "",
+          "State": "unavailable",
+          "Reason": "没有安装",
+          "CheckedAt": "2026-11-05T12:00:00Z",
+          "BackoffUntil": null
+        }
+      ],
+      "Tasks": [
+        {
+          "RunnerID": 7,
+          "TaskID": 530,
+          "RequestID": 92,
+          "Type": "review",
+          "Name": "codex · macos-arm64",
+          "Repo": "acme/kiln",
+          "Orca": {
+            "runtime_id": "rt-7f3a9c",
+            "start_request_id": "5b2e1c7a-3d4f-4a8b-9c0d-1e2f3a4b5c6d",
+            "run_id": "run-12",
+            "task_id": "task-88",
+            "dispatch_id": "dsp-530-1",
+            "worktree_path": "/Users/me/orca/workspaces/kiln/kiln-a41-e1",
+            "worktree_name": "kiln-a41-e1"
+          },
+          "Stage": "running",
+          "Text": "运行 go test ./...",
+          "TaskURL": "https://kiln.example.com/ai/tasks/530",
+          "Started": "2026-11-05T12:15:00Z"
+        }
+      ],
+      "Accepting": true,
+      "ConnLabel": "在线",
+      "ConnClass": "ok"
+    },
+    "OfflineAfter": "2 分钟",
+    "LongPoll": "30 秒"
+  }
+}

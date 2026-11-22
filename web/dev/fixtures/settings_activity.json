@@ -1,0 +1,104 @@
+{
+ "Page": "settings_activity",
+ "Title": "活动",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "activity",
+  "Actor": "",
+  "Actors": [
+   "admin",
+   "octocat",
+   "lin-design"
+  ],
+  "Entries": [
+   {
+    "ID": 208,
+    "Actor": "octocat",
+    "Action": "run.rerun",
+    "Detail": {
+     "run_id": 409,
+     "rerun": 1,
+     "mode": "failed"
+    },
+    "At": "2026-11-05T04:53:46-08:00",
+    "Text": "重跑了 run #409（第 1 次重跑）",
+    "Link": "/runs/409",
+    "RunText": "重跑了 run #409（第 1 次重跑）"
+   },
+   {
+    "ID": 207,
+    "Actor": "octocat",
+    "Action": "runner.drain",
+    "Detail": {
+     "name": "mini-02"
+    },
+    "At": "2026-11-05T04:46:46-08:00",
+    "Text": "暂停了 Runner mini-02 接单",
+    "Link": "/runners",
+    "RunText": "暂停了 Runner mini-02 接单"
+   },
+   {
+    "ID": 206,
+    "Actor": "lin-design",
+    "Action": "run.dispatch",
+    "Detail": {
+     "run_id": 408
+    },
+    "At": "2026-11-05T04:10:46-08:00",
+    "Text": "手动启动了 run #408",
+    "Link": "/runs/408",
+    "RunText": "手动启动了 run #408"
+   },
+   {
+    "ID": 205,
+    "Actor": "octocat",
+    "Action": "config.secret.set",
+    "Detail": {
+     "name": "NPM_TOKEN",
+     "scope": "acme/kiln"
+    },
+    "At": "2026-11-05T02:45:46-08:00",
+    "Text": "设置了 secret NPM_TOKEN（acme/kiln）",
+    "Link": "",
+    "RunText": "设置了 secret NPM_TOKEN（acme/kiln）"
+   },
+   {
+    "ID": 204,
+    "Actor": "admin",
+    "Action": "admin.bind",
+    "Detail": {
+     "github_login": "octocat"
+    },
+    "At": "2026-10-24T04:55:46-08:00",
+    "Text": "把管理员绑定到 GitHub 账号 octocat",
+    "Link": "",
+    "RunText": "把管理员绑定到 GitHub 账号 octocat"
+   },
+   {
+    "ID": 203,
+    "Actor": "admin",
+    "Action": "login",
+    "Detail": {
+     "via": "token"
+    },
+    "At": "2026-10-24T04:50:46-08:00",
+    "Text": "用 admin token 登录了 Dashboard",
+    "Link": "",
+    "RunText": "用 admin token 登录了 Dashboard"
+   }
+  ],
+  "OlderURL": "/settings/activity?before=203",
+  "LatestURL": ""
+ }
+}

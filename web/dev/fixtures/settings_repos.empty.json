@@ -1,0 +1,34 @@
+{
+ "Page": "settings_repos",
+ "Title": "设置 · 仓库",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "repos",
+  "Repos": null,
+  "Query": "",
+  "Page": 1,
+  "Pages": 1,
+  "Total": 0,
+  "PrevURL": "",
+  "NextURL": "",
+  "Pick": "",
+  "Sync": {
+   "at": "2026-11-05T10:12:00+08:00",
+   "actor": "octocat",
+   "error": "GitHub 返回 401：App 的私钥不对",
+   "installations": 0,
+   "repos": 0
+  }
+ }
+}

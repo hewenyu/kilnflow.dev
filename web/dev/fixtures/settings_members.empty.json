@@ -1,0 +1,23 @@
+{
+ "Page": "settings_members",
+ "Title": "成员",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "admin",
+  "Admin": true,
+  "ViaToken": true,
+  "Bound": false
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "members",
+  "Members": null,
+  "Admins": 0,
+  "Users": 0,
+  "Bound": false
+ }
+}

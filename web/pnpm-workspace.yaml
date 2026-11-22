@@ -1,0 +1,5 @@
+# ESLint / typescript-eslint 仍依赖 minimatch 10，覆盖到已修复 glob 展开放大的版本。
+# https://github.com/advisories/GHSA-g3hv-75wg-m249
+# 上游依赖全部升级到 >=11.0.1 后删除此覆盖。
+overrides:
+  'minimatch@<11.0.1': 11.0.5

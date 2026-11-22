@@ -1,0 +1,30 @@
+{
+ "Page": "ai_dev",
+ "Title": "AI 开发",
+ "Nav": "ai_dev",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 1,
+ "Flash": "",
+ "Data": {
+  "Repo": "",
+  "Items": null,
+  "Paused": null,
+  "Pool": null,
+  "Occupancy": null,
+  "Repos": [
+   "acme/kiln",
+   "acme/notes"
+  ],
+  "Ready": "kiln:ready",
+  "HoldLabel": "kiln:hold",
+  "GitHub": "https://github.com"
+ }
+}

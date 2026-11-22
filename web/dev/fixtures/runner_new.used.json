@@ -1,0 +1,70 @@
+{
+ "Page": "runner_new",
+ "Title": "注册新的 Runner",
+ "Nav": "runners",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Form": {
+   "Values": {
+    "pool": "default",
+    "name": "mini-03"
+   },
+   "Errors": {},
+   "Failed": false
+  },
+  "RequestID": "3f1c2a9b8e7d6c5b4a39281706f5e4d3",
+  "PublicURL": "https://kiln.example.com",
+  "ServerVersion": "v0.4.2",
+  "Pools": [
+   "default",
+   "linux"
+  ],
+  "Reveal": {
+   "ID": "3f1c2a9b8e7d6c5b4a39281706f5e4d3",
+   "Token": "",
+   "Pool": "default",
+   "Name": "mini-03",
+   "Created": "2026-11-05T04:53:46-08:00",
+   "Expires": "2026-11-05T05:53:46-08:00",
+   "Status": "used",
+   "UsedAt": "2026-11-05T04:54:46-08:00",
+   "Runner": {
+    "ID": 5,
+    "Name": "mini-03",
+    "Pool": "default",
+    "Platforms": [
+     "darwin/arm64"
+    ],
+    "Executors": [
+     "host",
+     "oci"
+    ],
+    "Version": "v0.4.2",
+    "Revoked": false,
+    "Drain": false,
+    "Online": true,
+    "LastSeen": "2026-11-05T04:55:40-08:00",
+    "Jobs": null,
+    "Accepting": true,
+    "ConnLabel": "在线",
+    "ConnClass": "ok",
+    "KindLabel": "CI Runner",
+    "URL": "/runners/detail/mini-03"
+   },
+   "Existing": null
+  },
+  "Missing": false,
+  "RegenID": "9a8b7c6d5e4f30211203a4b5c6d7e8f9",
+  "Command": ""
+ }
+}

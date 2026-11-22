@@ -1,0 +1,92 @@
+{
+  "id": "00000000-0000-4000-8000-000000000030",
+  "ok": true,
+  "result": {
+    "requestId": "00000000-0000-4000-8000-000000000029",
+    "state": "completed",
+    "method": "orchestration.workerStart",
+    "createdAt": "2026-11-14 11:18:52",
+    "updatedAt": "2026-11-14 11:18:56",
+    "receipt": {
+      "state": "ready",
+      "runId": "run_000000000001",
+      "taskId": "task_000000000001",
+      "dispatchId": "ctx_000000000001",
+      "stage": "input_accepted",
+      "turnStart": "observed",
+      "setup": {
+        "requested": "inherit",
+        "effective": "run",
+        "source": "orchestration_default",
+        "hookFound": false,
+        "startupPolicy": "start-immediately",
+        "state": "not_configured"
+      },
+      "launch": {
+        "requested": {
+          "agent": "claude",
+          "model": null,
+          "effort": null
+        },
+        "effective": {
+          "agent": "claude",
+          "model": null,
+          "effort": null
+        }
+      },
+      "mode": {
+        "mode": "structured",
+        "preferred": "structured",
+        "reason": "user_default",
+        "detail": "Started a structured chat session worker, the default for new agent tabs in your settings."
+      },
+      "timeoutMs": 60000,
+      "effects": [
+        {
+          "kind": "worktree",
+          "action": "created_top_level",
+          "id": "00000000-0000-4000-8000-000000000027::/Users/kiln/orca/workspaces/target/kiln-smoke-1",
+          "name": "kiln-smoke-1"
+        },
+        {
+          "kind": "setup",
+          "action": "run",
+          "requested": "inherit",
+          "effective": "run",
+          "source": "orchestration_default",
+          "hookFound": false,
+          "startupPolicy": "start-immediately",
+          "state": "not_configured"
+        },
+        {
+          "kind": "terminal",
+          "role": "agent",
+          "action": "created",
+          "id": "structworker_00000000-0000-4000-8000-000000000028",
+          "surface": "background"
+        },
+        {
+          "kind": "dispatch_input",
+          "role": "agent",
+          "id": "structworker_00000000-0000-4000-8000-000000000028",
+          "state": "accepted"
+        }
+      ],
+      "residualResources": [],
+      "next": "Orca wakes you when workers report; end your turn when you're done.",
+      "run": {
+        "id": "run_000000000001",
+        "objective": "Kiln AI 任务（kiln-orca）",
+        "created": false
+      },
+      "mutation": {
+        "requestId": "00000000-0000-4000-8000-000000000029",
+        "replayed": false
+      }
+    },
+    "interpretation": "Request 00000000-0000-4000-8000-000000000029 already took effect (orchestration.workerStart). Replaying it with --retry-request 00000000-0000-4000-8000-000000000029 returns the recorded outcome and starts nothing new."
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

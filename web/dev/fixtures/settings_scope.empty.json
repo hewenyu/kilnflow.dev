@@ -1,0 +1,39 @@
+{
+ "Page": "settings_scope",
+ "Title": "acme/kiln-site",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "vars",
+  "Account": "",
+  "Repo": "acme/kiln-site",
+  "Env": "",
+  "Label": "acme/kiln-site",
+  "Kind": "repo",
+  "KindLabel": "仓库级",
+  "Environment": null,
+  "Vars": null,
+  "Secrets": null,
+  "Docker": false,
+  "DockerURL": "",
+  "EnvForm": {
+   "Values": {},
+   "Errors": {},
+   "Failed": false
+  },
+  "CrumbLabel": "变量与密钥",
+  "CrumbURL": "/settings/variables",
+  "URL": "/settings/scope?repo=acme%2Fkiln-site",
+  "Query": "repo=acme%2Fkiln-site"
+ }
+}

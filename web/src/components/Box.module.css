@@ -1,0 +1,66 @@
+/* GitHub 的 Box：带边框的列表容器，标题行是浅灰底。 */
+.box {
+  border: 1px solid var(--borderColor-default);
+  border-radius: 6px;
+  background-color: var(--bgColor-default);
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 12px 16px;
+  background-color: var(--bgColor-muted);
+  border-bottom: 1px solid var(--borderColor-default);
+  border-radius: 6px 6px 0 0;
+}
+
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--borderColor-muted);
+  min-width: 0;
+}
+
+.header + .row,
+.row:first-child {
+  border-top: 0;
+}
+
+.row:last-child {
+  border-radius: 0 0 6px 6px;
+}
+
+.row:hover.hoverable {
+  background-color: var(--bgColor-muted);
+}
+
+.body {
+  padding: 16px;
+}
+
+.footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--borderColor-default);
+  color: var(--fgColor-muted);
+}
+
+.danger {
+  border-color: var(--borderColor-danger-emphasis);
+}
+
+.danger .row {
+  border-top-color: var(--borderColor-default);
+}

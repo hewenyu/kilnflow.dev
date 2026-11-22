@@ -1,0 +1,112 @@
+# Kiln 自己的 CI：在 Linux ARM64 Docker 环境中检查、测试和构建（Dashboard 前端 web/、AI 执行节点的连接器 kiln-orca/、
+# Go 的检查和测试、带版本号的构建分成四个 job）。
+name: ci
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch: {}
+jobs:
+  web:
+    runs-on: linux/arm64
+    # 官方 Node 26 slim 镜像（node:26-bookworm-slim）；固定 digest。
+    container: docker.io/library/node@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68
+    inputs: [web/]
+    # pnpm 是 Runner 管理的 runtime（版本和摘要在 runtimes.lock，取自 package.json 的 packageManager），不在 job 里安装。
+    runtimes: [pnpm]
+    network: true            # 安装依赖
+    # pnpm 的包存储（按内容寻址、自校验）：依赖不变时不再下载。
+    toolcache:
+      - { name: pnpm-store, env: PNPM_CONFIG_STORE_DIR }
+    resources: { cpu: 2, memory: 4Gi }
+    timeout-minutes: 20
+    steps:
+      - name: 安装依赖
+        run: |
+          cd web && pnpm install --frozen-lockfile
+      - name: lint 和类型检查
+        run: cd web && pnpm lint
+      - name: 测试
+        run: cd web && pnpm test
+      - name: 构建
+        run: cd web && pnpm build
+    outputs:
+      dist: internal/server/web/ui/dist/
+  kiln-orca:
+    runs-on: linux/arm64
+    # 官方 Node 26 完整镜像（node:26-bookworm，基于 buildpack-deps，自带 git）；固定 digest。测试用真实的 git，
+    # web 用的 slim 镜像没有 git。
+    container: docker.io/library/node@sha256:b7087bc4d973034b30854b378ba107f9fab622b47514cb7e2592e41b8bab8d49
+    inputs: [kiln-orca/]
+    # pnpm 是 Runner 管理的 runtime（版本和摘要在 runtimes.lock，取自 package.json 的 packageManager），不在 job 里安装。
+    # go 也是：test/goprivate.test.ts 用真实的 go 验证 task exec 设置的 GOPRIVATE（找不到 go 时测试失败，不跳过）。
+    runtimes: [pnpm, go]
+    network: true            # 安装依赖
+    # pnpm 的包存储（按内容寻址、自校验）：依赖不变时不再下载。
+    toolcache:
+      - { name: pnpm-store, env: PNPM_CONFIG_STORE_DIR }
+    resources: { cpu: 2, memory: 2Gi }
+    timeout-minutes: 20
+    steps:
+      - name: 安装依赖
+        run: |
+          cd kiln-orca && pnpm install --frozen-lockfile
+      - name: lint 和类型检查
+        run: cd kiln-orca && pnpm lint
+      - name: 测试
+        run: cd kiln-orca && pnpm test
+  test:
+    runs-on: linux/arm64
+    # 官方 Go 1.27.3 镜像；固定 digest，避免标签更新改变构建环境。
+    container: docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+    # 默认源码输入会排除 .kiln/workflows；显式包含，确保 lint 真正检查工作流。
+    inputs: ["**"]
+    network: true            # go mod download
+    resources: { cpu: 2, memory: 4Gi }
+    timeout-minutes: 30
+    # 需要 Postgres 的单元测试（internal/pgtest）用这个服务；固定 digest。
+    services:
+      postgres:
+        image: docker.io/library/postgres@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+        env:
+          POSTGRES_PASSWORD: kiln
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: "2"
+      GOFLAGS: "-p=2"
+      KILN_TEST_DATABASE_URL: postgres://postgres:kiln@postgres/postgres?sslmode=disable
+    toolcache:
+      - { name: gomod, env: GOMODCACHE }
+      - { name: gocache, env: GOCACHE }
+    steps:
+      - name: go.mod 是否整洁
+        run: go mod tidy -diff
+      - name: vet 和 race tests
+        run: make test-go
+      - name: lint workflows
+        run: go run ./cmd/kiln lint
+  # 带版本号（commit sha）的构建单独成一个 job：sha 不进 test 的 action key，合并后 tree 与 PR head 相同时
+  # test 直接命中缓存（不让 sha 进入 test 的 action key）。
+  build:
+    runs-on: linux/arm64
+    container: docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+    network: true            # go mod download
+    resources: { cpu: 2, memory: 2Gi }
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: "2"
+      GOFLAGS: "-p=2"
+    toolcache:
+      - { name: gomod, env: GOMODCACHE }
+      - { name: gocache, env: GOCACHE }
+    steps:
+      - name: 构建 Linux ARM64 二进制
+        run: |
+          CGO_ENABLED=0 make build VERSION=${{ github.sha }}
+          dist/local/kiln version
+          dist/local/kiln-runner version
+          dist/local/kiln-server version
+          sha256sum dist/local/*
+    outputs:
+      bin: dist/local/

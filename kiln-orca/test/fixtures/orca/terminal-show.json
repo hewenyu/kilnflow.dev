@@ -1,0 +1,30 @@
+{
+  "id": "00000000-0000-4000-8000-000000000011",
+  "ok": true,
+  "result": {
+    "terminal": {
+      "handle": "term_00000000-0000-4000-8000-000000000007",
+      "ptyId": "00000000-0000-4000-8000-000000000005::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca@@93e63700",
+      "incarnationId": "00000000-0000-4000-8000-000000000010",
+      "orphaned": false,
+      "worktreeId": "00000000-0000-4000-8000-000000000005::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+      "worktreePath": "/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+      "branch": "refs/heads/main",
+      "tabId": "00000000-0000-4000-8000-000000000008",
+      "leafId": "00000000-0000-4000-8000-000000000009",
+      "title": "kiln-orca 邮箱",
+      "paneTitle": "kiln-orca 邮箱",
+      "connected": true,
+      "writable": true,
+      "lastOutputAt": 1794655132059,
+      "preview": "kiln@host kiln-orca %",
+      "executionHostId": "local",
+      "paneRuntimeId": -1,
+      "rendererGraphEpoch": 0,
+      "agentWait": null
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

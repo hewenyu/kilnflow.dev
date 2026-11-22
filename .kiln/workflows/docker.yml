@@ -1,0 +1,73 @@
+# Kiln 的容器镜像：在对应架构的 Linux Runner 上用 BuildKit 编译 ARM64 / AMD64 镜像，由 Server 合并多平台 index 并推送到 Docker Hub 的
+# docker.io/<DOCKERHUB_NAMESPACE>/kilnflow（PLAN #13.8、#21.1）。PR 构建并验证两个平台，只有推送 v* tag 才发布，普通分支 push 不触发：
+# - 普通 v* tag：正式发布（publish job），设置版本 tag；正式版本且是 Kiln 发布过的最大版本时才移动 latest。
+#   release.yml（构建二进制、发布 GitHub Release）也匹配这些 tag，两者相互独立。
+# - 名字中含 -docker-test 的 v* tag（例如 v0.0.0-docker-test.1）：在真实 registry 上做隔离验收（publish-test job），
+#   只设置这个 tag 本身，没有浮动 tag，不会移动 latest；release.yml 排除了这类 tag，不会发布 GitHub Release。
+#   它仍以 v 开头，docker-release 原有的 refs/tags/v* ref 策略不用改，见 docs/DEPLOY.md #7.2。
+# Docker Hub 的用户名、命名空间和 token 在 Kiln 的账号级 environment docker-release 中配置，见 docs/DEPLOY.md #7.2。
+# Runner 需要开启 buildkit（config.toml 中 buildkit = true）。
+name: docker
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+jobs:
+  image:
+    runs-on: linux/${{ matrix.arch }}
+    # 与 ci.yml 相同的镜像（Runner 上已有缓存）；只用它的 shell，buildctl 由 Kiln 挂载进来。
+    container: docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+    buildkit: true
+    network: true            # 拉取基础镜像、pnpm install、go mod download
+    # job 容器只运行 buildctl（构建在独立的 BuildKit 容器中进行）；linux/amd64 的 Runner 只有 2 核 / 约 2GiB，
+    # 声明的资源必须放得下（PLAN #14.1）。
+    resources: { cpu: 1, memory: 1Gi }
+    timeout-minutes: 30
+    strategy:
+      # 每个变体输出一个平台的 OCI layout，publish 等待全部成功后合并成同一个 tag。
+      max-parallel: 1
+      matrix:
+        arch: [arm64, amd64]
+    env:
+      TARGETPLATFORM: linux/${{ matrix.arch }}
+      VERSION: ${{ github.ref_name }}
+      # 镜像中的时间戳取 tag 所在 commit 的时间，重跑时尽量得到相同的 digest
+      SOURCE_DATE_EPOCH: ${{ kiln.commit_time }}
+    steps:
+      - name: 构建 kiln-server 镜像（linux/${{ matrix.arch }}）
+        run: |
+          buildctl build --progress plain \
+            --frontend dockerfile.v0 --local context=. --local dockerfile=deploy \
+            --opt platform="$TARGETPLATFORM" \
+            --opt build-arg:VERSION="$VERSION" \
+            --opt build-arg:SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
+            --output type=oci,dest=out/image,tar=false,rewrite-timestamp=true
+    outputs:
+      image: out/image/
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-docker-test')
+    needs: [image]
+    environment: docker-release
+    release:
+      images:
+        - from: image.image
+          name: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/kilnflow
+          tags: ["${{ github.ref_name }}"]
+          floating-tags: [latest]
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          sign: none
+  # 隔离验收：与 publish 相同的镜像名和凭据，但只设置验收 tag 本身（不可变 tag），不写 floating-tags。
+  # 条件与 release.yml 中的排除模式 !v*-docker-test* 对应。
+  publish-test:
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-docker-test')
+    needs: [image]
+    environment: docker-release
+    release:
+      images:
+        - from: image.image
+          name: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/kilnflow
+          tags: ["${{ github.ref_name }}"]
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          sign: none

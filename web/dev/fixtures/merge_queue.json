@@ -1,0 +1,217 @@
+{
+ "Page": "merge_queue",
+ "Title": "合并队列",
+ "Nav": "merge_queue",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Repo": "",
+  "Queues": [
+   {
+    "Repo": "acme/kiln",
+    "URL": "/merge-queue?repo=acme%2Fkiln",
+    "Queued": [
+     {
+      "PR": 104,
+      "State": "queued",
+      "HeadSHA": "9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f6a7b8c9d0e",
+      "EnqueuedBy": "github:octocat",
+      "Status": "等待验证：2/3 个 run 已结束",
+      "Reason": "",
+      "Removal": "",
+      "MergeSHA": "",
+      "EnqueuedAt": "2026-11-08T09:12:00-08:00",
+      "FinishedAt": null,
+      "BaseRef": "main"
+     },
+     {
+      "PR": 107,
+      "State": "queued",
+      "HeadSHA": "3a1b5c7d9e0f2a4b6c8d0e1f3a5b7c9d1e3f5a7b",
+      "EnqueuedBy": "octocat",
+      "Status": "等待验证：1/3 个 run 已结束",
+      "Reason": "",
+      "Removal": "",
+      "MergeSHA": "",
+      "EnqueuedAt": "2026-11-08T09:20:00-08:00",
+      "FinishedAt": null,
+      "BaseRef": "dev"
+     },
+     {
+      "PR": 108,
+      "State": "queued",
+      "HeadSHA": "",
+      "EnqueuedBy": "github:lin-design",
+      "Status": "目标 dev · 排在第 2 个",
+      "Reason": "",
+      "Removal": "",
+      "MergeSHA": "",
+      "EnqueuedAt": "2026-11-08T09:31:00-08:00",
+      "FinishedAt": null,
+      "BaseRef": "dev"
+     }
+    ],
+    "Recent": [
+     {
+      "PR": 103,
+      "State": "merged",
+      "HeadSHA": "c0ffee1234567890abcdef1234567890abcdef12",
+      "EnqueuedBy": "github:octocat",
+      "Status": "已关闭关联的 issue #101",
+      "Reason": "",
+      "Removal": "",
+      "MergeSHA": "5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f",
+      "EnqueuedAt": "2026-11-08T08:40:00-08:00",
+      "FinishedAt": "2026-11-08T09:05:00-08:00",
+      "BaseRef": "main"
+     },
+     {
+      "PR": 101,
+      "State": "removed",
+      "HeadSHA": "aa11bb22cc33dd44ee55ff6677889900aabbccdd",
+      "EnqueuedBy": "github:octocat",
+      "Status": "",
+      "Reason": "验证失败：ci.yml（run #131）失败",
+      "Removal": "",
+      "MergeSHA": "",
+      "EnqueuedAt": "2026-11-08T07:58:00-08:00",
+      "FinishedAt": "2026-11-08T08:21:00-08:00",
+      "BaseRef": "main"
+     },
+     {
+      "PR": 99,
+      "State": "merged",
+      "HeadSHA": "bb11bb22cc33dd44ee55ff6677889900aabbccdd",
+      "EnqueuedBy": "github:octocat",
+      "Status": "",
+      "Reason": "PR 在合并队列之外被合并",
+      "Removal": "",
+      "MergeSHA": "1234abcd5678ef901234abcd5678ef901234abcd",
+      "EnqueuedAt": "2026-11-07T16:10:00-08:00",
+      "FinishedAt": "2026-11-07T16:30:00-08:00",
+      "BaseRef": "main"
+     },
+     {
+      "PR": 97,
+      "State": "removed",
+      "HeadSHA": "cc11bb22cc33dd44ee55ff6677889900aabbccdd",
+      "EnqueuedBy": "auto",
+      "Status": "",
+      "Reason": "与目标分支 main（5e6f7a8b9c0d）冲突，已交给 AI 开发返修（工作项 #12）",
+      "Removal": "conflict_dev",
+      "MergeSHA": "",
+      "EnqueuedAt": "2026-11-07T15:10:00-08:00",
+      "FinishedAt": "2026-11-07T15:20:00-08:00",
+      "BaseRef": "main"
+     },
+     {
+      "PR": 96,
+      "State": "removed",
+      "HeadSHA": "dd11bb22cc33dd44ee55ff6677889900aabbccdd",
+      "EnqueuedBy": "github:lin-design",
+      "Status": "",
+      "Reason": "与目标分支 main（5e6f7a8b9c0d）冲突，请提交者把目标分支合并进来（或 rebase）解决冲突",
+      "Removal": "conflict_author",
+      "MergeSHA": "",
+      "EnqueuedAt": "2026-11-07T14:10:00-08:00",
+      "FinishedAt": "2026-11-07T14:20:00-08:00",
+      "BaseRef": "main"
+     }
+    ],
+    "AutoTags": [
+     {
+      "SHA": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432",
+      "PR": 118,
+      "Labels": [
+       "kiln:merge"
+      ],
+      "MergedBy": "octocat",
+      "Source": "queue",
+      "State": "tagging",
+      "Tag": "v0.4.4",
+      "Reason": "",
+      "Tries": 1,
+      "Created": "2026-11-05T04:50:00-08:00",
+      "Updated": "2026-11-05T04:50:10-08:00",
+      "Retryable": false,
+      "SenderIsBot": false,
+      "WorkItemID": 0,
+      "BaseRef": "main"
+     },
+     {
+      "SHA": "1a2b3c4d5e6f708192a3b4c5d6e7f80912345678",
+      "PR": 116,
+      "Labels": [
+       "minor"
+      ],
+      "MergedBy": "octocat",
+      "Source": "webhook",
+      "State": "failed",
+      "Tag": "v0.4.3",
+      "Reason": "创建 tag 被拒绝：GitHub App 需要 Contents 读写权限",
+      "Tries": 3,
+      "Created": "2026-11-05T03:00:00-08:00",
+      "Updated": "2026-11-05T03:05:00-08:00",
+      "Retryable": true,
+      "SenderIsBot": false,
+      "WorkItemID": 0,
+      "BaseRef": "main"
+     },
+     {
+      "SHA": "0011223344556677889900aabbccddeeff001122",
+      "PR": 112,
+      "Labels": [],
+      "MergedBy": "kiln[bot]",
+      "Source": "queue",
+      "State": "planned",
+      "Tag": "v0.4.2",
+      "Reason": "",
+      "Tries": 1,
+      "Created": "2026-11-04T10:00:00-08:00",
+      "Updated": "2026-11-04T10:00:05-08:00",
+      "Retryable": false,
+      "SenderIsBot": true,
+      "WorkItemID": 12,
+      "BaseRef": "main"
+     }
+    ]
+   },
+   {
+    "Repo": "acme/notes",
+    "URL": "/merge-queue?repo=acme%2Fnotes",
+    "Queued": null,
+    "Recent": [
+     {
+      "PR": 12,
+      "State": "removed",
+      "HeadSHA": "dd11bb22cc33dd44ee55ff6677889900aabbccdd",
+      "EnqueuedBy": "octocat",
+      "Status": "",
+      "Reason": "PR 已关闭",
+      "Removal": "",
+      "MergeSHA": "",
+      "EnqueuedAt": "2026-11-06T10:00:00-08:00",
+      "FinishedAt": "2026-11-06T11:00:00-08:00",
+      "BaseRef": "main"
+     }
+    ]
+   }
+  ],
+  "Repos": [
+   "acme/kiln",
+   "acme/notes",
+   "acme/site"
+  ],
+  "Label": "kiln:merge",
+  "GitHub": "https://github.com"
+ }
+}

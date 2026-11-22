@@ -1,0 +1,25 @@
+.cards {
+  display: grid;
+  gap: 16px;
+}
+
+.cardTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account {
+  color: var(--fgColor-muted);
+  font-weight: 400;
+}
+
+.body {
+  display: grid;
+  gap: 16px;
+}
+
+.other {
+  margin: 0;
+  color: var(--fgColor-muted);
+}

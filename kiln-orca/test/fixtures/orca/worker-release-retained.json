@@ -1,0 +1,18 @@
+{
+  "id": "00000000-0000-4000-8000-000000000205",
+  "ok": true,
+  "result": {
+    "dispatchId": "ctx_000000000102",
+    "state": "retained",
+    "reason": "no_owned_resource",
+    "processAction": "none",
+    "archive": null,
+    "mutation": {
+      "requestId": "00000000-0000-4000-8000-000000000206",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

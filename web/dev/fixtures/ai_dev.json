@@ -1,0 +1,145 @@
+{
+ "Page": "ai_dev",
+ "Title": "AI 开发",
+ "Nav": "ai_dev",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 1,
+ "Flash": "",
+ "Data": {
+  "Repo": "",
+  "Items": [
+   {
+    "ID": 14,
+    "Repo": "acme/kiln",
+    "State": "blocked",
+    "Active": true,
+    "Retryable": true,
+    "Issues": [
+     {
+      "Number": 128,
+      "Title": "Runner 详情页显示升级历史",
+      "Resolution": "partial",
+      "Active": true,
+      "Closed": false
+     },
+     {
+      "Number": 129,
+      "Title": "升级失败时保留旧版本的日志",
+      "Resolution": "full",
+      "Active": true,
+      "Closed": false
+     }
+    ],
+    "PR": 131,
+    "Branch": "kiln/dev-14",
+    "HeadSHA": "9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f6a7b8c9d0e",
+    "FixRounds": 2,
+    "ConflictRounds": 0,
+    "MaxFixRounds": 2,
+    "Agent": "claude-code",
+    "Phase": "implement",
+    "DesignFirst": false,
+    "DesignPR": 0,
+    "ImplRound": 1,
+    "NextRound": false,
+    "Hold": true,
+    "RequirementsChanged": true,
+    "Reason": "返修 2 轮后 CI 仍未通过：test（internal/server/web）",
+    "Created": "2026-11-10T08:02:00-08:00",
+    "Updated": "2026-11-10T09:40:00-08:00",
+    "Finished": null,
+    "URL": "/ai-dev/14"
+   },
+   {
+    "ID": 12,
+    "Repo": "acme/kiln",
+    "State": "merged",
+    "Active": false,
+    "Retryable": false,
+    "Issues": [
+     {
+      "Number": 117,
+      "Title": "日志页支持按 step 跳转",
+      "Resolution": "full",
+      "Active": false,
+      "Closed": true
+     }
+    ],
+    "PR": 126,
+    "Branch": "kiln/dev-12",
+    "HeadSHA": "9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f6a7b8c9d0e",
+    "FixRounds": 1,
+    "ConflictRounds": 0,
+    "MaxFixRounds": 2,
+    "Agent": "claude-code",
+    "Phase": "implement",
+    "DesignFirst": true,
+    "DesignPR": 11,
+    "ImplRound": 1,
+    "NextRound": false,
+    "Hold": false,
+    "RequirementsChanged": false,
+    "Reason": "",
+    "Created": "2026-11-10T08:02:00-08:00",
+    "Updated": "2026-11-09T18:20:00-08:00",
+    "Finished": "2026-11-09T18:20:00-08:00",
+    "URL": "/ai-dev/12"
+   },
+   {
+    "ID": 9,
+    "Repo": "acme/notes",
+    "State": "no_change",
+    "Active": false,
+    "Retryable": false,
+    "Issues": [
+     {
+      "Number": 110,
+      "Title": "补充 merge.yml 的示例",
+      "Resolution": "none",
+      "Active": false,
+      "Closed": false
+     }
+    ],
+    "PR": 0,
+    "Branch": "kiln/dev-9",
+    "HeadSHA": "",
+    "FixRounds": 0,
+    "ConflictRounds": 0,
+    "MaxFixRounds": 2,
+    "Agent": "claude-code",
+    "Phase": "implement",
+    "DesignFirst": false,
+    "DesignPR": 0,
+    "ImplRound": 1,
+    "NextRound": false,
+    "Hold": false,
+    "RequirementsChanged": false,
+    "Reason": "Agent 判断不需要改代码：已经由 #120 实现",
+    "Created": "2026-11-10T08:02:00-08:00",
+    "Updated": "2026-11-08T11:00:00-08:00",
+    "Finished": "2026-11-08T11:00:00-08:00",
+    "URL": "/ai-dev/9"
+   }
+  ],
+  "Paused": [
+   "acme/notes"
+  ],
+  "Pool": null,
+  "Occupancy": null,
+  "Repos": [
+   "acme/kiln",
+   "acme/notes"
+  ],
+  "Ready": "kiln:ready",
+  "HoldLabel": "kiln:hold",
+  "GitHub": "https://github.com"
+ }
+}

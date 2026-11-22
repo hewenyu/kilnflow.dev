@@ -1,0 +1,169 @@
+.page {
+  display: grid;
+  gap: 16px;
+}
+
+.latest {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--borderColor-default);
+  border-radius: 2em;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.main {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.notices {
+  display: grid;
+  gap: 8px;
+}
+
+.pre {
+  margin: 4px 0 0;
+  font-family: var(--kiln-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 触发信息摘要：一行四格，格之间是竖线 */
+.summary {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.4fr);
+}
+
+.cell {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+  padding: 16px;
+  border-left: 1px solid var(--borderColor-muted);
+}
+
+.cell:first-child {
+  border-left: 0;
+}
+
+.label {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.value {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.plain {
+  overflow-wrap: anywhere;
+}
+
+.plain code {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+}
+
+.trigger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.muted {
+  color: var(--fgColor-muted);
+}
+
+.wf {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.on {
+  margin-left: 8px;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.hint {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.empty {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--fgColor-muted);
+  text-align: center;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.event {
+  display: block;
+  color: var(--fgColor-default);
+}
+
+.event > span:first-child {
+  margin-right: 2px;
+}
+
+@media (max-width: 1011px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .cell:nth-child(3) {
+    border-left: 0;
+  }
+
+  .cell:nth-child(n + 3) {
+    border-top: 1px solid var(--borderColor-muted);
+  }
+
+  .cell:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .cell:nth-child(2) {
+    border-left: 0;
+    border-top: 1px solid var(--borderColor-muted);
+  }
+
+  .cell:nth-child(3) {
+    border-left: 1px solid var(--borderColor-muted);
+  }
+
+  .cell:nth-child(4) {
+    grid-column: 1 / -1;
+    border-left: 0;
+  }
+
+  .hint {
+    display: none;
+  }
+}

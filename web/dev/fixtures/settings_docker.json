@@ -1,0 +1,62 @@
+{
+ "Page": "settings_docker",
+ "Title": "Docker Hub 连接 · acme",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "conn",
+  "Docker": {
+   "Account": "acme",
+   "Env": {
+    "name": "docker-release",
+    "account": "acme",
+    "ref_policy": [
+     "refs/tags/v*"
+    ],
+    "OverriddenIn": [
+     "acme/legacy-api"
+    ],
+    "Overrides": false,
+    "URL": "/settings/scope?account=acme&env=docker-release",
+    "Docker": true
+   },
+   "Username": "octocat",
+   "Namespace": "acme",
+   "Token": {
+    "Name": "DOCKERHUB_TOKEN",
+    "UpdatedBy": "octocat",
+    "UpdatedAt": "2026-11-02T09:14:00+08:00",
+    "Version": 3
+   },
+   "Extra": 1,
+   "Verified": {
+    "Image": "docker.io/acme/kiln-server",
+    "Version": "v0.26.0",
+    "At": "2026-11-04T21:40:00+08:00"
+   },
+   "Status": "verified",
+   "Missing": null,
+   "URL": "/settings/docker?account=acme"
+  },
+  "Form": {
+   "Values": {
+    "username": "octocat",
+    "namespace": "acme",
+    "ref_policy": "refs/tags/v*"
+   },
+   "Errors": {},
+   "Failed": false
+  },
+  "DefaultRef": "refs/tags/v*"
+ }
+}

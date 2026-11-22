@@ -1,0 +1,23 @@
+{
+  "id": "00000000-0000-4000-8000-000000000203",
+  "ok": false,
+  "error": {
+    "code": "dispatch_inactive",
+    "message": "Dispatch ctx_000000000101 is ready; only a settled worker can release. Use worker-stop to cancel an active worker. Orchestration mutation request ID: 00000000-0000-4000-8000-000000000204.",
+    "data": {
+      "orchestrationRequestId": "00000000-0000-4000-8000-000000000204",
+      "originalCommand": [
+        "/Applications/Orca.app/Contents/Resources/bin/orca",
+        "orchestration",
+        "worker-release",
+        "--dispatch",
+        "ctx_000000000101",
+        "--json",
+        "--full"
+      ]
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

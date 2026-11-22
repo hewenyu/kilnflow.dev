@@ -1,0 +1,22 @@
+{
+  "id": "00000000-0000-4000-8000-000000000006",
+  "ok": true,
+  "result": {
+    "terminal": {
+      "processId": 12345,
+      "handle": "term_00000000-0000-4000-8000-000000000007",
+      "tabId": "00000000-0000-4000-8000-000000000008",
+      "paneKey": "00000000-0000-4000-8000-000000000008:00000000-0000-4000-8000-000000000009",
+      "ptyId": "00000000-0000-4000-8000-000000000005::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca@@93e63700",
+      "worktreeId": "00000000-0000-4000-8000-000000000005::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+      "title": "kiln-orca 邮箱",
+      "executionHostId": "local",
+      "incarnationId": "00000000-0000-4000-8000-000000000010",
+      "hostPlatform": "darwin",
+      "surface": "visible"
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

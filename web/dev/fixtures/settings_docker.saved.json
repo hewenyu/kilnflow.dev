@@ -1,0 +1,61 @@
+{
+ "Page": "settings_docker",
+ "Title": "Docker Hub 连接 · acme",
+ "Nav": "settings",
+ "Status": 422,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "conn",
+  "Docker": {
+   "Account": "acme",
+   "Env": {
+    "name": "docker-release",
+    "account": "acme",
+    "ref_policy": [
+     "refs/tags/v*"
+    ],
+    "OverriddenIn": [
+     "acme/legacy-api"
+    ],
+    "Overrides": false,
+    "URL": "/settings/scope?account=acme&env=docker-release",
+    "Docker": true
+   },
+   "Username": "octocat",
+   "Namespace": "acme",
+   "Token": {
+    "Name": "DOCKERHUB_TOKEN",
+    "UpdatedBy": "octocat",
+    "UpdatedAt": "2026-11-02T09:14:00+08:00",
+    "Version": 3
+   },
+   "Extra": 1,
+   "Verified": null,
+   "Status": "saved",
+   "Missing": null,
+   "URL": "/settings/docker?account=acme"
+  },
+  "Form": {
+   "Values": {
+    "username": "octocat",
+    "namespace": "KilnBuild",
+    "ref_policy": "refs/tags/v*"
+   },
+   "Errors": {
+    "namespace": "命名空间只能包含小写字母、数字和 . _ -（Docker Hub 镜像名必须小写），例如 acme",
+    "token": "为了安全，刚才输入的访问令牌没有保留，修正上面的错误后请重新输入"
+   },
+   "Failed": true
+  },
+  "DefaultRef": "refs/tags/v*"
+ }
+}

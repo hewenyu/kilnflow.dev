@@ -1,0 +1,146 @@
+{
+  "Page": "ai_request",
+  "Title": "AI 审计请求 #88",
+  "Nav": "ai_requests",
+  "Status": 200,
+  "Session": {
+    "Login": "octocat",
+    "Admin": true,
+    "ViaToken": false,
+    "Bound": true
+  },
+  "CSRF": "csrf-preview",
+  "OAuth": true,
+  "Active": 0,
+  "Flash": "",
+  "Data": {
+    "Request": {
+      "ID": 88,
+      "Type": "review",
+      "TypeLabel": "AI 审计",
+      "Repo": "acme/kiln",
+      "Event": "pull_request",
+      "Ref": "refs/pull/74/head",
+      "SHA": "8d74cb0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708",
+      "Trigger": "synchronize",
+      "Sender": "octocat",
+      "State": "failed",
+      "PRNumber": 74,
+      "WorkItemID": 0,
+      "WorkItemURL": "",
+      "DevMode": "",
+      "DevRound": 0,
+      "RerunOf": 0,
+      "ConfigError": "",
+      "Warnings": "",
+      "Created": "2026-11-05T12:10:02Z",
+      "Finished": "2026-11-05T12:18:21Z",
+      "Purged": null
+    },
+    "Tasks": [
+      {
+        "ID": 520,
+        "RequestID": 88,
+        "Key": "review-macos-arm64",
+        "DisplayName": "codex · macos-arm64",
+        "Platforms": [
+          "darwin/arm64"
+        ],
+        "Platform": "darwin/arm64",
+        "Agent": "codex",
+        "State": "failed",
+        "StateTitle": "失败",
+        "Reason": "审计发现问题：2 个",
+        "ReusedFrom": 0,
+        "AttemptCount": 1,
+        "Runner": "ai-node-01",
+        "CancelRequested": false,
+        "Created": "2026-11-05T12:10:02Z",
+        "Started": "2026-11-05T12:10:05Z",
+        "Finished": "2026-11-05T12:18:20Z"
+      },
+      {
+        "ID": 521,
+        "RequestID": 88,
+        "Key": "review-any",
+        "DisplayName": "codex · any",
+        "Platforms": [
+          "darwin/arm64",
+          "linux/amd64"
+        ],
+        "Platform": "linux/amd64",
+        "Agent": "codex",
+        "State": "succeeded",
+        "StateTitle": "成功",
+        "Reason": "",
+        "ReusedFrom": 0,
+        "AttemptCount": 1,
+        "Runner": "linux-ai",
+        "CancelRequested": false,
+        "Created": "2026-11-05T12:10:02Z",
+        "Started": "2026-11-05T12:10:05Z",
+        "Finished": "2026-11-05T12:18:20Z"
+      }
+    ],
+    "Family": [
+      {
+        "ID": 88,
+        "State": "failed",
+        "Created": "2026-11-05T12:10:02Z"
+      },
+      {
+        "ID": 91,
+        "State": "succeeded",
+        "Created": "2026-11-05T13:00:00Z"
+      }
+    ],
+    "Terminal": true,
+    "CanRerun": true,
+    "HasFailed": true,
+    "PRURL": "https://github.com/acme/kiln/pull/74",
+    "DesignBasis": {
+      "RequestID": 88,
+      "Type": "review",
+      "DeclaredSource": "snapshot_set",
+      "Declared": true,
+      "WorkItemID": 0,
+      "WorkItemURL": "",
+      "SnapshotSetID": 412,
+      "Basis": {
+        "Source": "snapshot_set",
+        "Frozen": true,
+        "FrozenAt": "2026-11-10T06:40:00-08:00",
+        "Provider": "outline",
+        "SiteURL": "https://outline.example.com",
+        "CollectionID": "col-design",
+        "CollectionName": "Kiln 设计",
+        "CollectionURL": "https://outline.example.com/collection/col-design",
+        "SourceKnown": true,
+        "BindingGeneration": 3,
+        "DocCount": 2,
+        "ManifestDigest": "d8344d814a904f420f312c0dd6f35d67bbad83af52a0e4b9ce0706c681819820",
+        "ContentPurgedAt": null,
+        "Docs": [
+          {
+            "DocID": "doc-api",
+            "Title": "Runner 升级协议",
+            "Revision": 4,
+            "SHA256": "d7f4274a59730a9a3ebf033cc49fb7c5ed92ddff5d834125e61bd43b4531085c",
+            "URL": "https://outline.example.com/doc/doc-api",
+            "Purged": false
+          },
+          {
+            "DocID": "doc-ui",
+            "Title": "Runner 详情页",
+            "Revision": 2,
+            "SHA256": "d661c3d96d53ebc0ca8a55aae24b5df4a4d1bf28d37337b982fe8ebf54846eeb",
+            "URL": "https://outline.example.com/doc/doc-ui",
+            "Purged": true
+          }
+        ],
+        "IntegrityError": ""
+      },
+      "Error": ""
+    }
+  }
+}

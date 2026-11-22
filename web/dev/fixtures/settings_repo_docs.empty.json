@@ -1,0 +1,31 @@
+{
+ "Page": "settings_repo_docs",
+ "Title": "设置 · acme/kiln-site · 外部文档",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {"Login": "octocat", "Admin": true, "ViaToken": false, "Bound": true},
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 0,
+ "Flash": "",
+ "Data": {
+  "Section": "repos",
+  "Repo": "acme/kiln-site",
+  "Active": true,
+  "Binding": null,
+  "Decision": {
+   "Configured": false,
+   "Provider": "",
+   "BaseURL": "",
+   "SiteURL": "",
+   "DocID": "",
+   "CollectionID": "",
+   "DocURL": "",
+   "ObservedUnits": null,
+   "WarningCode": "",
+   "CreatedBy": "",
+   "UpdatedBy": "",
+   "UpdatedAt": "0001-01-01T00:00:00Z"
+  }
+ }
+}

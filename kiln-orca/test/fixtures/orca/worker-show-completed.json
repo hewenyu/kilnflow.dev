@@ -1,0 +1,208 @@
+{
+  "id": "00000000-0000-4000-8000-000000000036",
+  "ok": true,
+  "result": {
+    "dispatch": {
+      "id": "ctx_000000000001",
+      "runId": "run_000000000001",
+      "taskId": "task_000000000001",
+      "task_id": "task_000000000001",
+      "contractVersion": 1,
+      "assigneeHandle": "structworker_00000000-0000-4000-8000-000000000028",
+      "assigneePaneKey": "structured-agent-session-00000000-0000-4000-8000-000000000034:00000000-0000-4000-8000-000000000035",
+      "processIncarnation": "structured:00000000-0000-4000-8000-000000000034",
+      "capabilityRevokedAt": "2026-11-14T11:18:58.662Z",
+      "retryOfDispatchId": null,
+      "creatorDispatchId": null,
+      "followUpOf": null,
+      "hostScope": {
+        "kind": "local",
+        "hostId": "local"
+      },
+      "status": "completed",
+      "failureCount": 0,
+      "lastFailure": null,
+      "terminationReason": null,
+      "depth": 1,
+      "dispatchedAt": "2026-11-14 11:18:52",
+      "completedAt": "2026-11-14T11:18:58.662Z",
+      "createdAt": "2026-11-14 11:18:52",
+      "lastHeartbeatAt": null
+    },
+    "worker": {
+      "dispatchId": "ctx_000000000001",
+      "runtimeEpoch": "00000000-0000-4000-8000-000000000001",
+      "state": "succeeded",
+      "stage": "settled",
+      "worktreeId": "00000000-0000-4000-8000-000000000027::/Users/kiln/orca/workspaces/target/kiln-smoke-1",
+      "agentTerminalHandle": "structworker_00000000-0000-4000-8000-000000000028",
+      "setupState": "not_configured",
+      "effects": [
+        {
+          "kind": "worktree",
+          "action": "created_top_level",
+          "id": "00000000-0000-4000-8000-000000000027::/Users/kiln/orca/workspaces/target/kiln-smoke-1",
+          "name": "kiln-smoke-1"
+        },
+        {
+          "kind": "setup",
+          "action": "run",
+          "requested": "inherit",
+          "effective": "run",
+          "source": "orchestration_default",
+          "hookFound": false,
+          "startupPolicy": "start-immediately",
+          "state": "not_configured"
+        },
+        {
+          "kind": "terminal",
+          "role": "agent",
+          "action": "created",
+          "id": "structworker_00000000-0000-4000-8000-000000000028",
+          "surface": "background"
+        },
+        {
+          "kind": "dispatch_input",
+          "role": "agent",
+          "id": "structworker_00000000-0000-4000-8000-000000000028",
+          "state": "accepted"
+        }
+      ],
+      "residualResources": [
+        {
+          "kind": "worktree",
+          "action": "created_top_level",
+          "id": "00000000-0000-4000-8000-000000000027::/Users/kiln/orca/workspaces/target/kiln-smoke-1",
+          "name": "kiln-smoke-1"
+        },
+        {
+          "kind": "terminal",
+          "role": "agent",
+          "action": "created",
+          "id": "structworker_00000000-0000-4000-8000-000000000028",
+          "surface": "background"
+        }
+      ],
+      "startOptions": {
+        "worktree": "new-top-level",
+        "mode": {
+          "mode": "structured",
+          "preferred": "structured",
+          "reason": "user_default",
+          "detail": "Started a structured chat session worker, the default for new agent tabs in your settings."
+        },
+        "resolvedWorktreeId": null,
+        "name": "kiln-smoke-1",
+        "repo": "id:00000000-0000-4000-8000-000000000027",
+        "baseBranch": "fedcba9876543210fedcba9876543210fedcba98",
+        "terminal": null,
+        "agent": "claude",
+        "launch": {
+          "requested": {
+            "agent": "claude",
+            "model": null,
+            "effort": null
+          },
+          "effective": {
+            "agent": "claude",
+            "model": null,
+            "effort": null
+          }
+        },
+        "timeoutMs": 60000,
+        "setup": "run",
+        "setupSource": "orchestration_default"
+      },
+      "lastError": null,
+      "createdAt": "2026-11-14 11:18:52",
+      "updatedAt": "2026-11-14T11:18:58.663Z"
+    },
+    "projection": {
+      "id": "ctx_000000000001",
+      "dispatchId": "ctx_000000000001",
+      "taskId": "task_000000000001",
+      "runId": "run_000000000001",
+      "role": "worker",
+      "parent": null,
+      "provider": {
+        "id": "claude",
+        "model": "claude-fable-5-2"
+      },
+      "host": {
+        "kind": "local",
+        "id": "local"
+      },
+      "workspace": {
+        "id": "00000000-0000-4000-8000-000000000027::/Users/kiln/orca/workspaces/target/kiln-smoke-1",
+        "kind": "folder_or_worktree"
+      },
+      "stage": {
+        "worker": "succeeded",
+        "dispatch": "completed",
+        "detail": "settled",
+        "activity": "done"
+      },
+      "outcome": "succeeded",
+      "liveness": {
+        "verdict": "live",
+        "observedAt": 1794655140967,
+        "source": "execution_host"
+      },
+      "evidence": {
+        "durable": true,
+        "liveStatus": "fresh",
+        "lastObservedAt": 1794655140571
+      },
+      "resource": {
+        "state": "owned",
+        "id": "wtr_000000000001",
+        "ownerDispatchId": "ctx_000000000001",
+        "releaseState": "retained",
+        "terminalState": "retained"
+      },
+      "nextAction": {
+        "kind": "none",
+        "argv": []
+      },
+      "attention": {
+        "categories": [
+          "root_completion"
+        ],
+        "requiresAction": false
+      }
+    },
+    "terminal": null,
+    "observation": {
+      "status": "live",
+      "exactWorker": true,
+      "addressable": true
+    },
+    "terminalResource": {
+      "id": "wtr_000000000001",
+      "ownershipState": "owned",
+      "releaseState": "retained",
+      "retainedReason": "user_requested",
+      "terminalHandle": "structworker_00000000-0000-4000-8000-000000000028",
+      "worktreeId": "00000000-0000-4000-8000-000000000027::/Users/kiln/orca/workspaces/target/kiln-smoke-1",
+      "endpointId": "00000000-0000-4000-8000-000000000001",
+      "endpointIncarnation": "structured:00000000-0000-4000-8000-000000000034",
+      "originDispatchId": "ctx_000000000001",
+      "ownerDispatchId": "ctx_000000000001",
+      "releaseRequestedAt": null,
+      "releaseCompletedAt": null,
+      "releaseError": null,
+      "recoveryAttemptCount": 0,
+      "lastRecoveryAt": null,
+      "autoReleaseAt": null,
+      "archive": {
+        "source": null,
+        "status": null
+      }
+    },
+    "autoReleaseAt": null,
+    "coordinatedFrom": null
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

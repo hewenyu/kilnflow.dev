@@ -1,0 +1,26 @@
+/* run 和 job 详情页左侧的 job 列表（GitHub Actions 运行页的侧栏）。 */
+.side {
+  position: sticky;
+  top: 16px;
+}
+
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu {
+  display: none;
+}
+
+@media (max-width: 1011px) {
+  .side {
+    display: none;
+  }
+
+  .menu {
+    display: block;
+  }
+}

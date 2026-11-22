@@ -1,0 +1,179 @@
+/* Runner 的本地缓存：清单表格、清理结果和清理表单。 */
+.page > * + * {
+  margin-top: 16px;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.summary > div {
+  display: flex;
+  gap: 8px;
+}
+
+.summary dt {
+  color: var(--fgColor-muted);
+}
+
+.summary dd {
+  margin: 0;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  padding: 8px 12px;
+  background-color: var(--bgColor-muted);
+  border-bottom: 1px solid var(--borderColor-default);
+  color: var(--fgColor-muted);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 8px 12px;
+  border-top: 1px solid var(--borderColor-muted);
+  vertical-align: top;
+}
+
+.table tr:first-child td {
+  border-top: 0;
+}
+
+.right {
+  text-align: right !important;
+}
+
+.name {
+  font-family: var(--kiln-mono);
+  overflow-wrap: anywhere;
+}
+
+.nowrap {
+  color: var(--fgColor-muted);
+  white-space: nowrap;
+}
+
+.muted {
+  margin: 0;
+  color: var(--fgColor-muted);
+}
+
+.err {
+  color: var(--fgColor-danger);
+  overflow-wrap: anywhere;
+}
+
+.block {
+  display: block;
+}
+
+.line {
+  margin: 0;
+}
+
+.meta {
+  margin: 4px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.purgeHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.failures,
+.notes {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+}
+
+.notes {
+  color: var(--fgColor-muted);
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.subhead {
+  background-color: var(--bgColor-muted);
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.confirmList {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.confirmList li + li {
+  margin-top: 6px;
+}
+
+@media (max-width: 767px) {
+  .table thead {
+    display: none;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+  }
+
+  .table tr {
+    padding: 8px 0;
+    border-top: 1px solid var(--borderColor-muted);
+  }
+
+  .table tr:first-child {
+    border-top: 0;
+  }
+
+  .table td {
+    padding: 2px 12px;
+    border: 0;
+    text-align: left !important;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    margin-right: 8px;
+    color: var(--fgColor-muted);
+  }
+}

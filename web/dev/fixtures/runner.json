@@ -1,0 +1,116 @@
+{
+ "Page": "runner",
+ "Title": "Runner · mini-01",
+ "Nav": "runners",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Runner": {
+   "ID": 1,
+   "Name": "mini-01",
+   "Pool": "default",
+   "Platforms": [
+    "darwin/arm64",
+    "linux/arm64"
+   ],
+   "Executors": [
+    "host",
+    "oci",
+    "buildkit"
+   ],
+   "Version": "v0.4.2",
+   "Revoked": false,
+   "Drain": false,
+   "Online": true,
+   "LastSeen": "2026-11-05T04:55:28-08:00",
+   "Jobs": [
+    {
+     "RunnerID": 1,
+     "JobID": 9812,
+     "Name": "build (darwin/arm64)",
+     "RunID": 412,
+     "Workflow": "Release",
+     "Repo": "acme/kiln",
+     "Started": "2026-11-05T04:52:46-08:00"
+    },
+    {
+     "RunnerID": 1,
+     "JobID": 9815,
+     "Name": "test",
+     "RunID": 413,
+     "Workflow": "CI",
+     "Repo": "acme/kiln",
+     "Started": "2026-11-05T04:54:46-08:00"
+    }
+   ],
+   "Accepting": true,
+   "ConnLabel": "在线",
+   "ConnClass": "ok",
+   "Capacity": {
+    "Machine": "10 核 / 16.0 GiB",
+    "Reserved": "2 核 / 4.0 GiB",
+    "Allocatable": "8 核 / 12.0 GiB",
+    "Allocated": "2 核 / 2.0 GiB",
+    "Limits": [
+     "oci 上限 8 核 / 7.7 GiB"
+    ],
+    "MaxJobs": 4
+   },
+   "CacheBytes": 3412000000,
+   "CacheReportedAt": "2026-11-05T04:41:10-08:00",
+   "Upgrade": {
+    "State": "downloading",
+    "Target": "0.4.3",
+    "Error": "",
+    "Launcher": true,
+    "Disabled": false,
+    "Current": "0.4.2",
+    "Previous": "0.4.1",
+    "Package": "@yuebanlaosiji/kilnflow-runner-darwin-arm64",
+    "Latest": "0.4.3",
+    "CheckedAt": "2026-11-05T04:31:10-08:00",
+    "CheckError": "",
+    "CheckPending": false,
+    "CanUpgrade": false,
+    "Reason": "正在升级到 0.4.3",
+    "Request": {
+     "ID": 1003,
+     "Version": "0.4.3",
+     "From": "0.4.2",
+     "State": "pending",
+     "Error": "",
+     "Actor": "octocat",
+     "Created": "2026-11-05T04:50:02-08:00",
+     "Finished": null
+    }
+   },
+   "KindLabel": "CI Runner",
+   "URL": "/runners/detail/mini-01"
+  },
+  "History": [
+   {
+    "ID": 1003,
+    "Version": "0.4.3",
+    "From": "0.4.2",
+    "State": "pending",
+    "Error": "",
+    "Actor": "octocat",
+    "Created": "2026-11-05T04:50:02-08:00",
+    "Finished": null
+   }
+  ],
+  "Registry": "https://registry.npmjs.org/",
+  "RegistryDefault": true,
+  "OfflineAfter": "2 分钟",
+  "LongPoll": "25 秒"
+ }
+}

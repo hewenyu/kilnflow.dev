@@ -1,0 +1,71 @@
+/* Runner 详情页：概况、升级（版本、最新版本、状态和操作）、升级记录。 */
+.page > * + * {
+  margin-top: 16px;
+}
+
+/* BoxRow 默认是横向排列：键值列表、说明和按钮要纵向排列 */
+.block {
+  display: block;
+}
+
+.labels {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.kv dt {
+  color: var(--fgColor-muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.p {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.status > :first-child,
+.status > .p:first-child {
+  margin-top: 0;
+}
+
+.status > * + * {
+  margin-top: 8px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.muted {
+  color: var(--fgColor-muted);
+}
+
+.err {
+  color: var(--fgColor-danger);
+}
+
+.upWarn {
+  color: var(--fgColor-attention);
+}

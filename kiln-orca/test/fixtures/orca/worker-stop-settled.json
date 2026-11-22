@@ -1,0 +1,17 @@
+{
+  "id": "00000000-0000-4000-8000-000000000059",
+  "ok": true,
+  "result": {
+    "dispatchId": "ctx_000000000002",
+    "state": "stopped",
+    "alreadySettled": true,
+    "processAction": "none",
+    "mutation": {
+      "requestId": "00000000-0000-4000-8000-000000000060",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

@@ -1,0 +1,111 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: none
+  enable:
+    # 正确性
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - errcheck
+    - errorlint
+    - nilerr
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - noctx
+    - durationcheck
+    - forcetypeassert
+    - copyloopvar
+    - predeclared
+    # 安全
+    - gosec
+    - asciicheck
+    - bidichk
+    # 风格与现代化
+    - gocritic
+    - revive
+    - misspell
+    - modernize
+    - intrange
+    - usestdlibvars
+    - usetesting
+    - thelper
+    - unconvert
+    - perfsprint
+    - sloglint
+    - loggercheck
+    - nolintlint
+    # 复杂度（阈值先放宽，逐步收紧）
+    - gocyclo
+    - nestif
+  settings:
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*text/tabwriter.Writer).Flush
+    gocyclo:
+      min-complexity: 30
+    nestif:
+      min-complexity: 8
+    gosec:
+      excludes:
+        - G204 # 构建系统必然要执行外部命令
+        - G304 # 读取的路径来自工作区和配置，不是不可信输入
+        - G301 # 目录权限：工作区目录需要 0755
+        - G306 # 文件权限：产物需要 0644/0755，敏感文件单独处理
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003"]
+    revive:
+      rules:
+        - name: context-as-argument
+        - name: error-return
+        - name: error-naming
+        - name: error-strings
+        - name: errorf
+        - name: indent-error-flow
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: var-naming
+        - name: early-return
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    sloglint:
+      kv-only: true
+  exclusions:
+    generated: strict
+    presets:
+      - std-error-handling
+    paths:
+      - ^gen/
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, forcetypeassert]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/hewenyu/kilnflow.dev
+  exclusions:
+    generated: strict
+    paths:
+      - ^gen/

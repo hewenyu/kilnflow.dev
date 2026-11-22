@@ -1,0 +1,36 @@
+/* GitHub 设置页的 Subhead：大标题、下边线，右侧放操作 */
+.subhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.subhead.spaced {
+  margin-top: 40px;
+}
+
+.heading {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.small .heading {
+  font-size: 20px;
+}
+
+.danger .heading {
+  color: var(--fgColor-danger);
+}
+
+.description {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--fgColor-muted);
+}

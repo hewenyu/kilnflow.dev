@@ -1,0 +1,226 @@
+/* 日志面板：浅色和深色模式下都是深色（GitHub Actions 的日志区），面板内的 Primer 组件按深色主题显示。 */
+.panel {
+  overflow: hidden;
+  color: var(--kiln-log-fg);
+  background-color: var(--kiln-log-bg);
+  border: 1px solid var(--kiln-log-border);
+  border-radius: 6px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--kiln-log-border);
+}
+
+.title {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.note {
+  margin-left: 8px;
+  color: var(--kiln-log-muted);
+  font-weight: 400;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.searchInput {
+  width: 220px;
+}
+
+.hits {
+  min-width: 0;
+  margin-left: 4px;
+  color: var(--kiln-log-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.follow {
+  align-items: center;
+}
+
+.follow label {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--kiln-log-muted);
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 16px;
+  min-height: 20px;
+  font-size: 12px;
+  color: var(--kiln-log-muted);
+  border-bottom: 1px solid var(--kiln-log-line);
+}
+
+.status::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--kiln-log-muted);
+}
+
+.run::before {
+  background-color: var(--fgColor-attention);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.ok::before {
+  background-color: var(--fgColor-success);
+}
+
+.warn::before {
+  background-color: var(--fgColor-attention);
+}
+
+.bad {
+  color: var(--fgColor-danger);
+}
+
+.bad::before {
+  background-color: var(--fgColor-danger);
+}
+
+.muted::before {
+  display: none;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--fgColor-attention);
+  background-color: var(--bgColor-attention-muted);
+  border-bottom: 1px solid var(--kiln-log-line);
+}
+
+.bodyWrap {
+  position: relative;
+}
+
+.body {
+  position: relative;
+  height: clamp(320px, calc(100vh - 280px), 760px);
+  overflow: auto;
+  /* 丢弃最早的行后由 LogViewer 自己修正滚动位置，关掉浏览器的滚动锚定，免得修正两次 */
+  overflow-anchor: none;
+  padding: 8px 0 16px;
+  scrollbar-color: var(--kiln-log-border) transparent;
+}
+
+.body:focus-visible {
+  outline: 2px solid var(--fgColor-accent);
+  outline-offset: -2px;
+}
+
+/* 每行：左侧行号（CSS 计数器，复制时不带行号），长行折行 */
+.lines {
+  counter-reset: kiln-line;
+  font-family: var(--kiln-mono);
+  font-size: 12px;
+  line-height: 20px;
+  tab-size: 4;
+}
+
+.lines > :global(.kiln-log-line) {
+  position: relative;
+  min-height: 20px;
+  padding: 0 16px 0 64px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  counter-increment: kiln-line;
+}
+
+.lines > :global(.kiln-log-line)::before {
+  position: absolute;
+  left: 0;
+  width: 48px;
+  content: counter(kiln-line);
+  color: var(--kiln-log-muted);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.lines > :global(.kiln-log-line):hover {
+  background-color: var(--kiln-log-line);
+}
+
+.lines ::selection {
+  background-color: rgb(56 139 253 / 40%);
+}
+
+::highlight(kiln-log-hit) {
+  background-color: var(--kiln-log-hit);
+  color: var(--kiln-log-fg);
+}
+
+::highlight(kiln-log-cur) {
+  background-color: var(--kiln-log-cur);
+  color: var(--kiln-log-bg);
+}
+
+.empty {
+  margin: 0;
+  padding: 32px 16px;
+  color: var(--kiln-log-muted);
+  text-align: center;
+}
+
+.bottom {
+  position: absolute;
+  right: 24px;
+  bottom: 16px;
+  box-shadow: 0 6px 16px rgb(1 4 9 / 60%);
+}
+
+@media (max-width: 767px) {
+  .searchInput {
+    width: 160px;
+  }
+
+  .body {
+    height: clamp(280px, 70vh, 640px);
+  }
+
+  .lines > :global(.kiln-log-line) {
+    padding-left: 48px;
+    padding-right: 8px;
+  }
+
+  .lines > :global(.kiln-log-line)::before {
+    width: 36px;
+  }
+}

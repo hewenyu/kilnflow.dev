@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "result": {
+    "dispatchId": "ctx_000000000003",
+    "taskId": "task_000000000003",
+    "runId": "run_000000000004",
+    "state": "succeeded",
+    "stage": "settled",
+    "liveness": "exited",
+    "terminal": "structworker_00000000-0000-4000-8000-000000000042",
+    "terminalState": "released",
+    "workspace": "00000000-0000-4000-8000-000000000043::/Users/kiln/orca/workspaces/app/worktree",
+    "waitingOnHuman": "unknown"
+  }
+}

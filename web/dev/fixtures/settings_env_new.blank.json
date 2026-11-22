@@ -1,0 +1,29 @@
+{
+ "Page": "settings_env_new",
+ "Title": "设置 · 新建 environment",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "envs",
+  "Accounts": [
+   "acme",
+   "acme-lab"
+  ],
+  "Repo": "",
+  "Form": {
+   "Values": {},
+   "Errors": {},
+   "Failed": false
+  }
+ }
+}

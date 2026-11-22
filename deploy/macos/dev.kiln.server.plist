@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 放到 ~/Library/LaunchAgents/，把 YOU 换成你的用户名后：
+     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.kiln.server.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.kiln.server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOU/kiln-server/kiln-server</string>
+    <string>--env-file</string>
+    <string>/Users/YOU/kiln-server/server.env</string>
+  </array>
+  <!-- 日志写到 logs/kiln-server-<日期>.log，只保留最近 7 天；下面的文件只有启动失败、崩溃等输出 -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>KILN_LOG_DIR</key><string>/Users/YOU/kiln-server/logs</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/YOU/kiln-server/logs/kiln-server.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/YOU/kiln-server/logs/kiln-server.out.log</string>
+</dict>
+</plist>

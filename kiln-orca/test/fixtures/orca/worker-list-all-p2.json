@@ -1,0 +1,219 @@
+{
+  "ok": true,
+  "result": {
+    "workers": [
+      {
+        "dispatchId": "ctx_000000000708",
+        "taskId": "task_000000000718",
+        "runId": "run_000000000601",
+        "workerState": "succeeded",
+        "dispatchStatus": "completed",
+        "agentTerminalHandle": null,
+        "terminalState": null,
+        "coordinatedFrom": null,
+        "resource": null,
+        "projection": {
+          "id": "ctx_000000000708",
+          "dispatchId": "ctx_000000000708",
+          "taskId": "task_000000000718",
+          "runId": "run_000000000601",
+          "role": "worker",
+          "parent": null,
+          "provider": null,
+          "host": {
+            "kind": "local",
+            "id": "local"
+          },
+          "workspace": {
+            "id": "00000000-0000-4000-8000-000000000712::/Users/kiln/orca/workspaces/target/kiln-a9158-e1",
+            "kind": "folder_or_worktree"
+          },
+          "stage": {
+            "worker": "succeeded",
+            "dispatch": "completed",
+            "detail": "settled",
+            "activity": "unknown"
+          },
+          "outcome": "succeeded",
+          "liveness": {
+            "verdict": "unverifiable",
+            "reason": "missing_status"
+          },
+          "evidence": {
+            "durable": true,
+            "liveStatus": "unavailable",
+            "lastObservedAt": null
+          },
+          "resource": {
+            "state": "absent",
+            "reason": "not_materialized"
+          },
+          "nextAction": {
+            "kind": "none",
+            "argv": []
+          },
+          "attention": {
+            "categories": [
+              "unverifiable",
+              "root_completion"
+            ],
+            "requiresAction": true
+          }
+        }
+      },
+      {
+        "dispatchId": "ctx_000000000719",
+        "taskId": "task_000000000720",
+        "runId": "run_000000000601",
+        "workerState": "succeeded",
+        "dispatchStatus": "completed",
+        "agentTerminalHandle": "structworker_00000000-0000-4000-8000-000000000725",
+        "terminalState": "retained",
+        "coordinatedFrom": null,
+        "resource": {
+          "id": "wtr_000000000721",
+          "ownershipState": "owned",
+          "releaseState": "retained",
+          "retainedReason": "user_requested",
+          "terminalHandle": "structworker_00000000-0000-4000-8000-000000000725",
+          "worktreeId": "00000000-0000-4000-8000-000000000712::/Users/kiln/orca/workspaces/target/kiln-a9159-e1",
+          "endpointId": "00000000-0000-4000-8000-000000000713",
+          "endpointIncarnation": "structured:00000000-0000-4000-8000-000000000726",
+          "originDispatchId": "ctx_000000000722",
+          "ownerDispatchId": "ctx_000000000719",
+          "releaseRequestedAt": null,
+          "releaseCompletedAt": null,
+          "releaseError": null,
+          "recoveryAttemptCount": 0,
+          "lastRecoveryAt": null,
+          "autoReleaseAt": null,
+          "archive": {
+            "source": null,
+            "status": null
+          }
+        },
+        "projection": {
+          "id": "ctx_000000000719",
+          "dispatchId": "ctx_000000000719",
+          "taskId": "task_000000000720",
+          "runId": "run_000000000601",
+          "role": "worker",
+          "parent": null,
+          "provider": null,
+          "host": {
+            "kind": "local",
+            "id": "local"
+          },
+          "workspace": {
+            "id": "00000000-0000-4000-8000-000000000712::/Users/kiln/orca/workspaces/target/kiln-a9159-e1",
+            "kind": "folder_or_worktree"
+          },
+          "stage": {
+            "worker": "succeeded",
+            "dispatch": "completed",
+            "detail": "settled",
+            "activity": "unknown"
+          },
+          "outcome": "succeeded",
+          "liveness": {
+            "verdict": "exited",
+            "source": "execution_host"
+          },
+          "evidence": {
+            "durable": true,
+            "liveStatus": "unavailable",
+            "lastObservedAt": null
+          },
+          "resource": {
+            "state": "owned"
+          },
+          "nextAction": {
+            "kind": "none",
+            "argv": []
+          },
+          "attention": {
+            "categories": [
+              "root_completion"
+            ],
+            "requiresAction": false
+          }
+        }
+      },
+      {
+        "dispatchId": "ctx_000000000717",
+        "taskId": "task_000000000723",
+        "runId": "run_000000000601",
+        "workerState": "succeeded",
+        "dispatchStatus": "completed",
+        "agentTerminalHandle": null,
+        "terminalState": null,
+        "coordinatedFrom": null,
+        "resource": null,
+        "projection": {
+          "id": "ctx_000000000717",
+          "dispatchId": "ctx_000000000717",
+          "taskId": "task_000000000723",
+          "runId": "run_000000000601",
+          "role": "worker",
+          "parent": null,
+          "provider": null,
+          "host": {
+            "kind": "local",
+            "id": "local"
+          },
+          "workspace": {
+            "id": "00000000-0000-4000-8000-000000000712::/Users/kiln/orca/workspaces/target/kiln-a9159-e1",
+            "kind": "folder_or_worktree"
+          },
+          "stage": {
+            "worker": "succeeded",
+            "dispatch": "completed",
+            "detail": "settled",
+            "activity": "unknown"
+          },
+          "outcome": "succeeded",
+          "liveness": {
+            "verdict": "unverifiable",
+            "reason": "missing_status"
+          },
+          "evidence": {
+            "durable": true,
+            "liveStatus": "unavailable",
+            "lastObservedAt": null
+          },
+          "resource": {
+            "state": "absent",
+            "reason": "not_materialized"
+          },
+          "nextAction": {
+            "kind": "none",
+            "argv": []
+          },
+          "attention": {
+            "categories": [
+              "unverifiable",
+              "root_completion"
+            ],
+            "requiresAction": true
+          }
+        }
+      }
+    ],
+    "counts": {
+      "retained": 3
+    },
+    "page": {
+      "limit": 3,
+      "total": 7,
+      "hasMore": true,
+      "nextCursor": "eyJ2ZXJzaW9uIjoyLCJzbmFwc2hvdCI6eyJkYXRhYmFzZUlkIjoyMDh9LCJhZnRlciI6eyJjcmVhdGVkQXQiOiIyMDI2LTExLTE2IDE3OjA4OjA5IiwiZGlzcGF0Y2hJZCI6ImN0eF8wMDAwMDAwMDA3MTciLCJkYXRhYmFzZUlkIjoyMDB9fQ"
+    },
+    "warnings": [
+      "Showing 3 of 7 Dispatches, newest first; more are on later pages. Follow page.nextCursor with --cursor."
+    ],
+    "scope": {
+      "run": "run_000000000601",
+      "source": "flag"
+    }
+  }
+}

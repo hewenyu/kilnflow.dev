@@ -1,0 +1,50 @@
+{
+  "ok": true,
+  "result": {
+    "messages": [
+      {
+        "id": "msg_000000000003",
+        "type": "question",
+        "from": "term_00000000-0000-4000-8000-000000000025",
+        "subject": "q1",
+        "body": "问题一",
+        "payload": {
+          "dispatchId": "ctx_fake1"
+        }
+      },
+      {
+        "id": "msg_000000000004",
+        "type": "worker_done",
+        "from": "term_00000000-0000-4000-8000-000000000025",
+        "subject": "Rejected worker_done: done1",
+        "body": "Orca rejected this worker_done: worker_done references unknown task task_fake.\n\nOriginal body:\n完成",
+        "priority": "high",
+        "payload": {
+          "taskId": "task_fake",
+          "dispatchId": "ctx_fake1",
+          "outcome": "succeeded",
+          "reportPath": "/tmp/r.md",
+          "_orcaLifecycleRejection": {
+            "code": "unknown_task",
+            "reason": "worker_done references unknown task task_fake."
+          }
+        }
+      },
+      {
+        "id": "msg_000000000005",
+        "type": "status",
+        "from": "term_00000000-0000-4000-8000-000000000025",
+        "subject": "Rejected escalation: e1",
+        "body": "Orca rejected this escalation: No active Dispatch belongs to this message sender.\n\nOriginal body:\n升级一",
+        "priority": "high",
+        "payload": {
+          "dispatchId": "ctx_fake1",
+          "_orcaLifecycleRejection": {
+            "code": "sender_not_assignee",
+            "reason": "No active Dispatch belongs to this message sender."
+          }
+        }
+      }
+    ]
+  }
+}

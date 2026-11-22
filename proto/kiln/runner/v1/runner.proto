@@ -1,0 +1,532 @@
+syntax = "proto3";
+
+package kiln.runner.v1;
+
+// RunnerService 是 Runner 与 Server 之间唯一的接口（PLAN #9.1）。
+// 除 Enroll 和 Authenticate 外，所有调用都需要 Authorization: Bearer <access token>。
+service RunnerService {
+  // 一次性 enroll token + 公钥 → runner_id。
+  rpc Enroll(EnrollRequest) returns (EnrollResponse);
+  // 对 (runner_id, 时间戳, 随机数) 签名 → 15 分钟 access token。
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+  // 长轮询，最长约 30 秒；返回时任务已经是 running。
+  rpc Acquire(AcquireRequest) returns (AcquireResponse);
+  // 源码 token 和 secret；校验 epoch。只给旧版 Runner：新版 Runner 用 FetchSecrets 和按操作签发的 IssueGitToken。
+  rpc FetchCredentials(FetchCredentialsRequest) returns (FetchCredentialsResponse);
+  // job 引用的 secret（校验与 FetchCredentials 相同，含 environment 的 ref 策略）；不签发任何 token。
+  rpc FetchSecrets(FetchSecretsRequest) returns (FetchSecretsResponse);
+  // 为一次网络 git 操作签发一个仓库的只读 token（contents: read）；同一 op_id 重试返回同一枚。要求租约未过期。
+  rpc IssueGitToken(IssueGitTokenRequest) returns (IssueGitTokenResponse);
+  // 按 op_id 关闭操作并吊销它的 token（终态：之后同一 op_id 不再签发）；只要求归属和 epoch，不要求租约。
+  rpc RevokeGitToken(RevokeGitTokenRequest) returns (RevokeGitTokenResponse);
+  // 续约，上报 current_step；响应中可能带取消指令。
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc AppendLog(AppendLogRequest) returns (AppendLogResponse);
+  rpc PrepareUpload(PrepareUploadRequest) returns (PrepareUploadResponse);
+  rpc PrepareDownload(PrepareDownloadRequest) returns (PrepareDownloadResponse);
+  rpc Complete(CompleteRequest) returns (CompleteResponse);
+}
+
+message AttemptRef {
+  int64 attempt_id = 1;
+  int64 epoch = 2;
+}
+
+message Resources {
+  double cpu = 1;
+  int64 memory_bytes = 2;
+}
+
+message RunnerState {
+  string version = 1;
+  // 第一个是 Runner 的原生平台（host executor 只执行这个平台的 job）。
+  repeated string platforms = 2;
+  repeated string executors = 3;
+  // 旧版 Runner 上报的空闲资源（总量 - 预留 - 已分配 job 的声明值）。上报了 capacity 的 Runner 由 Server
+  // 按 capacity 和自己的账本调度，这个字段只用于兼容没有 capacity 的旧版 Runner。
+  Resources free = 4;
+  map<string, string> host_fingerprint = 5;
+  int32 running_jobs = 6;
+  // 正在执行的 attempt，用于 Server 识别已经丢失的任务。
+  repeated AttemptRef running = 7;
+  // 静态规格与容量（PLAN #8.6）。没有设置表示旧版 Runner（没有上报）。
+  Capacity capacity = 8;
+  // 本地缓存清单和上一次清理的结果（PLAN #8.3）。只在有新的清单时设置；没有设置时 Server 保留上一次的。
+  CacheReport cache_report = 9;
+  // 已经执行完的缓存清理请求（RunnerDirectives.cache_purges）的结果；Server 收到后不再下发这些请求。
+  repeated CachePurgeResult purge_results = 10;
+  // 自升级的状态（PLAN #27.6）。没有设置表示旧版 Runner（不支持自升级）。
+  UpgradeStatus upgrade = 11;
+  // AI Runner 的字段移到了 kiln.airunner.v1（PLAN #30.8）。旧版 AI Runner 仍会发送它们，Server 忽略。
+  reserved 12, 13, 14;
+  reserved "ai_protocol", "agents", "host_id";
+}
+
+// UpgradeStatus 是 Runner 自升级的状态（PLAN #27.7、#27.12）。
+message UpgradeStatus {
+  // idle | downloading | ready | draining | switching | confirmed | failed | rolled_back | manual
+  string state = 1;
+  // 正在处理的目标版本（npm 版本号，不带 v）。
+  string target = 2;
+  // 失败、回滚或需要手动升级的原因。
+  string error = 3;
+  // 失败过的版本（回滚、integrity 不符等）和当时的 generation：generation 变大之前不再安装。
+  repeated FailedVersion failed = 4;
+  // 启动器记录的当前版本和上一个版本（没有经过启动器时为空）。
+  string current = 5;
+  string previous = 6;
+  // 是否经过启动器运行（能自动切换版本）。
+  bool launcher = 7;
+  // 当前状态（下载中、失败等）对应的指令的 generation（升级请求的 ID）：Server 据此判断失败属于哪一个请求。
+  int64 generation = 8;
+  // config.toml 中 upgrade = false（本地关闭了自升级）。
+  bool disabled = 9;
+  // 这台 Runner 对应的 npm 包（@<scope>/<程序名>-<os>-<arch>）。
+  string package = 10;
+  // registry 中这个包的 dist-tags.latest（正式版本，不带 v）；还没有检查成功过时为空。
+  string latest = 11;
+  // 最后一次检查成功的时间（Unix 秒，0 表示没有成功过）。
+  int64 checked_at = 12;
+  // 最后一次检查的错误（成功时为空），例如 registry 不可达、包不存在、latest 不是正式版本。
+  string check_error = 13;
+  // 已经处理过的检查序号（RunnerDirectives.upgrade_check）。
+  int64 check_seq = 14;
+}
+
+message FailedVersion {
+  string version = 1;
+  int64 generation = 2;
+}
+
+// Capacity 是 Runner 的静态规格和调度用的固定上限，不是实时占用（不采集 CPU 利用率、内存占用或负载）。
+// Server 用 job 声明的 resources 记账：同一台 Runner 上正在执行的 job 声明值之和不超过有效容量。
+message Capacity {
+  // 机器规格：逻辑 CPU 核数和物理内存。
+  Resources machine = 1;
+  // config.toml 中为宿主机预留的资源（reserve_cpu、reserve_memory）。
+  Resources reserved = 2;
+  // 各 executor 的固定上限：host 为 Runner 服务所在 cgroup 的 cpu.max / memory.max（例如 systemd 的
+  // CPUQuota、MemoryMax），oci 为 docker 的 NCPU / MemTotal（colima 等虚拟机的规格）。
+  // 没有的 executor 或字段为 0 表示不额外限制。
+  map<string, Resources> executor_limits = 3;
+  // 同时执行的 job 数上限（config.toml 的 max_jobs）。
+  int32 max_jobs = 4;
+}
+
+// CacheEntry 是 Runner 本地的一项缓存或过程数据。
+message CacheEntry {
+  // toolcache | runtime | git | cas | buildkit | work | image | legacy
+  string kind = 1;
+  // 所属仓库（toolcache、git、work）；0 表示不属于单个仓库（runtime、CAS 等按内容共享）。
+  int64 repo_id = 2;
+  string platform = 3;
+  // toolcache 的执行身份（host、oci-root 等，PLAN #4.6）。
+  string domain = 4;
+  // 名称：toolcache 的 name、runtime 的 digest、work 的 attempt id、镜像引用等。
+  string name = 5;
+  // 相对于数据目录的路径（镜像为空）。
+  string path = 6;
+  int64 size_bytes = 7;
+  // 最后使用的时间（镜像为拉取时间），Unix 秒。
+  int64 last_used_at = 8;
+  // 按保留策略到期的时间，Unix 秒；0 表示没有到期时间。
+  int64 expires_at = 9;
+}
+
+// CacheFailure 是一次清理中没有删除成功的对象。
+message CacheFailure {
+  string kind = 1;
+  string path = 2;
+  string error = 3;
+}
+
+// CacheReport 是 Runner 的缓存清单和上一次清理的结果。
+message CacheReport {
+  // 生成清单的时间，Unix 秒。
+  int64 generated_at = 1;
+  repeated CacheEntry entries = 2;
+  // 数据目录所在文件系统的总量和可用量。
+  int64 disk_total_bytes = 3;
+  int64 disk_free_bytes = 4;
+  // 上一次清理（GC 或清理请求）。
+  int64 gc_at = 5;
+  int64 gc_removed = 6;
+  int64 gc_removed_bytes = 7;
+  repeated CacheFailure gc_failures = 8;
+}
+
+// CachePurge 是 Server 下发的缓存清理请求（kiln runner cache purge / Dashboard）。Runner 在没有正在执行的
+// job 时执行（有待执行的请求时暂停领取新任务），完成后在 RunnerState.purge_results 中回报。
+message CachePurge {
+  int64 id = 1;
+  // 过滤条件，都为空表示全部；repo_id 非 0 时只删除这个仓库的 toolcache、git 镜像和工作区。
+  int64 repo_id = 2;
+  repeated string kinds = 3;
+  string domain = 4;
+}
+
+message CachePurgeResult {
+  int64 id = 1;
+  int64 removed = 2;
+  int64 removed_bytes = 3;
+  repeated CacheFailure failures = 4;
+}
+
+message EnrollRequest {
+  string token = 1;
+  string name = 2;
+  bytes public_key = 3;
+  RunnerState state = 4;
+}
+
+message EnrollResponse {
+  int64 runner_id = 1;
+  string pool = 2;
+  // Runner 的类型，由注册令牌决定（Server 授权，客户端不能修改）：ci（kiln-runner）或 ai（kiln-orca）。
+  // 旧版 Server 不返回（为空），客户端据此拒绝注册，避免把 AI 执行节点当成 CI Runner 使用。
+  string kind = 3;
+  // AI Runner 的角色，由注册令牌决定：review（审计）或 development（开发）；CI Runner 为空（PLAN #26.7）。
+  string role = 4;
+}
+
+message AuthenticateRequest {
+  int64 runner_id = 1;
+  int64 timestamp = 2;
+  string nonce = 3;
+  // ed25519 签名，内容为 "kiln-runner-auth:<runner_id>:<timestamp>:<nonce>"。
+  bytes signature = 4;
+}
+
+message AuthenticateResponse {
+  string access_token = 1;
+  int64 expires_at = 2;
+}
+
+message AcquireRequest {
+  RunnerState state = 1;
+  int32 max_jobs = 2;
+  // 幂等键：同一个 request_id 重试时返回同一批任务。
+  string request_id = 3;
+  // 长轮询的最长等待秒数，0 表示用 Server 的默认值。
+  int32 wait_seconds = 4;
+}
+
+message RunnerDirectives {
+  bool drain = 1;
+  reserved 2, 3, 6;
+  reserved "min_runner_version", "latest_runner_version", "below_min_version";
+  // 待执行的缓存清理请求。
+  repeated CachePurge cache_purges = 4;
+  // 自升级指令（PLAN #27.13）：管理员请求把这台 Runner 升级到某个版本；没有设置表示不升级。
+  UpgradeDirective upgrade = 5;
+  // 查询升级版本、下载升级包用的 npm registry；为空表示官方 registry（https://registry.npmjs.org/）。
+  string upgrade_registry = 7;
+  // 检查序号：管理员点"检查更新"时增加，Runner 看到变化后立即查询 latest。
+  int64 upgrade_check = 8;
+}
+
+// UpgradeDirective 是自升级指令：Runner 从 registry 读这个版本的 dist.tarball 和 dist.integrity，下载、核对后切换。
+message UpgradeDirective {
+  // 目标版本（npm 版本号，不带 v，严格 semver）。
+  string version = 1;
+  reserved 2, 3, 4, 5;
+  reserved "tarball", "integrity", "size", "file";
+  // 升级请求的 ID：失败时记下，更大的 generation（管理员重试）之前不再安装这个版本。
+  int64 generation = 6;
+}
+
+message AcquireResponse {
+  repeated JobSpec jobs = 1;
+  RunnerDirectives directives = 2;
+}
+
+message Source {
+  int64 repo_id = 1;
+  string repository = 2;
+  string clone_url = 3;
+  string sha = 4;
+  // 检出范围：inputs 规则（与 Planner 使用同一份匹配代码）。
+  repeated string inputs = 5;
+  // 期望的输入摘要（hex），检出后必须一致。为空时不校验。
+  string input_digest = 6;
+}
+
+message ExecutorSpec {
+  // host | oci | image
+  string kind = 1;
+  // oci：容器镜像引用（带 digest）。
+  string image = 2;
+  string platform = 3;
+  // host：额外加入 PATH 的目录（来自 Runner 配置之外的设置，目前为空）。
+  repeated string extra_path = 4;
+  // oci：非空时（buildkit: true）为 job 启动这个 BuildKit daemon 镜像（带 digest），
+  // 只会派给上报了 buildkit 能力的 Runner。
+  string buildkit_image = 5;
+}
+
+message RuntimeRef {
+  string name = 1;
+  string version = 2;
+  // runtime 包所属平台（pnpm 等为 any）。
+  string platform = 3;
+  // 上游归档的 sha256（v0），例如 "sha256:…"。
+  string digest = 4;
+}
+
+message Step {
+  string name = 1;
+  string run = 2;
+  string shell = 3;
+  string working_directory = 4;
+  map<string, string> env = 5;
+  bool continue_on_error = 6;
+}
+
+message OutputSpec {
+  string name = 1;
+  string path = 2;
+}
+
+message FetchSpec {
+  // <job_key>.<output>，仅用于显示。
+  string from = 1;
+  string to = 2;
+  // 上游输出的 manifest digest（"sha256:…"）。
+  string manifest_digest = 3;
+}
+
+message Service {
+  string name = 1;
+  string image = 2;
+  map<string, string> env = 3;
+  repeated string command = 4;
+}
+
+message ToolCache {
+  string name = 1;
+  string env = 2;
+}
+
+message JobSpec {
+  AttemptRef ref = 1;
+  int32 lease_ttl_seconds = 2;
+  Source source = 3;
+  ExecutorSpec executor = 4;
+  repeated RuntimeRef runtimes = 5;
+  // 合并后的 env，不含 secret 的值；secret 以 ${{ secrets.NAME }} 占位，Runner 在拿到 secret 后替换。
+  map<string, string> env = 6;
+  repeated Step steps = 7;
+  repeated OutputSpec outputs = 8;
+  repeated FetchSpec fetch = 9;
+  int32 timeout_seconds = 10;
+  Resources resources = 11;
+  repeated Service services = 13;
+  repeated ToolCache toolcache = 14;
+  bool effects = 15;
+  bool needs_credentials = 16;
+  bool keep_on_failure = 17;
+  bool network = 18;
+  int64 job_id = 19;
+  int64 run_id = 20;
+  string job_key = 21;
+  string display_name = 22;
+  string workflow = 23;
+  // job 引用的 secret 名称（只用于诊断）。
+  repeated string secret_names = 24;
+  // job 声明的额外仓库（owner/name），用于私有依赖。
+  repeated string repositories = 25;
+  // macOS 代码签名（signing:）。非空时只会派给上报了 signing 能力的 Runner，
+  // Runner 在执行 step 前建立 job 专用的临时 keychain，结束后删除（PLAN #8.10）。
+  Signing signing = 26;
+  // AI 任务移到了 kiln.airunner.v1（PLAN #30.8）。
+  reserved 27, 28;
+  reserved "ai_review", "ai_develop";
+}
+
+// Signing 中的值可能含有 ${{ secrets.NAME }} 占位符，Runner 拿到 secret 后替换。
+message Signing {
+  repeated SigningCertificate certificates = 1;
+  // base64 编码的 provisioning profile。
+  repeated string provisioning_profiles = 2;
+  Notary notary = 3;
+}
+
+message SigningCertificate {
+  // base64 编码的 PKCS#12（.p12）。
+  string p12 = 1;
+  string password = 2;
+}
+
+// Notary 是存入临时 keychain 的公证凭据（xcrun notarytool store-credentials）。
+// apple_id + team_id + password 与 key + key_id（+ issuer）二选一。
+message Notary {
+  string profile = 1;
+  string apple_id = 2;
+  string team_id = 3;
+  string password = 4;
+  // App Store Connect API key（.p8 的内容，原文或 base64）。
+  string key = 5;
+  string key_id = 6;
+  string issuer = 7;
+}
+
+message FetchCredentialsRequest {
+  AttemptRef ref = 1;
+}
+
+message FetchCredentialsResponse {
+  // 只读 installation token，范围为本仓库 + job 的 repositories。
+  string git_token = 1;
+  int64 git_token_expires_at = 2;
+  map<string, string> secrets = 3;
+}
+
+message FetchSecretsRequest {
+  AttemptRef ref = 1;
+}
+
+message FetchSecretsResponse {
+  // job 引用的 secret。
+  map<string, string> secrets = 1;
+}
+
+message IssueGitTokenRequest {
+  AttemptRef ref = 1;
+  // 客户端为每个操作随机生成的 ID（最长 128 字节）：一个操作至多一枚 token。
+  string op_id = 2;
+  // 这次操作访问的仓库（owner/name）：任务仓库或 job 的 repositories 之一。
+  string repository = 3;
+}
+
+message IssueGitTokenResponse {
+  // 只读 installation token，范围只有 repository。不续签：过期后重新执行即是新的操作。
+  string token = 1;
+  // 过期时间，Unix 秒。
+  int64 expires_at = 2;
+}
+
+message RevokeGitTokenRequest {
+  AttemptRef ref = 1;
+  string op_id = 2;
+  // 客户端收到的 token（没收到时为空）：只用于 Server 重启丢了登记后补吊销。
+  string token = 3;
+}
+
+message RevokeGitTokenResponse {}
+
+message HeartbeatRequest {
+  AttemptRef ref = 1;
+  // -1 表示还在准备环境，0 起表示正在执行的 step 序号。
+  int32 current_step = 2;
+  // 当前阶段与进度；旧版 Runner 不上报，Dashboard 显示"进度暂不可用"。
+  Progress progress = 3;
+}
+
+// Progress 是 attempt 当前的执行阶段与进度。时间都是相对时长（Server 按收到的时间换算），
+// 避免两台机器的时钟不一致。不含预签名地址、token 或本地绝对路径。
+message Progress {
+  Phase phase = 1;
+  // 一句话的说明，例如 step 名称、正在上传的输出名称。
+  string detail = 2;
+  // 阶段已持续的时长、距离最近一次进展的时长（毫秒）。
+  int64 phase_elapsed_ms = 3;
+  int64 idle_ms = 4;
+  // 上传阶段：需要上传的对象数与字节数（Server 已有的不计入）、Server 已确认的对象数与字节数、
+  // 正在上传的对象已发送的字节数（重试时从 0 重新计数，不重复累计）。
+  int32 files_total = 5;
+  int32 files_done = 6;
+  int64 bytes_total = 7;
+  int64 bytes_done = 8;
+  int64 bytes_sent = 9;
+  // Server 已有、不需要上传的对象数。
+  int32 files_skipped = 10;
+  // 当前对象的重试次数与最近一次失败的原因。
+  int32 retries = 11;
+  string last_error = 12;
+}
+
+enum Phase {
+  PHASE_UNSPECIFIED = 0;
+  // 准备执行环境：拉取源码、准备镜像、安装 runtime、下载上游输出等。
+  PHASE_PREPARE = 1;
+  // 执行 step（current_step 是序号）。
+  PHASE_STEP = 2;
+  // 收集产物并上传到 Kiln Server。
+  PHASE_UPLOAD = 3;
+  // 清理执行环境和工作区。
+  PHASE_CLEANUP = 4;
+  // 向 Server 提交结果。
+  PHASE_COMPLETE = 5;
+}
+
+message HeartbeatResponse {
+  bool cancel_requested = 1;
+  int64 lease_expires_at = 2;
+}
+
+message AppendLogRequest {
+  AttemptRef ref = 1;
+  int64 offset = 2;
+  bytes data = 3;
+}
+
+message AppendLogResponse {
+  // Server 已经持有的日志长度。
+  int64 committed = 1;
+}
+
+message BlobRef {
+  string digest = 1;
+  int64 size = 2;
+}
+
+message PrepareUploadRequest {
+  AttemptRef ref = 1;
+  repeated BlobRef blobs = 2;
+}
+
+message UploadTarget {
+  string digest = 1;
+  // 以 "/" 开头时相对于 Server 地址。
+  string url = 2;
+}
+
+message PrepareUploadResponse {
+  // 只包含 Server 上缺失的对象。
+  repeated UploadTarget uploads = 1;
+}
+
+message PrepareDownloadRequest {
+  AttemptRef ref = 1;
+  repeated string digests = 2;
+}
+
+message PrepareDownloadResponse {
+  repeated UploadTarget downloads = 1;
+}
+
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_SUCCEEDED = 1;
+  OUTCOME_FAILED = 2;
+  OUTCOME_INFRA_ERROR = 3;
+  OUTCOME_CANCELLED = 4;
+  OUTCOME_TIMED_OUT = 5;
+}
+
+message CompleteRequest {
+  AttemptRef ref = 1;
+  Outcome outcome = 2;
+  // user | timeout | infra.prepare | infra.fetch | infra.upload | infra.lost | infra.disk
+  string error_class = 3;
+  int32 exit_code = 4;
+  // 结果 manifest 的 digest（"sha256:…"），其中列出每个命名输出的 manifest。
+  string result_manifest_digest = 5;
+  string message = 6;
+  double cpu_seconds = 7;
+  // AI 任务的结果移到了 kiln.airunner.v1（PLAN #30.8）。
+  reserved 8, 9, 10, 11;
+  reserved "ai_report", "ai_delivery", "agent_version", "agent_model";
+}
+
+message CompleteResponse {}

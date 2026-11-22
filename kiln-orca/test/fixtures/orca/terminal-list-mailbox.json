@@ -1,0 +1,73 @@
+{
+  "id": "00000000-0000-4000-8000-00000000070e",
+  "ok": true,
+  "result": {
+    "terminals": [
+      {
+        "handle": "term_00000000-0000-4000-8000-00000000070f",
+        "ptyId": "00000000-0000-4000-8000-000000000702::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca@@e0fe5e2f",
+        "incarnationId": "00000000-0000-4000-8000-000000000710",
+        "orphaned": false,
+        "worktreeId": "00000000-0000-4000-8000-000000000702::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+        "worktreePath": "/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+        "branch": "refs/heads/main",
+        "tabId": "00000000-0000-4000-8000-000000000711",
+        "leafId": "00000000-0000-4000-8000-000000000712",
+        "title": "kiln-orca 邮箱",
+        "connected": true,
+        "writable": true,
+        "lastOutputAt": 1794923045563,
+        "preview": "kiln@host kiln-orca %",
+        "executionHostId": "local"
+      },
+      {
+        "handle": "term_00000000-0000-4000-8000-000000000713",
+        "ptyId": "00000000-0000-4000-8000-000000000702::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca@@845b4c1e",
+        "incarnationId": "00000000-0000-4000-8000-000000000714",
+        "orphaned": false,
+        "worktreeId": "00000000-0000-4000-8000-000000000702::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+        "worktreePath": "/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+        "branch": "refs/heads/main",
+        "tabId": "00000000-0000-4000-8000-000000000715",
+        "leafId": "00000000-0000-4000-8000-000000000716",
+        "title": "kiln-orca 邮箱",
+        "connected": true,
+        "writable": true,
+        "lastOutputAt": 1794923306378,
+        "preview": "kiln@host kiln-orca %",
+        "executionHostId": "local"
+      },
+      {
+        "handle": "term_00000000-0000-4000-8000-000000000717",
+        "ptyId": "00000000-0000-4000-8000-000000000702::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca@@482b0d63",
+        "incarnationId": "00000000-0000-4000-8000-000000000718",
+        "orphaned": false,
+        "worktreeId": "00000000-0000-4000-8000-000000000702::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+        "worktreePath": "/Users/kiln/Library/Application Support/kiln-orca/kiln-orca",
+        "branch": "refs/heads/main",
+        "tabId": "00000000-0000-4000-8000-000000000719",
+        "leafId": "00000000-0000-4000-8000-00000000071a",
+        "title": "zsh",
+        "connected": true,
+        "writable": true,
+        "lastOutputAt": 1794923306535,
+        "preview": "kiln@host kiln-orca %",
+        "executionHostId": "local"
+      }
+    ],
+    "hostScope": {
+      "hostIds": [
+        "local"
+      ],
+      "omittedHostIds": []
+    },
+    "topologyRevisions": {
+      "00000000-0000-4000-8000-000000000702::/Users/kiln/Library/Application Support/kiln-orca/kiln-orca": 12
+    },
+    "totalCount": 3,
+    "truncated": false
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000706"
+  }
+}

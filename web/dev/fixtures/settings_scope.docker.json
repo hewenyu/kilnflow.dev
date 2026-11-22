@@ -1,0 +1,72 @@
+{
+ "Page": "settings_scope",
+ "Title": "acme/docker-release",
+ "Nav": "settings",
+ "Status": 422,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "envs",
+  "Account": "acme",
+  "Repo": "",
+  "Env": "docker-release",
+  "Label": "acme/docker-release",
+  "Kind": "environment",
+  "KindLabel": "账号级 environment（账号下的所有仓库共用）",
+  "Environment": {
+   "name": "docker-release",
+   "account": "acme",
+   "ref_policy": [
+    "refs/tags/v*"
+   ],
+   "OverriddenIn": [
+    "acme/legacy-api"
+   ],
+   "Overrides": false,
+   "URL": "/settings/scope?account=acme&env=docker-release",
+   "Docker": true
+  },
+  "Vars": [
+   {
+    "Name": "DOCKERHUB_NAMESPACE",
+    "Value": "acme"
+   },
+   {
+    "Name": "DOCKERHUB_USERNAME",
+    "Value": "octocat"
+   }
+  ],
+  "Secrets": [
+   {
+    "Name": "DOCKERHUB_TOKEN",
+    "UpdatedBy": "octocat",
+    "UpdatedAt": "2026-11-02T09:14:00+08:00",
+    "Version": 3
+   }
+  ],
+  "Docker": true,
+  "DockerURL": "/settings/docker?account=acme",
+  "EnvForm": {
+   "Values": {
+    "ref_policy": "refs/tags/v*",
+    "allowed_publish_repos": "acme/kilnx"
+   },
+   "Errors": {
+    "allowed_publish_repos": "每个仓库都应写成 owner/name：octocat"
+   },
+   "Failed": true
+  },
+  "CrumbLabel": "环境",
+  "CrumbURL": "/settings/environments",
+  "URL": "/settings/scope?account=acme&env=docker-release",
+  "Query": "account=acme&env=docker-release"
+ }
+}

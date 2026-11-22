@@ -1,0 +1,134 @@
+/*
+ * run 的 job 依赖图（GitHub Actions 运行页的样式）：按阶段从左到右排成列，每个 job 是固定高度的节点。
+ * 相邻两列之间是一个 48px 宽的连接区：中间一条竖线连接左列各节点右侧和右列各节点左侧伸出的短线。
+ * 节点高 56px、间距 16px，所以第 k 个节点的中线在列顶部往下 28 + 72k px（连接区的竖线据此计算长度）。
+ */
+/* 放不下时横向滚动：还有内容的一侧显示阴影（遮罩随内容滚动，阴影固定在边缘） */
+.scroll {
+  --kiln-scroll-shadow: color-mix(in srgb, var(--fgColor-default) 16%, transparent);
+  overflow-x: auto;
+  padding: 24px;
+  border-radius: 0 0 6px 6px;
+  background:
+    linear-gradient(to right, var(--bgColor-muted) 30%, transparent) left center / 40px 100% no-repeat local,
+    linear-gradient(to left, var(--bgColor-muted) 30%, transparent) right center / 40px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--kiln-scroll-shadow), transparent) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--kiln-scroll-shadow), transparent) right center / 12px 100% no-repeat scroll,
+    var(--bgColor-muted);
+}
+
+.scroll:focus-visible {
+  outline: 2px solid var(--focus-outlineColor);
+  outline-offset: -2px;
+}
+
+.graph {
+  display: flex;
+  align-items: flex-start;
+  width: max-content;
+  min-width: 100%;
+}
+
+.stage {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 16px;
+  width: 248px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.joint {
+  position: relative;
+  flex: none;
+  width: 48px;
+}
+
+.line {
+  position: absolute;
+  top: 28px;
+  left: 24px;
+  border-left: 1px solid var(--borderColor-emphasis);
+}
+
+.node {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  box-sizing: border-box;
+  height: 56px;
+  padding: 8px 12px;
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: 6px;
+  box-shadow: var(--shadow-resting-small, 0 1px 0 rgb(31 35 40 / 4%));
+}
+
+.node:hover {
+  border-color: var(--borderColor-emphasis);
+}
+
+/* 伸向连接区的短线 */
+.in::before,
+.out::after {
+  position: absolute;
+  top: 27px;
+  width: 24px;
+  border-top: 1px solid var(--borderColor-emphasis);
+  content: '';
+}
+
+.in::before {
+  left: -25px;
+}
+
+.out::after {
+  right: -25px;
+}
+
+.icon {
+  flex: none;
+  padding-top: 2px;
+}
+
+.text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.name {
+  display: block;
+  overflow: hidden;
+  color: var(--fgColor-default);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 整个节点可点：名称链接的点击区域铺满节点 */
+.name::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+
+.meta {
+  display: block;
+  overflow: hidden;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta a {
+  position: relative;
+  z-index: 1;
+}
+
+.reason {
+  color: var(--fgColor-danger);
+}

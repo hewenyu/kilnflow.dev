@@ -1,0 +1,1 @@
+{"Page":"login","Title":"登录","Nav":"login","Status":422,"Session":null,"CSRF":"","OAuth":false,"Active":0,"Flash":"","Data":{"Next":"/","GitHubURL":"/auth/github?next=%2F","Notice":"","TokenLogin":true,"Bound":"","Form":{"Values":{},"Errors":{"token":"admin token 不对。检查 Server 的 KILN_ADMIN_TOKEN 配置。"},"Failed":true}}}

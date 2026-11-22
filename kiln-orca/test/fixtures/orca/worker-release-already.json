@@ -1,0 +1,20 @@
+{
+  "id": "00000000-0000-4000-8000-000000000200",
+  "ok": true,
+  "result": {
+    "dispatchId": "ctx_000000000101",
+    "state": "already_released",
+    "processAction": "none",
+    "archive": {
+      "source": "transcript",
+      "status": "captured"
+    },
+    "mutation": {
+      "requestId": "00000000-0000-4000-8000-000000000201",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

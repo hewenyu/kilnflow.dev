@@ -1,0 +1,31 @@
+{
+  "id": "00000000-0000-4000-8000-00000000050a",
+  "ok": false,
+  "error": {
+    "code": "selector_not_found",
+    "message": "selector_not_found",
+    "data": {
+      "selector": "id:00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9155-e1",
+      "validSelectorForms": [
+        "id:<repo-id>::<absolute-path>",
+        "folder:<folder-id>",
+        "path:<absolute-path>",
+        "name:<display-name>",
+        "branch:<branch>",
+        "identity:<identity-key>",
+        "issue:<number>",
+        "current",
+        "active"
+      ],
+      "suggestions": [],
+      "nextSteps": [
+        "No Orca workspace matched the worktree selector \"id:00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9155-e1\".",
+        "Valid selector forms: id:<repo-id>::<absolute-path>, folder:<folder-id>, path:<absolute-path>, name:<display-name>, branch:<branch>, identity:<identity-key>, issue:<number>, current, active.",
+        "List the exact values, folder workspaces included, with `orca worktree ps --json` (add `--environment <id>` for a workspace in another environment); a bare repository id is not a worktree id."
+      ]
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000506"
+  }
+}

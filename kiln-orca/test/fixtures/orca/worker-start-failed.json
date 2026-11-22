@@ -1,0 +1,53 @@
+{
+  "id": "00000000-0000-4000-8000-000000000207",
+  "ok": true,
+  "result": {
+    "runId": "run_000000000101",
+    "taskId": "task_000000000101",
+    "dispatchId": "ctx_000000000102",
+    "state": "failed",
+    "stage": "worktree_create",
+    "failedStage": "worktree_create",
+    "lastError": "Command failed: git -c checkout.workers=0 worktree add --no-track -b kiln/kiln-r10-fail /Users/kiln/orca/workspaces/target/kiln-r10-fail 0000000000000000000000000000000000000001\nfatal: invalid reference: 0000000000000000000000000000000000000001\n",
+    "setup": {
+      "requested": "not_applicable",
+      "effective": "not_applicable",
+      "source": "existing_worktree",
+      "hookFound": false,
+      "startupPolicy": "start-immediately",
+      "state": "not_applicable"
+    },
+    "launch": {
+      "requested": {
+        "agent": "claude",
+        "model": null,
+        "effort": null
+      },
+      "effective": {
+        "agent": "claude",
+        "model": null,
+        "effort": null
+      }
+    },
+    "mode": {
+      "mode": "structured",
+      "preferred": "structured",
+      "reason": "user_default",
+      "detail": "Started a structured chat session worker, the default for new agent tabs in your settings."
+    },
+    "effects": [],
+    "residualResources": [],
+    "run": {
+      "id": "run_000000000101",
+      "objective": "kiln r10 failed start",
+      "created": false
+    },
+    "mutation": {
+      "requestId": "00000000-0000-4000-8000-000000000208",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

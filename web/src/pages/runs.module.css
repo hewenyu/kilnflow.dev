@@ -1,0 +1,70 @@
+.page {
+  display: grid;
+  gap: 16px;
+}
+
+/* 筛选：一行五个字段，按钮靠在最后 */
+.filter {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  gap: 8px 12px;
+  align-items: end;
+}
+
+.filter label {
+  font-size: 12px;
+}
+
+.filterActions {
+  display: flex;
+  gap: 4px;
+}
+
+/* "全部 / 我发起的"：Box 标题中的两个切换链接 */
+.scope {
+  display: flex;
+  gap: 16px;
+}
+
+.scope a {
+  color: var(--fgColor-muted);
+  font-weight: 400;
+}
+
+.scope a[aria-current='page'] {
+  color: var(--fgColor-default);
+  font-weight: 600;
+}
+
+.count {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-align: right;
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 1011px) {
+  .filter {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 543px) {
+  .filter {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .filter > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .count {
+    display: none;
+  }
+}

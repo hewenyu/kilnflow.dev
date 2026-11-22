@@ -1,0 +1,72 @@
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import fixture from '../../dev/fixtures/settings_upgrade.json'
+import invalid from '../../dev/fixtures/settings_upgrade.invalid.json'
+import { envelope, renderPage } from '../test/render'
+import { stubSubmit } from './settings/testing'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('设置 · Runner 升级', () => {
+  it('在设置导航中，显示 registry 和各 Runner 的版本、最新版本、升级状态', () => {
+    renderPage(envelope(fixture), '/settings/runner-upgrade')
+    expect(screen.getByRole('heading', { level: 1, name: 'Runner 升级' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Runner 升级' }).some((a) => a.getAttribute('aria-current') === 'page')).toBe(true)
+
+    const form = screen.getByRole('form', { name: 'npm registry' })
+    expect(within(form).getByRole('textbox', { name: /registry 地址/ })).toHaveValue('https://npm.example.com/')
+    expect(screen.getByText(/当前使用/)).toHaveTextContent('当前使用：https://npm.example.com/')
+
+    const runners = within(screen.getByRole('table', { name: '各 Runner' }))
+    const row = (name: string) => {
+      const tr = runners.getByRole('link', { name }).closest('tr')
+      if (!tr) throw new Error(`没有 ${name}`)
+      return within(tr)
+    }
+    expect(runners.getByRole('link', { name: 'mini-01' })).toHaveAttribute('href', '/runners/detail/mini-01')
+    // 只列 CI Runner，不再标注类型；AI 执行节点用 npm 升级，不在这里
+    expect(runners.queryByText('CI Runner')).not.toBeInTheDocument()
+    expect(screen.getByText(/AI 执行节点不在这里，连接器 kiln-orca 在节点上用 npm 升级/)).toBeInTheDocument()
+    expect(row('mini-01').getByText('正在下载：0.4.3')).toBeInTheDocument()
+    expect(row('mini-02').getByText('升级到 0.4.3 失败')).toBeInTheDocument()
+    expect(row('linux-01').getByText('不能按台升级')).toBeInTheDocument()
+    expect(row('linux-01').getByText(/没有经过启动器运行/)).toBeInTheDocument()
+    expect(row('linux-01').getByText('0.4.3')).toBeInTheDocument()
+    expect(runners.queryByText('mac-02')).not.toBeInTheDocument()
+  })
+
+  it('保存 registry 提交表单', async () => {
+    const calls = stubSubmit('/settings/runner-upgrade')
+    renderPage(envelope(fixture), '/settings/runner-upgrade')
+    const form = screen.getByRole('form', { name: 'npm registry' })
+    const input = within(form).getByRole('textbox', { name: /registry 地址/ })
+    await userEvent.clear(input)
+    await userEvent.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))
+    const post = calls.find((c) => c.method === 'POST')
+    expect(post?.url).toBe('/settings/runner-upgrade/registry')
+    expect(post?.body.get('registry')).toBe('')
+  })
+
+  it('全部检查更新', async () => {
+    const calls = stubSubmit('/settings/runner-upgrade')
+    renderPage(envelope(fixture), '/settings/runner-upgrade')
+    await userEvent.click(screen.getByRole('button', { name: '全部检查更新' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))
+    expect(calls.find((c) => c.method === 'POST')?.url).toBe('/settings/runner-upgrade/check')
+  })
+
+  it('校验失败时在字段旁显示错误；没有设置时使用官方 registry', () => {
+    renderPage(envelope(invalid), '/settings/runner-upgrade')
+    const form = screen.getByRole('form', { name: 'npm registry' })
+    expect(within(form).getByText('没有保存。')).toBeInTheDocument()
+    const input = within(form).getByRole('textbox', { name: /registry 地址/ })
+    expect(input).toHaveValue('http://npm.example.com/')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(within(form).getByText('registry 必须是 https 地址（本机地址除外）')).toBeInTheDocument()
+    expect(screen.getByText(/当前使用/)).toHaveTextContent('当前使用：https://registry.npmjs.org/（官方）')
+  })
+})

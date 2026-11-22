@@ -1,0 +1,65 @@
+{
+ "Page": "settings_item",
+ "Title": "编辑变量 GO_VERSION · acme/kilnflow.dev",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "vars",
+  "Account": "",
+  "Repo": "acme/kilnflow.dev",
+  "Env": "",
+  "Label": "acme/kilnflow.dev",
+  "Kind": "variables",
+  "KindLabel": "仓库级",
+  "Environment": null,
+  "Vars": [
+   {
+    "Name": "GO_VERSION",
+    "Value": "1.27.3"
+   },
+   {
+    "Name": "GOFLAGS",
+    "Value": "-trimpath -buildvcs=false -ldflags=-s -w -X github.com/hewenyu/kilnflow.dev/internal/buildinfo.version=dev"
+   }
+  ],
+  "Secrets": [
+   {
+    "Name": "CODECOV_TOKEN",
+    "UpdatedBy": "octocat",
+    "UpdatedAt": "2026-09-30T10:00:00+08:00",
+    "Version": 1
+   }
+  ],
+  "Docker": false,
+  "DockerURL": "",
+  "EnvForm": {
+   "Values": {},
+   "Errors": {},
+   "Failed": false
+  },
+  "CrumbLabel": "变量与密钥",
+  "CrumbURL": "/settings/variables",
+  "URL": "/settings/scope?repo=acme%2Fkilnflow.dev",
+  "Query": "repo=acme%2Fkilnflow.dev",
+  "Name": "GO_VERSION",
+  "Secret": null,
+  "Form": {
+   "Values": {
+    "value": "1.27.3"
+   },
+   "Errors": {},
+   "Failed": false
+  },
+  "IsSecret": false
+ }
+}

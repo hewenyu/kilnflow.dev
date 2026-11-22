@@ -1,0 +1,36 @@
+{
+ "Page": "settings_npm",
+ "Title": "npm · acme-sandbox",
+ "Nav": "settings",
+ "Status": 422,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "conn",
+  "Npm": {
+   "Account": "acme-sandbox",
+   "Config": null,
+   "URL": "/settings/npm?account=acme-sandbox"
+  },
+  "Form": {
+   "Values": {
+    "scope": "Acme",
+    "registry": "https://registry.npmjs.org/"
+   },
+   "Errors": {
+    "scope": "scope \"@Acme\" 无效：不能有大写字母",
+    "token": "为了安全，刚才输入的 token 没有保留，修正上面的错误后请重新输入"
+   },
+   "Failed": true
+  },
+  "DefaultRegistry": "https://registry.npmjs.org/"
+ }
+}

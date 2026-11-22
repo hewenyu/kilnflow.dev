@@ -1,0 +1,243 @@
+/* Runner 列表：GitHub Settings → Runners 的列表行。 */
+.page > * + * {
+  margin-top: 16px;
+}
+
+.help > summary {
+  cursor: pointer;
+  color: var(--fgColor-accent);
+  width: fit-content;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 72ch);
+  gap: 8px 16px;
+  margin: 12px 0 0;
+  padding: 16px;
+  border: 1px solid var(--borderColor-muted);
+  border-radius: 6px;
+  background-color: var(--bgColor-muted);
+}
+
+.kv dt {
+  font-weight: 600;
+}
+
+.kv dd {
+  margin: 0;
+  color: var(--fgColor-muted);
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.counts a {
+  color: var(--fgColor-muted);
+}
+
+.counts a:hover {
+  color: var(--fgColor-default);
+  text-decoration: none;
+}
+
+.counts a[aria-current] {
+  color: var(--fgColor-default);
+  font-weight: 600;
+}
+
+.counts b {
+  color: var(--fgColor-default);
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.filtered {
+  justify-content: space-between;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listHead {
+  flex-wrap: wrap;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.name a {
+  color: var(--fgColor-default);
+}
+
+.name a:hover {
+  color: var(--fgColor-accent);
+}
+
+.revoked .name,
+.revoked .name a {
+  color: var(--fgColor-muted);
+}
+
+.icon {
+  padding-top: 3px;
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 20px;
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.facts > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.facts dt {
+  color: var(--fgColor-muted);
+}
+
+.facts dd {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+
+.factNote {
+  color: var(--fgColor-muted);
+}
+
+/* 升级状态：上一次升级失败为红色，可以升级为黄色（文字色，不靠颜色单独传达：文字本身说明状态）。 */
+.upBad {
+  color: var(--fgColor-danger);
+}
+
+.upWarn {
+  color: var(--fgColor-attention);
+}
+
+.upgradeNote {
+  margin: 6px 0 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.idle {
+  margin: 6px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.jobs {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jobs li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 2px 0;
+}
+
+.jobs a {
+  font-weight: 600;
+}
+
+.jobMeta {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.ops {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirmLead {
+  margin: 0 0 8px;
+  color: var(--fgColor-muted);
+}
+
+.confirmList {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.confirmList li + li {
+  margin-top: 6px;
+}
+
+.footer {
+  font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  .kv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kv dd {
+    margin-bottom: 8px;
+  }
+
+  .row {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  .ops {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .filters {
+    margin-left: 0;
+  }
+}

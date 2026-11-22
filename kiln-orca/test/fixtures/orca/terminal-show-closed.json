@@ -1,0 +1,32 @@
+{
+  "id": "00000000-0000-4000-8000-000000000012",
+  "ok": true,
+  "result": {
+    "terminal": {
+      "handle": "term_00000000-0000-4000-8000-000000000013",
+      "ptyId": "00000000-0000-4000-8000-000000000003::/Users/kiln/exp-repo@@617ba325",
+      "incarnationId": "00000000-0000-4000-8000-000000000014",
+      "orphaned": true,
+      "recordedPaneKey": "00000000-0000-4000-8000-000000000015:00000000-0000-4000-8000-000000000016",
+      "worktreeId": "00000000-0000-4000-8000-000000000003::/Users/kiln/exp-repo",
+      "worktreePath": "/Users/kiln/exp-repo",
+      "branch": "refs/heads/main",
+      "tabId": "00000000-0000-4000-8000-000000000015",
+      "leafId": "00000000-0000-4000-8000-000000000016",
+      "title": "kiln-exp-mbox",
+      "connected": false,
+      "writable": false,
+      "lastOutputAt": 1794654460687,
+      "preview": "kiln@host exp-repo %",
+      "exitCause": {
+        "kind": "operator_close"
+      },
+      "executionHostId": "local",
+      "paneRuntimeId": -1,
+      "rendererGraphEpoch": 0
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

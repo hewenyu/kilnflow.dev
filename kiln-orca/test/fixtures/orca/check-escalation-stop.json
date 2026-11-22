@@ -1,0 +1,54 @@
+{
+  "id": "00000000-0000-4000-8000-000000000079",
+  "ok": true,
+  "result": {
+    "runId": "run_000000000002",
+    "deliveryId": "delivery_000000000006",
+    "messages": [
+      {
+        "id": "msg_stop_000000000080",
+        "run_id": "run_000000000002",
+        "delivery_contract": "current_delivery",
+        "from_handle": "structworker_00000000-0000-4000-8000-000000000081",
+        "to_handle": "run:run_000000000002",
+        "subject": "Worker stopped without reporting",
+        "body": "Worker structworker_00000000-0000-4000-8000-000000000081 ended its turn without sending worker_done for task \"示例任务\" (task_000000000082).\nThe Dispatch is still open. Answer it with your Orca CLI's `orchestration send --to dispatch:ctx_000000000083 --subject \"<topic>\" --body \"<guidance>\"`, retry it, or stop the worker.\nIf it is idle on purpose, leave it: its later idle turns are not reported until you write to it.\nLast output:\n运行验证中。\nFull output: orchestration worker-read --dispatch ctx_000000000083",
+        "type": "escalation",
+        "priority": "high",
+        "thread_id": null,
+        "payload": "{\"taskId\":\"task_000000000082\",\"dispatchId\":\"ctx_000000000083\",\"handle\":\"structworker_00000000-0000-4000-8000-000000000081\",\"stopReason\":\"finished\"}",
+        "created_at": "2026-11-20T09:05:00Z",
+        "delivered_at": null
+      },
+      {
+        "id": "msg_stop_000000000084",
+        "run_id": "run_000000000002",
+        "delivery_contract": "current_delivery",
+        "from_handle": "term_00000000-0000-4000-8000-000000000085",
+        "to_handle": "run:run_000000000002",
+        "subject": "Worker is waiting on a prompt",
+        "body": "Worker term_00000000-0000-4000-8000-000000000085 is stopped at a prompt that needs a person (approval or a question) while running task \"示例任务\" (task_000000000086).\nA message does not answer it: a person must, where the worker runs. The Dispatch is still open; retry it or stop the worker if it stays stuck.\nLast output:\n等待输入。\nFull output: orchestration worker-read --dispatch ctx_000000000087",
+        "type": "escalation",
+        "priority": "high",
+        "thread_id": null,
+        "payload": "{\"taskId\":\"task_000000000086\",\"dispatchId\":\"ctx_000000000087\",\"handle\":\"term_00000000-0000-4000-8000-000000000085\",\"stopReason\":\"needs-input\"}",
+        "created_at": "2026-11-20T09:06:00Z",
+        "delivered_at": null
+      }
+    ],
+    "count": 2,
+    "replayed": false,
+    "deliveryAcknowledged": true,
+    "acknowledged": null,
+    "timedOut": false,
+    "cancelled": false,
+    "connectionLost": false,
+    "mutation": {
+      "requestId": "00000000-0000-4000-8000-000000000088",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

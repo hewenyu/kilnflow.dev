@@ -1,0 +1,24 @@
+{
+ "Page": "settings_account",
+ "Title": "登录与身份",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "admin",
+  "Admin": true,
+  "ViaToken": true,
+  "Bound": false
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "account",
+  "Binding": null,
+  "OAuth": true,
+  "SignedInAsBound": false,
+  "GitHubLogin": "/auth/github?next=%2Fsettings%2Faccount",
+  "Step": 1
+ }
+}

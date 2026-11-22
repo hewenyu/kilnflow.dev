@@ -1,0 +1,152 @@
+.page {
+  display: grid;
+  gap: 16px;
+  max-width: 768px;
+}
+
+.crumbs {
+  display: flex;
+  gap: 6px;
+  color: var(--fgColor-muted);
+}
+
+.head {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.lead {
+  margin: 0;
+  color: var(--fgColor-muted);
+}
+
+.form {
+  display: grid;
+  gap: 24px;
+}
+
+/* 每一步：标题 + 内容，步骤之间用细线分开 */
+.step {
+  display: grid;
+  gap: 12px;
+}
+
+.step + .step {
+  padding-top: 24px;
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.stepTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.repoPicked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--fgColor-muted);
+}
+
+.repoName {
+  color: var(--fgColor-default);
+  font-family: var(--kiln-mono);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mono,
+.mono input,
+textarea.mono {
+  font-family: var(--kiln-mono);
+}
+
+.file {
+  margin-left: 4px;
+  color: var(--fgColor-muted);
+  font-family: var(--kiln-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.warn {
+  color: var(--fgColor-attention);
+}
+
+.lines {
+  white-space: pre-line;
+}
+
+.muted {
+  margin: 0;
+  color: var(--fgColor-muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 仓库选择器 */
+.search {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.search > :first-child {
+  flex: 1 1 auto;
+}
+
+.boxHead {
+  padding: 12px 16px;
+  background-color: var(--bgColor-muted);
+  border-bottom: 1px solid var(--borderColor-default);
+  border-radius: 6px 6px 0 0;
+  color: var(--fgColor-muted);
+}
+
+.repos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.repoIcon {
+  flex: none;
+  color: var(--fgColor-muted);
+}
+
+.repoText {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.repoText .repoName {
+  font-size: 14px;
+}
+
+.none {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--fgColor-muted);
+  text-align: center;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}

@@ -1,0 +1,30 @@
+{
+  "id": "00000000-0000-4000-8000-000000000314",
+  "ok": false,
+  "error": {
+    "code": "run_not_found",
+    "message": "Run run_000000000999 was not found. Orchestration mutation request ID: 00000000-0000-4000-8000-000000000315.",
+    "data": {
+      "orchestrationRequestId": "00000000-0000-4000-8000-000000000315",
+      "originalCommand": [
+        "/Applications/Orca.app/Contents/Resources/bin/orca",
+        "orchestration",
+        "check",
+        "--terminal",
+        "term_00000000-0000-4000-8000-000000000999",
+        "--run",
+        "run_000000000999",
+        "--wait",
+        "--types",
+        "worker_done,escalation,question",
+        "--timeout-ms",
+        "1000",
+        "--json",
+        "--full"
+      ]
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

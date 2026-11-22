@@ -1,0 +1,11 @@
+{
+  "id": "00000000-0000-4000-8000-000000000770",
+  "ok": false,
+  "error": {
+    "code": "runtime_error",
+    "message": "The worker inventory changed destructively while paging. Restart without --cursor."
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

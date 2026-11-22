@@ -1,0 +1,179 @@
+{
+  "id": "00000000-0000-4000-8000-000000000500",
+  "ok": true,
+  "result": {
+    "worktrees": [
+      {
+        "id": "00000000-0000-4000-8000-000000000501::/Users/kiln/Library/Application Support/kiln-orca/repos/1/target",
+        "identity": {
+          "key": "wt2:local:00000000-0000-4000-8000-000000000502",
+          "executionHostId": "local",
+          "instanceId": "00000000-0000-4000-8000-000000000502"
+        },
+        "instanceId": "00000000-0000-4000-8000-000000000502",
+        "repoId": "00000000-0000-4000-8000-000000000501",
+        "projectId": "repo:00000000-0000-4000-8000-000000000501",
+        "hostId": "local",
+        "projectHostSetupId": "00000000-0000-4000-8000-000000000501",
+        "path": "/Users/kiln/Library/Application Support/kiln-orca/repos/1/target",
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "branch": "refs/heads/main",
+        "isBare": false,
+        "isMainWorktree": true,
+        "displayName": "main",
+        "displayNameMode": "automatic",
+        "comment": "",
+        "linkedIssue": null,
+        "linkedPR": null,
+        "linkedLinearIssue": null,
+        "linkedLinearIssueWorkspaceId": null,
+        "linkedLinearIssueOrganizationUrlKey": null,
+        "linkedGitLabMR": null,
+        "linkedGitLabIssue": null,
+        "linkedBitbucketPR": null,
+        "linkedAzureDevOpsPR": null,
+        "linkedGiteaPR": null,
+        "linkedWorkItem": null,
+        "linkedTaskSourceContext": null,
+        "isArchived": false,
+        "isUnread": false,
+        "isPinned": false,
+        "sortOrder": 1794761621322,
+        "lastActivityAt": 1794816804421,
+        "workspaceStatus": "in-progress",
+        "parentWorktreeId": null,
+        "childWorktreeIds": [],
+        "lineage": null,
+        "git": {
+          "path": "/Users/kiln/Library/Application Support/kiln-orca/repos/1/target",
+          "head": "0123456789abcdef0123456789abcdef01234567",
+          "branch": "refs/heads/main",
+          "isBare": false,
+          "isMainWorktree": true
+        },
+        "linkedItems": []
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000501::/Users/kiln/Library/Application Support/kiln-orca/tasks/9155/head",
+        "identity": {
+          "key": "wt2:local:00000000-0000-4000-8000-000000000503",
+          "executionHostId": "local",
+          "instanceId": "00000000-0000-4000-8000-000000000503"
+        },
+        "instanceId": "00000000-0000-4000-8000-000000000503",
+        "repoId": "00000000-0000-4000-8000-000000000501",
+        "projectId": "repo:00000000-0000-4000-8000-000000000501",
+        "hostId": "local",
+        "projectHostSetupId": "00000000-0000-4000-8000-000000000501",
+        "path": "/Users/kiln/Library/Application Support/kiln-orca/tasks/9155/head",
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "branch": "",
+        "isBare": false,
+        "isMainWorktree": false,
+        "displayName": "target",
+        "displayNameMode": "automatic",
+        "comment": "",
+        "linkedIssue": null,
+        "linkedPR": null,
+        "linkedLinearIssue": null,
+        "linkedLinearIssueWorkspaceId": null,
+        "linkedLinearIssueOrganizationUrlKey": null,
+        "linkedGitLabMR": null,
+        "linkedGitLabIssue": null,
+        "linkedBitbucketPR": null,
+        "linkedAzureDevOpsPR": null,
+        "linkedGiteaPR": null,
+        "linkedWorkItem": null,
+        "linkedTaskSourceContext": null,
+        "isArchived": false,
+        "isUnread": false,
+        "isPinned": false,
+        "sortOrder": 1794712523434,
+        "lastActivityAt": 0,
+        "workspaceStatus": "in-progress",
+        "parentWorktreeId": null,
+        "childWorktreeIds": [],
+        "lineage": null,
+        "git": {
+          "path": "/Users/kiln/Library/Application Support/kiln-orca/tasks/9155/head",
+          "head": "0123456789abcdef0123456789abcdef01234567",
+          "branch": "",
+          "isBare": false,
+          "isMainWorktree": false
+        },
+        "linkedItems": []
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000501::/Users/kiln/orca/workspaces/target/kiln-a9155-e1",
+        "identity": {
+          "key": "wt2:local:00000000-0000-4000-8000-000000000504",
+          "executionHostId": "local",
+          "instanceId": "00000000-0000-4000-8000-000000000504"
+        },
+        "instanceId": "00000000-0000-4000-8000-000000000504",
+        "repoId": "00000000-0000-4000-8000-000000000501",
+        "projectId": "repo:00000000-0000-4000-8000-000000000501",
+        "hostId": "local",
+        "projectHostSetupId": "00000000-0000-4000-8000-000000000501",
+        "creatorProvenance": {
+          "kind": "host"
+        },
+        "path": "/Users/kiln/orca/workspaces/target/kiln-a9155-e1",
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "branch": "refs/heads/kiln/kiln-a9155-e1",
+        "isBare": false,
+        "isMainWorktree": false,
+        "displayName": "kiln-a9155-e1",
+        "displayNameMode": "fixed",
+        "comment": "kiln:attempt=9155;epoch=1;task=1;kind=review",
+        "linkedIssue": null,
+        "linkedPR": null,
+        "linkedLinearIssue": null,
+        "linkedLinearIssueWorkspaceId": null,
+        "linkedLinearIssueOrganizationUrlKey": null,
+        "linkedGitLabMR": null,
+        "linkedGitLabIssue": null,
+        "linkedBitbucketPR": null,
+        "linkedAzureDevOpsPR": null,
+        "linkedGiteaPR": null,
+        "linkedWorkItem": null,
+        "linkedTaskSourceContext": null,
+        "isArchived": false,
+        "isUnread": false,
+        "isPinned": false,
+        "sortOrder": 1794786169766,
+        "lastActivityAt": 1794816809809,
+        "createdAt": 1794816809809,
+        "cliProvenance": {
+          "kind": "created-by-cli",
+          "createdAt": 1794816809580,
+          "callerTerminalHandle": "structworker_00000000-0000-4000-8000-000000000505"
+        },
+        "baseRef": "0123456789abcdef0123456789abcdef01234567",
+        "workspaceStatus": "in-progress",
+        "parentWorktreeId": null,
+        "childWorktreeIds": [],
+        "lineage": null,
+        "git": {
+          "path": "/Users/kiln/orca/workspaces/target/kiln-a9155-e1",
+          "head": "0123456789abcdef0123456789abcdef01234567",
+          "branch": "refs/heads/kiln/kiln-a9155-e1",
+          "isBare": false,
+          "isMainWorktree": false
+        },
+        "linkedItems": []
+      }
+    ],
+    "hostScope": {
+      "hostIds": [
+        "local"
+      ],
+      "omittedHostIds": []
+    },
+    "totalCount": 3,
+    "truncated": false
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000506"
+  }
+}

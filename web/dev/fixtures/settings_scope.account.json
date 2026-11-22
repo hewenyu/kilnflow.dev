@@ -1,0 +1,51 @@
+{
+ "Page": "settings_scope",
+ "Title": "acme",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "vars",
+  "Account": "acme",
+  "Repo": "",
+  "Env": "",
+  "Label": "acme",
+  "Kind": "owner",
+  "KindLabel": "账号级（账号下的所有仓库可见）",
+  "Environment": null,
+  "Vars": [
+   {
+    "Name": "PUBLIC_REPO",
+    "Value": "acme/kiln"
+   }
+  ],
+  "Secrets": [
+   {
+    "Name": "UPLOAD_TOKEN",
+    "UpdatedBy": "octocat",
+    "UpdatedAt": "2026-11-04T11:20:00+08:00",
+    "Version": 3
+   }
+  ],
+  "Docker": false,
+  "DockerURL": "",
+  "EnvForm": {
+   "Values": {},
+   "Errors": {},
+   "Failed": false
+  },
+  "CrumbLabel": "变量与密钥",
+  "CrumbURL": "/settings/variables",
+  "URL": "/settings/scope?account=acme",
+  "Query": "account=acme"
+ }
+}

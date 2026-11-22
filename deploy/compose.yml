@@ -1,0 +1,38 @@
+# VPS 部署：Postgres + kiln-server。HTTPS 由前面的反向代理（Caddy 等）负责。
+#   cp server.env.example server.env  # 填好后
+#   docker compose up -d
+#
+# 容器的输出由 docker 保存：每个容器最多 5 个 20MB 的文件，写满后删除最旧的（docker 只能按大小轮转）。
+# 构建日志、产物等过程数据由 kiln-server 自己清理（KILN_RETENTION，默认 12 小时）。
+x-logging: &logging
+  driver: local
+  options: { max-size: 20m, max-file: "5" }
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: kiln
+      POSTGRES_PASSWORD: kiln
+      POSTGRES_DB: kiln
+    volumes: [db:/var/lib/postgresql/data]
+    restart: unless-stopped
+    logging: *logging
+  server:
+    image: hewenyulucky/kilnflow:latest   # linux/arm64、linux/amd64；没有镜像时用 docker compose up --build 从源码构建
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    env_file: server.env
+    environment:
+      KILN_DATABASE_URL: postgres://kiln:kiln@db:5432/kiln?sslmode=disable
+      KILN_LISTEN: ":8080"
+      KILN_DATA_DIR: /data
+      KILN_GITHUB_PRIVATE_KEY_FILE: /secrets/github-app.pem
+    volumes:
+      - data:/data
+      - ./github-app.pem:/secrets/github-app.pem:ro
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on: [db]
+    restart: unless-stopped
+    logging: *logging
+volumes:
+  db: {}
+  data: {}

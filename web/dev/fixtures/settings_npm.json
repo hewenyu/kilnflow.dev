@@ -1,0 +1,38 @@
+{
+ "Page": "settings_npm",
+ "Title": "npm · acme",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Section": "conn",
+  "Npm": {
+   "Account": "acme",
+   "Config": {
+    "Scope": "@acme",
+    "Registry": "https://registry.npmjs.org/",
+    "UpdatedBy": "octocat",
+    "UpdatedAt": "2026-11-06T21:40:00+08:00"
+   },
+   "URL": "/settings/npm?account=acme"
+  },
+  "Form": {
+   "Values": {
+    "scope": "@acme",
+    "registry": "https://registry.npmjs.org/"
+   },
+   "Errors": {},
+   "Failed": false
+  },
+  "DefaultRegistry": "https://registry.npmjs.org/"
+ }
+}

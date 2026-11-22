@@ -1,0 +1,19 @@
+# 由 `kiln runtime lock` 根据 go.mod、package.json 等文件生成，请勿手工修改（PLAN #12.3）
+# v0：digest 为上游发行包的 sha256
+
+[go]
+version = "1.27.3"
+"darwin/arm64" = "sha256:dd3908cf20959d798c1e06ebe5b72213f0505ce01373b40ce3110975a6cd99c2"
+"linux/amd64" = "sha256:65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40"
+"linux/arm64" = "sha256:a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49"
+
+[node]
+version = "26.13.1"
+"darwin/arm64" = "sha256:aec2514ea1ceb2ba52455e9ec65986f6749a06dd759e5db2a72e6889668c9735"
+"linux/amd64" = "sha256:518674de2b621728a5e4486f5fb3b7d2900bb3cc4aa97969edaa463db99f9778"
+
+[pnpm]
+version = "12.14.0"
+"darwin/arm64" = "sha256:06136920c9cccad4f615bb080e054d9ac086fedfc32497bd87a892b7a4586f6f"
+"linux/amd64" = "sha256:1de98ed2e9621113b0887b06322b461efb9df73d913fc1d151039b10b7117a41"
+"linux/arm64" = "sha256:e7ca24224eb626a032828ec584c67903ad2f389911b849d009ed70a19f70d8d3"

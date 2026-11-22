@@ -1,0 +1,39 @@
+{
+  "id": "00000000-0000-4000-8000-000000000046",
+  "ok": true,
+  "result": {
+    "runId": "run_000000000001",
+    "deliveryId": "delivery_000000000002",
+    "messages": [
+      {
+        "id": "msg_000000000002",
+        "run_id": "run_000000000001",
+        "delivery_contract": "current_delivery",
+        "from_handle": "dispatch:ctx_000000000004",
+        "to_handle": "run:run_000000000001",
+        "subject": "Question",
+        "body": "冒烟测试提问：收到回复后我将直接发送 worker_done，可以吗？",
+        "type": "question",
+        "priority": "normal",
+        "thread_id": "msg_000000000002",
+        "payload": "{\"taskId\":\"task_000000000004\",\"dispatchId\":\"ctx_000000000004\",\"question\":\"冒烟测试提问：收到回复后我将直接发送 worker_done，可以吗？\",\"options\":[]}",
+        "created_at": "2026-11-14T11:19:07Z",
+        "delivered_at": null
+      }
+    ],
+    "count": 1,
+    "replayed": false,
+    "deliveryAcknowledged": true,
+    "acknowledged": null,
+    "timedOut": false,
+    "cancelled": false,
+    "connectionLost": false,
+    "mutation": {
+      "requestId": "00000000-0000-4000-8000-000000000047",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

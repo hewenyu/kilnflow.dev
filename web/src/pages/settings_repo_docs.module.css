@@ -1,0 +1,47 @@
+/* 设置 · 仓库 · 外部文档（settings_repo_docs.tsx）。 */
+.block > * + * {
+  margin-top: 8px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.kv dt {
+  color: var(--fgColor-muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin-top: 2px;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.ext {
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.failed {
+  color: var(--fgColor-danger);
+}
+
+@media (max-width: 767px) {
+  .kv {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .kv dd + dt {
+    margin-top: 8px;
+  }
+}

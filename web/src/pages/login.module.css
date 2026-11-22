@@ -1,0 +1,69 @@
+/* 登录页：GitHub 登录页的布局——居中的标识和标题、浅灰底的表单框、下方的说明框。 */
+.page {
+  padding-top: 8vh;
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+  color: var(--fgColor-default);
+}
+
+.title {
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: -0.5px;
+  text-align: center;
+}
+
+.box {
+  padding: 16px;
+  background-color: var(--bgColor-muted);
+  border: 1px solid var(--borderColor-muted);
+  border-radius: 6px;
+}
+
+.box > * + * {
+  margin-top: 16px;
+}
+
+.lead {
+  margin: 0;
+  color: var(--fgColor-muted);
+  text-align: center;
+}
+
+.callout {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--borderColor-default);
+  border-radius: 6px;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.callout p {
+  margin: 0;
+}
+
+.summary {
+  cursor: pointer;
+  color: var(--fgColor-accent);
+  font-size: 12px;
+  list-style-position: inside;
+}
+
+.tokenForm {
+  margin-top: 12px;
+}
+
+.tokenForm > * + * {
+  margin-top: 12px;
+}
+
+.notice {
+  margin-bottom: 16px;
+}

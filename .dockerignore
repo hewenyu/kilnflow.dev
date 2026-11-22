@@ -1,0 +1,5 @@
+# 镜像构建（deploy/Dockerfile）不需要的本地文件：前端依赖和构建产物在镜像中重新生成。
+web/node_modules
+internal/server/web/ui/dist
+dist
+kiln-data

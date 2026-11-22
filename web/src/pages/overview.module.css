@@ -1,0 +1,207 @@
+/* 总览：主栏是 run 列表（Box），右侧栏像 GitHub 仓库页的 About / Languages。 */
+.page > * + * {
+  margin-top: 24px;
+}
+
+.muted {
+  margin: 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+/* 初始设置清单 */
+.setupBar {
+  border-radius: 0;
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.steps li:first-child {
+  border-top: 0;
+}
+
+.stepText p {
+  margin: 2px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.stepDone .stepText b {
+  color: var(--fgColor-muted);
+  font-weight: 400;
+}
+
+.okIcon {
+  color: var(--fgColor-success);
+}
+
+.todoIcon {
+  color: var(--fgColor-muted);
+}
+
+/* 主栏和右侧栏 */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 296px;
+  gap: 24px;
+  align-items: start;
+}
+
+.main {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.more {
+  font-size: 12px;
+}
+
+.aside {
+  min-width: 0;
+}
+
+.side + .side {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.sideTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sideTitle a {
+  color: var(--fgColor-default);
+}
+
+.sideTitle a:hover {
+  color: var(--fgColor-accent);
+}
+
+.sideCount {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.rate {
+  margin: 0 0 8px;
+  color: var(--fgColor-muted);
+}
+
+.rate b {
+  color: var(--fgColor-default);
+  font-weight: 600;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 6px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.legend a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fgColor-default);
+}
+
+.legend a:hover {
+  color: var(--fgColor-accent);
+  text-decoration: none;
+}
+
+.legendLabel {
+  font-weight: 600;
+}
+
+.legend .num {
+  color: var(--fgColor-muted);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.runners {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runners li {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.runnerIcon {
+  padding-top: 2px;
+}
+
+.runnerText {
+  min-width: 0;
+}
+
+.runnerName {
+  color: var(--fgColor-default);
+  font-weight: 600;
+}
+
+.runnerText p {
+  margin: 2px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1011px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .steps li {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  .steps li > :last-child:not(.stepText) {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

@@ -1,0 +1,13 @@
+.fieldset {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--borderColor-default);
+  border-radius: 6px;
+}
+
+.legend {
+  padding: 0 4px;
+  font-weight: 600;
+}

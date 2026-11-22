@@ -1,0 +1,66 @@
+{
+ "Page": "runners",
+ "Title": "Runners",
+ "Nav": "runners",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 0,
+ "Flash": "",
+ "Data": {
+  "Runners": null,
+  "Counts": {
+   "Total": 0,
+   "Online": 0,
+   "Accepting": 0,
+   "Paused": 0,
+   "Offline": 0,
+   "Revoked": 0,
+   "Jobs": 0
+  },
+  "State": "",
+  "Pool": "",
+  "States": [
+   {
+    "Value": "online",
+    "Label": "在线"
+   },
+   {
+    "Value": "accepting",
+    "Label": "在线并接单"
+   },
+   {
+    "Value": "paused",
+    "Label": "已暂停接单"
+   },
+   {
+    "Value": "busy",
+    "Label": "正在执行任务"
+   },
+   {
+    "Value": "offline",
+    "Label": "离线"
+   },
+   {
+    "Value": "revoked",
+    "Label": "已吊销"
+   }
+  ],
+  "Pools": [
+   "default"
+  ],
+  "Self": "/runners",
+  "Now": "2026-11-05T04:55:46-08:00",
+  "OfflineAfter": "2 分钟",
+  "LeaseTTL": "1 分钟",
+  "LongPoll": "25 秒",
+  "Filtered": false,
+  "StateLabel": ""
+ }
+}

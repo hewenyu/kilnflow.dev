@@ -1,0 +1,62 @@
+/* run 和 job 详情页的标题区：位置，下面是状态图标、标题和右侧的操作，底部一条分隔线。 */
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--fgColor-muted);
+  font-size: 14px;
+}
+
+.crumbs a {
+  color: var(--fgColor-accent);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.titleRow {
+  display: flex;
+  flex: 1 1 360px;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.icon {
+  display: inline-flex;
+}
+
+.title {
+  margin: 0;
+  min-width: 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.id {
+  color: var(--fgColor-muted);
+  font-weight: 300;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 767px) {
+  .title {
+    font-size: 20px;
+  }
+}

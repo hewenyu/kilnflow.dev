@@ -1,0 +1,43 @@
+{
+  "id": "00000000-0000-4000-8000-000000000066",
+  "ok": true,
+  "result": {
+    "message": {
+      "id": "msg_000000000006",
+      "run_id": "run_000000000001",
+      "delivery_contract": "current_delivery",
+      "from_handle": "run:run_000000000001",
+      "to_handle": "dispatch:ctx_000000000004",
+      "subject": "Re: Question",
+      "body": "这个问题不会有人回答：Kiln 的任务没有人值守。请按任务说明自行决定，并用任务说明中的 kiln-orca task 命令与 Kiln 交互（领取、校验、交付、查询 CI）；有疑问的决定记录在报告中。确实无法继续时，按任务说明写出报告（说明受阻的原因）后发送 worker_done 结束。",
+      "type": "status",
+      "priority": "normal",
+      "thread_id": "msg_000000000002",
+      "payload": null,
+      "created_at": "2026-11-14T11:19:07Z",
+      "delivered_at": "2026-11-14T11:19:07Z"
+    },
+    "question": {
+      "message_id": "msg_000000000002",
+      "run_id": "run_000000000001",
+      "dispatch_id": "ctx_000000000004",
+      "asker_handle": "structworker_00000000-0000-4000-8000-000000000064",
+      "status": "answered",
+      "answer_message_id": "msg_000000000006",
+      "answer_body": "这个问题不会有人回答：Kiln 的任务没有人值守。请按任务说明自行决定，并用任务说明中的 kiln-orca task 命令与 Kiln 交互（领取、校验、交付、查询 CI）；有疑问的决定记录在报告中。确实无法继续时，按任务说明写出报告（说明受阻的原因）后发送 worker_done 结束。",
+      "answered_by_generation": 1,
+      "created_at": "2026-11-14T11:19:07Z",
+      "answered_at": "2026-11-14T11:19:07Z",
+      "closed_at": null
+    },
+    "duplicate": true,
+    "next": "Finish the rest of your mail.",
+    "mutation": {
+      "requestId": "00000000-0000-4000-8000-000000000067",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000001"
+  }
+}

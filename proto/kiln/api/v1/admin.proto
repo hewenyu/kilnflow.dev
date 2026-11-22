@@ -1,0 +1,1222 @@
+syntax = "proto3";
+
+package kiln.api.v1;
+
+// AdminService 供 kiln CLI 使用（Dashboard 目前由 Server 直接渲染页面）。
+// 认证：Authorization: Bearer <KILN_ADMIN_TOKEN>。管理员绑定了 GitHub 账号后，CLI 的操作在审计日志中记为该账号。
+service AdminService {
+  // GetAdminBinding 返回管理员绑定的 GitHub 账号，以及 Dashboard 是否允许用 admin token 登录。
+  rpc GetAdminBinding(GetAdminBindingRequest) returns (GetAdminBindingResponse);
+  // SetTokenLogin 开启或关闭 Dashboard 的 admin token 登录；关闭前必须先绑定 GitHub 账号。CLI 不受影响。
+  rpc SetTokenLogin(SetTokenLoginRequest) returns (SetTokenLoginResponse);
+  // UnbindAdmin 解除管理员绑定的 GitHub 账号，同时恢复 Dashboard 的 admin token 登录。
+  rpc UnbindAdmin(UnbindAdminRequest) returns (UnbindAdminResponse);
+
+  rpc CreateEnrollToken(CreateEnrollTokenRequest) returns (CreateEnrollTokenResponse);
+  // ListRunners 返回 CI Runner（kiln-runner）；AI Runner 见 ListAIRunners（PLAN #30.9）。
+  rpc ListRunners(ListRunnersRequest) returns (ListRunnersResponse);
+  rpc ListAIRunners(ListAIRunnersRequest) returns (ListAIRunnersResponse);
+  rpc RevokeRunner(RevokeRunnerRequest) returns (RevokeRunnerResponse);
+  // DeleteRunner 删除已吊销、没有未结束任务的 Runner：从列表中移除，名称可以重新注册；它的尝试记录保留并记下名称。
+  rpc DeleteRunner(DeleteRunnerRequest) returns (DeleteRunnerResponse);
+  rpc DrainRunner(DrainRunnerRequest) returns (DrainRunnerResponse);
+  // GetRunnerCache 返回 Runner 最近一次上报的缓存清单、上一次清理的结果和清理请求（PLAN #8.3）。
+  rpc GetRunnerCache(GetRunnerCacheRequest) returns (GetRunnerCacheResponse);
+  // PurgeRunnerCache 预览（dry_run）或发起一次缓存清理：Runner 在没有正在执行的 job 时执行。
+  rpc PurgeRunnerCache(PurgeRunnerCacheRequest) returns (PurgeRunnerCacheResponse);
+
+  rpc ListRepos(ListReposRequest) returns (ListReposResponse);
+  // SyncInstallations 刷新仓库目录：列出 App 的 installation 和仓库（不读取分支、tag、PR）。只在用户显式操作时调用。
+  rpc SyncInstallations(SyncInstallationsRequest) returns (SyncInstallationsResponse);
+  // ReconcileRepo 对一个仓库补对账：比较它的分支、tag 和打开的 PR，补上漏掉的 webhook（PLAN #7.3）。
+  rpc ReconcileRepo(ReconcileRepoRequest) returns (ReconcileRepoResponse);
+  rpc BumpCacheSalt(BumpCacheSaltRequest) returns (BumpCacheSaltResponse);
+
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+  rpc RerunRun(RerunRunRequest) returns (RerunRunResponse);
+  rpc RerunJob(RerunJobRequest) returns (RerunJobResponse);
+  rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+  // TriggerAIReview 手动触发一次 AI 审计：审计指定的 commit（ref 或 sha），仓库需要有 .kiln/agent/config.yml。
+  rpc TriggerAIReview(TriggerAIReviewRequest) returns (TriggerAIReviewResponse);
+  // AI 请求（审计、开发，PLAN #30.9）：列出、详情（含各平台任务）、取消、重跑审计请求、读取任务的日志。
+  rpc ListAIRequests(ListAIRequestsRequest) returns (ListAIRequestsResponse);
+  rpc GetAIRequest(GetAIRequestRequest) returns (GetAIRequestResponse);
+  rpc CancelAIRequest(CancelAIRequestRequest) returns (CancelAIRequestResponse);
+  rpc RerunAIRequest(RerunAIRequestRequest) returns (RerunAIRequestResponse);
+  rpc GetAITaskLog(GetAITaskLogRequest) returns (GetAITaskLogResponse);
+  // AI 开发（PLAN #26.11）：从 GitHub 全量同步任务池、暂停 / 恢复仓库的新领取、列出工作项、终止或重试一个工作项。
+  rpc SyncAIDev(SyncAIDevRequest) returns (SyncAIDevResponse);
+  rpc PauseAIDev(PauseAIDevRequest) returns (PauseAIDevResponse);
+  rpc ListWorkItems(ListWorkItemsRequest) returns (ListWorkItemsResponse);
+  rpc StopWorkItem(StopWorkItemRequest) returns (StopWorkItemResponse);
+  rpc RetryWorkItem(RetryWorkItemRequest) returns (RetryWorkItemResponse);
+  rpc GetJobLog(GetJobLogRequest) returns (GetJobLogResponse);
+
+  rpc SetSecret(SetSecretRequest) returns (SetSecretResponse);
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  rpc SetVariable(SetVariableRequest) returns (SetVariableResponse);
+  rpc DeleteVariable(DeleteVariableRequest) returns (DeleteVariableResponse);
+  rpc ListVariables(ListVariablesRequest) returns (ListVariablesResponse);
+  rpc UpsertEnvironment(UpsertEnvironmentRequest) returns (UpsertEnvironmentResponse);
+  rpc DeleteEnvironment(DeleteEnvironmentRequest) returns (DeleteEnvironmentResponse);
+  rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
+  // 账号级 npm 配置（PLAN #27.2）：release.npm 发布到 @<scope>/<name>，token 只写不读。
+  rpc SetNpmAccount(SetNpmAccountRequest) returns (SetNpmAccountResponse);
+  rpc DeleteNpmAccount(DeleteNpmAccountRequest) returns (DeleteNpmAccountResponse);
+  rpc ListNpmAccounts(ListNpmAccountsRequest) returns (ListNpmAccountsResponse);
+
+  // 外部设计文档绑定：把仓库关联到第三方文档集（首期 Outline），API token 只写不读、由 Server 加密保存。
+  rpc ListDocBindings(ListDocBindingsRequest) returns (ListDocBindingsResponse);
+  rpc BindDocCollection(BindDocCollectionRequest) returns (BindDocCollectionResponse);
+  rpc UnbindDocCollection(UnbindDocCollectionRequest) returns (UnbindDocCollectionResponse);
+
+  // 待决策清单：AI 开发的决策疑难点单向同步到一篇独立的 Outline 文档。
+  rpc SetDecisionDoc(SetDecisionDocRequest) returns (SetDecisionDocResponse);
+  rpc ClearDecisionDoc(ClearDecisionDocRequest) returns (ClearDecisionDocResponse);
+  rpc ListDecisionDocs(ListDecisionDocsRequest) returns (ListDecisionDocsResponse);
+  rpc ListDecisionSyncs(ListDecisionSyncsRequest) returns (ListDecisionSyncsResponse);
+  // ReconcileDecisionSync 对 unknown / attempted 的条目做一次只读查证，绝不重写文档。
+  rpc ReconcileDecisionSync(ReconcileDecisionSyncRequest) returns (ReconcileDecisionSyncResponse);
+  // ResolveDecisionSync 人工把 unknown 的条目结案为 delivered / cancelled，必须写明原因。
+  rpc ResolveDecisionSync(ResolveDecisionSyncRequest) returns (ResolveDecisionSyncResponse);
+
+  // 合并队列（PLAN #28）：入队和移除等同于给 PR 加上、去掉 label kiln:merge。
+  rpc ListMergeQueue(ListMergeQueueRequest) returns (ListMergeQueueResponse);
+  rpc AddToMergeQueue(AddToMergeQueueRequest) returns (AddToMergeQueueResponse);
+  rpc RemoveFromMergeQueue(RemoveFromMergeQueueRequest) returns (RemoveFromMergeQueueResponse);
+
+  // 自动打 tag（PLAN #29.4）：合并进默认分支的 commit 打 tag 的记录；失败或跳过的可以重试。
+  rpc ListAutoTags(ListAutoTagsRequest) returns (ListAutoTagsResponse);
+  rpc RetryAutoTag(RetryAutoTagRequest) returns (RetryAutoTagResponse);
+
+  // Runner 自升级（PLAN #27.13）：管理员按台请求升级到 Runner 上报的最新版本。
+  rpc GetRunnerUpgrade(GetRunnerUpgradeRequest) returns (GetRunnerUpgradeResponse);
+  // SetRunnerUpgradeRegistry 设置 Runner 查询和下载升级包用的 registry（空表示官方 registry）。
+  rpc SetRunnerUpgradeRegistry(SetRunnerUpgradeRegistryRequest) returns (SetRunnerUpgradeRegistryResponse);
+  // RequestRunnerUpgrade 请求把一台 Runner 升级到它上报的最新版本；已有进行中的请求时返回那一个。
+  rpc RequestRunnerUpgrade(RequestRunnerUpgradeRequest) returns (RequestRunnerUpgradeResponse);
+  // CancelRunnerUpgrade 取消一台 Runner 进行中（还没有切换）的升级请求。
+  rpc CancelRunnerUpgrade(CancelRunnerUpgradeRequest) returns (CancelRunnerUpgradeResponse);
+  // CheckRunnerUpgrade 让 Runner 立即查询最新版本（runner 为空表示全部没有吊销的 Runner）。
+  rpc CheckRunnerUpgrade(CheckRunnerUpgradeRequest) returns (CheckRunnerUpgradeResponse);
+
+  rpc ListOutbox(ListOutboxRequest) returns (ListOutboxResponse);
+  rpc RetryOutbox(RetryOutboxRequest) returns (RetryOutboxResponse);
+}
+
+message CreateEnrollTokenRequest {
+  string pool = 1;
+  int32 ttl_minutes = 2;
+  // 注册的 Runner 类型：ci（默认，kiln-runner）或 ai（kiln-orca）。
+  string kind = 3;
+  // AI Runner 的角色：review（默认，审计）或 development（开发）；CI Runner 不能设置（PLAN #26.7）。
+  string role = 4;
+}
+
+message CreateEnrollTokenResponse {
+  string token = 1;
+  int64 expires_at = 2;
+}
+
+message Runner {
+  int64 id = 1;
+  string name = 2;
+  string pool = 3;
+  repeated string platforms = 4;
+  repeated string executors = 5;
+  string version = 6;
+  string state = 7;
+  int64 last_seen_at = 8;
+  int32 running_jobs = 9;
+  map<string, string> host_fingerprint = 10;
+  // 静态规格与容量（PLAN #8.6）；旧版 Runner 没有上报时为空。
+  RunnerCapacity capacity = 11;
+  // 本地缓存的总大小和最近一次上报的时间（Unix 秒，0 表示没有上报过）。
+  int64 cache_bytes = 12;
+  int64 cache_reported_at = 13;
+  // 总是 ci（AI Runner 见 AIRunner）。
+  string kind = 14;
+  // 自升级（PLAN #27.6）。
+  RunnerUpgradeInfo upgrade = 15;
+  // AI 的字段移到 AIRunner（PLAN #30.9）。
+  reserved 16, 17, 18;
+  reserved "role", "ai_protocol", "agents";
+}
+
+// AIRunner 是一个 AI 执行节点（执行机器上的 Orca Server + kiln-orca 连接器，PLAN #33）。
+message AIRunner {
+  int64 id = 1;
+  string name = 2;
+  // review（审计）或 development（开发）。
+  string role = 3;
+  // 连接器（kiln-orca）的版本。
+  string version = 4;
+  // 显示状态：active、draining、offline、revoked（与 Runner.state 相同）。
+  string state = 5;
+  int64 last_seen_at = 6;
+  string platform = 7;
+  // 上报的 AI 协议版本；needs_upgrade 表示不是 Server 支持的版本（不派任务）。
+  int32 protocol = 8;
+  bool needs_upgrade = 9;
+  // 机器标识（展示用，不参与调度）。
+  string host_id = 10;
+  // Herdr 已经退役（PLAN #33.6）：原来的 11、12 号字段保留给 Orca 的状态。
+  reserved 11, 12;
+  reserved "herdr_state", "herdr_reason";
+  string docker_state = 13;
+  string docker_reason = 14;
+  // 执行中的任务数。
+  int32 running = 15;
+  repeated AIRunnerAgent agents = 16;
+  // 按台升级已经去掉（连接器用 npm 升级，PLAN #33.3）。
+  reserved 17;
+  reserved "upgrade";
+  // 同时执行的任务数上限（连接器配置 max_tasks）；running >= capacity 时不派任务。
+  int32 capacity = 18;
+  // Orca Server 的就绪状态（ready、unavailable、unknown）和原因，以及它的版本和 runtime id。
+  string orca_state = 19;
+  string orca_reason = 20;
+  string orca_version = 21;
+  string orca_runtime_id = 22;
+}
+
+// AIRunnerAgent 是 AI Runner 上的一个 Agent（Runner 配置为提供的）。
+message AIRunnerAgent {
+  // Agent ID（codex、claude-code）和显示名。
+  string agent = 1;
+  string name = 2;
+  string version = 3;
+  // 显示状态：available、unavailable、not_installed、unknown 等（ai.AgentShow*）。
+  string state = 4;
+  string reason = 5;
+  int64 checked_at = 6;
+  int64 backoff_until = 7;
+}
+
+message ListAIRunnersRequest {}
+
+message ListAIRunnersResponse {
+  repeated AIRunner runners = 1;
+}
+
+// AIRequest 是一个 AI 请求（一次审计或一次开发执行）。
+message AIRequest {
+  int64 id = 1;
+  // review 或 develop。
+  string type = 2;
+  string repo = 3;
+  string event = 4;
+  string ref = 5;
+  string sha = 6;
+  string trigger = 7;
+  string sender = 8;
+  // queued | active | succeeded | failed | cancelled | skipped
+  string state = 9;
+  // 审计的 PR；没有时为 0。
+  int32 pr_number = 10;
+  // 重跑的是哪个请求；首次请求为 0。
+  int64 rerun_of = 11;
+  int64 created_at = 12;
+  int64 finished_at = 13;
+  string config_error = 14;
+}
+
+// AITask 是 AI 请求在一个平台上的一次执行。
+message AITask {
+  int64 id = 1;
+  int64 request_id = 2;
+  string key = 3;
+  string display_name = 4;
+  // 当前 attempt 实际执行的平台（领取时节点上报的，例如 linux/amd64）；还没有领取时为空。
+  string platform = 5;
+  string agent = 6;
+  // waiting | pending | running | succeeded | failed | timed_out | cancelled | skipped
+  string state = 7;
+  string reason = 8;
+  // 沿用的结果来源任务；没有时为 0。
+  int64 reused_from = 9;
+  int32 attempt_count = 10;
+  // 当前 attempt 的 Runner（没有时为空）。
+  string runner = 11;
+  int64 started_at = 12;
+  int64 finished_at = 13;
+  // 当前 attempt 在 Orca 中的执行关联（PLAN #33.4）；任务还没有 attempt 时为空。
+  AIOrca orca = 14;
+  // 当前 attempt 的进度：连接器心跳上报的阶段（prepare、start、running、finishing）和说明。
+  string stage = 15;
+  string text = 16;
+  // 可以执行这个任务的平台（Runner 平台，至少一个）：一组平台时组内任一平台的节点都可以领取（PLAN #26.1）。
+  repeated string platforms = 17;
+}
+
+// AIOrca 是 AI 任务的一次执行在 Orca 中的关联（PLAN #33.4）：用于恢复、取消和从 Dashboard 定位。
+message AIOrca {
+  string runtime_id = 1;
+  string run_id = 2;
+  string task_id = 3;
+  string dispatch_id = 4;
+  string worktree_name = 5;
+  string worktree_path = 6;
+}
+
+message ListAIRequestsRequest {
+  // owner/name；为空表示全部仓库。
+  string repo = 1;
+  // review、develop；为空表示全部。
+  string type = 2;
+  int32 pr_number = 3;
+  string state = 4;
+  int32 limit = 5;
+}
+
+message ListAIRequestsResponse {
+  repeated AIRequest requests = 1;
+}
+
+message GetAIRequestRequest {
+  int64 id = 1;
+}
+
+message GetAIRequestResponse {
+  AIRequest request = 1;
+  repeated AITask tasks = 2;
+}
+
+message CancelAIRequestRequest {
+  int64 id = 1;
+}
+
+message CancelAIRequestResponse {}
+
+message RerunAIRequestRequest {
+  int64 id = 1;
+  // all、failed（默认）或 task（只重跑 task_id）。
+  string mode = 2;
+  int64 task_id = 3;
+}
+
+message RerunAIRequestResponse {
+  // 新的请求。
+  int64 id = 1;
+}
+
+message GetAITaskLogRequest {
+  int64 task_id = 1;
+  // 0 表示当前的 attempt。
+  int64 attempt_id = 2;
+  int64 offset = 3;
+}
+
+message GetAITaskLogResponse {
+  bytes data = 1;
+  int64 next_offset = 2;
+  bool finished = 3;
+}
+
+// RunnerUpgradeInfo 是一台 Runner 的自升级状态（PLAN #27.12–#27.14）。
+message RunnerUpgradeInfo {
+  // Runner 上报的状态（idle、downloading、ready、draining、switching、confirmed、failed、rolled_back、manual）；
+  // 空表示 Runner 没有上报过（版本不支持自升级）。
+  string state = 1;
+  string target = 2;
+  string error = 3;
+  // 经过启动器运行（能切换版本）。
+  bool launcher = 4;
+  reserved 5, 6, 7;
+  reserved "pin", "below_min_version", "assigned";
+  string current = 8;
+  string previous = 9;
+  // config.toml 中 upgrade = false。
+  bool disabled = 10;
+  // 对应的 npm 包、registry 中的最新正式版本、最后一次检查成功的时间（Unix 秒）和最后一次检查的错误。
+  string package = 11;
+  string latest = 12;
+  int64 checked_at = 13;
+  string check_error = 14;
+  // 已经请求检查、Runner 还没有处理。
+  bool check_pending = 15;
+  // 最近一次升级请求（进行中或已结束）；没有时不设置。
+  RunnerUpgradeRequest request = 16;
+  // 现在能否请求升级到 latest；不能时 reason 说明原因（已是最新、需要 service install 等）。
+  bool can_upgrade = 17;
+  string reason = 18;
+}
+
+// RunnerUpgradeRequest 是一次按台升级的请求。
+message RunnerUpgradeRequest {
+  int64 id = 1;
+  // 目标版本和请求时 Runner 的版本（不带 v）。
+  string version = 2;
+  string from_version = 3;
+  // pending | succeeded | failed | cancelled
+  string state = 4;
+  string error = 5;
+  string actor = 6;
+  int64 created_at = 7;
+  // 结束的时间（Unix 秒，0 表示还没有结束）。
+  int64 finished_at = 8;
+}
+
+message ResourceAmount {
+  double cpu = 1;
+  int64 memory_bytes = 2;
+}
+
+message RunnerCapacity {
+  // 机器规格（逻辑 CPU 核数、物理内存）。
+  ResourceAmount machine = 1;
+  // config.toml 中为宿主机预留的资源。
+  ResourceAmount reserved = 2;
+  // 各 executor 的固定上限（host：服务的 cgroup 限制；oci：docker 的规格），字段为 0 表示不限制。
+  map<string, ResourceAmount> executor_limits = 3;
+  int32 max_jobs = 4;
+  // 可以分配给 job 的总量（machine - reserved）。
+  ResourceAmount allocatable = 5;
+  // 正在执行的 job 声明的资源之和。
+  ResourceAmount allocated = 6;
+}
+
+message RunnerCacheEntry {
+  // toolcache | runtime | git | cas | buildkit | work | image | legacy
+  string kind = 1;
+  int64 repo_id = 2;
+  // 所属仓库（owner/name），Kiln 中没有这个仓库时为空。
+  string repo = 3;
+  string platform = 4;
+  string domain = 5;
+  string name = 6;
+  string path = 7;
+  int64 size_bytes = 8;
+  int64 last_used_at = 9;
+  // 按保留策略到期的时间，0 表示没有（CAS 对象各自到期）。
+  int64 expires_at = 10;
+}
+
+message RunnerCacheFailure {
+  string kind = 1;
+  string path = 2;
+  string error = 3;
+}
+
+message RunnerCachePurge {
+  int64 id = 1;
+  string repo = 2;
+  repeated string kinds = 3;
+  string domain = 4;
+  // pending | done
+  string state = 5;
+  string actor = 6;
+  int64 created_at = 7;
+  int64 done_at = 8;
+  int64 removed = 9;
+  int64 removed_bytes = 10;
+  repeated RunnerCacheFailure failures = 11;
+}
+
+message GetRunnerCacheRequest {
+  string name = 1;
+}
+
+message GetRunnerCacheResponse {
+  // 清单生成的时间（Unix 秒），0 表示 Runner 还没有上报过（旧版 Runner 或刚注册）。
+  int64 generated_at = 1;
+  repeated RunnerCacheEntry entries = 2;
+  int64 disk_total_bytes = 3;
+  int64 disk_free_bytes = 4;
+  // 上一次清理（GC 或清理请求）。
+  int64 gc_at = 5;
+  int64 gc_removed = 6;
+  int64 gc_removed_bytes = 7;
+  repeated RunnerCacheFailure gc_failures = 8;
+  // 最近的清理请求（新的在前）。
+  repeated RunnerCachePurge purges = 9;
+}
+
+message PurgeRunnerCacheRequest {
+  string name = 1;
+  // 只清理这个仓库（owner/name）的 toolcache、git 镜像和工作区；为空表示不限仓库。
+  string repo = 2;
+  // 类别（toolcache、runtime、git、cas、buildkit、work、image、legacy），为空表示全部。
+  repeated string kinds = 3;
+  // toolcache 的执行身份（host、oci-root…），为空表示全部。
+  string domain = 4;
+  // 只预览，不发起清理。
+  bool dry_run = 5;
+}
+
+message PurgeRunnerCacheResponse {
+  // 按最近一次上报的清单，范围内会删除的项和总大小。
+  repeated RunnerCacheEntry matched = 1;
+  int64 matched_bytes = 2;
+  // 不在范围内、继续保留的共享缓存（不属于单个仓库：runtime、CAS、镜像等），按各自的到期时间清理。
+  repeated RunnerCacheEntry retained_shared = 3;
+  // 发起的清理请求（dry_run 时为 0）。
+  int64 purge_id = 4;
+  // 说明：Runner 正在执行的 job 数（清理会等它们结束）、清单的时间等。
+  repeated string notes = 5;
+}
+
+message ListRunnersRequest {}
+
+message ListRunnersResponse {
+  repeated Runner runners = 1;
+}
+
+message RevokeRunnerRequest {
+  string name = 1;
+}
+
+message RevokeRunnerResponse {}
+
+message DeleteRunnerRequest {
+  string name = 1;
+}
+
+message DeleteRunnerResponse {}
+
+message DrainRunnerRequest {
+  string name = 1;
+  // false 表示取消 drain。
+  bool drain = 2;
+}
+
+message DrainRunnerResponse {}
+
+message Repo {
+  int64 id = 1;
+  string full_name = 2;
+  int64 installation_id = 3;
+  bool private = 4;
+  string default_branch = 5;
+  bool active = 6;
+}
+
+message ListReposRequest {}
+
+message ListReposResponse {
+  repeated Repo repos = 1;
+}
+
+message SyncInstallationsRequest {}
+
+message SyncInstallationsResponse {
+  int32 installations = 1;
+  int32 repos = 2;
+}
+
+message ReconcileRepoRequest {
+  // owner/name
+  string repo = 1;
+}
+
+message ReconcileRepoResponse {
+  string repo = 1;
+  // 第一次对账：没有记录过的 ref 只记录为基线，不触发构建。
+  bool baseline = 2;
+  int32 branches = 3;
+  int32 tags = 4;
+  int32 pulls = 5;
+  // 补上的 run 数。
+  int32 runs = 6;
+}
+
+message BumpCacheSaltRequest {
+  string repo = 1;
+}
+
+message BumpCacheSaltResponse {}
+
+message Run {
+  int64 id = 1;
+  string repo = 2;
+  string workflow = 3;
+  string event = 4;
+  string ref = 5;
+  string sha = 6;
+  string state = 7;
+  int32 rerun = 8;
+  int64 created_at = 9;
+  string source = 10;
+  string error = 11;
+}
+
+message Job {
+  int64 id = 1;
+  string job_key = 2;
+  string display_name = 3;
+  string state = 4;
+  string kind = 5;
+  string platform = 6;
+  string executor = 7;
+  int64 cached_from_job_id = 8;
+  string runner = 9;
+  int32 attempts = 10;
+  string reason = 11;
+  string action_key = 12;
+  int64 started_at = 13;
+  int64 finished_at = 14;
+  int32 rerun = 15;
+  // 排队中的 job 没有被领取的原因（调度器最近一次跳过它的原因，例如资源不够时需要多少、各 Runner 能提供多少）。
+  string wait_reason = 16;
+}
+
+message ListRunsRequest {
+  string repo = 1;
+  int32 limit = 2;
+}
+
+message ListRunsResponse {
+  repeated Run runs = 1;
+}
+
+message GetRunRequest {
+  int64 id = 1;
+}
+
+message GetRunResponse {
+  Run run = 1;
+  repeated Job jobs = 2;
+}
+
+message CancelRunRequest {
+  int64 id = 1;
+}
+
+message CancelRunResponse {}
+
+message RerunRunRequest {
+  int64 id = 1;
+  // failed（默认）| all | all_no_cache
+  string mode = 2;
+}
+
+message RerunRunResponse {
+  int32 rerun = 1;
+}
+
+message RerunJobRequest {
+  int64 job_id = 1;
+}
+
+message RerunJobResponse {
+  int32 rerun = 1;
+}
+
+message DispatchRequest {
+  string repo = 1;
+  // .kiln/workflows/ 下的文件名，例如 ci.yml。
+  string workflow = 2;
+  // 分支名、tag 名或完整 ref；为空时使用默认分支。
+  string ref = 3;
+  map<string, string> inputs = 4;
+  string request_id = 5;
+}
+
+message DispatchResponse {
+  int64 run_id = 1;
+}
+
+message GetJobLogRequest {
+  int64 job_id = 1;
+  // 0 表示最新的 attempt。
+  int64 attempt_id = 2;
+  int64 offset = 3;
+}
+
+message GetJobLogResponse {
+  bytes data = 1;
+  int64 next_offset = 2;
+  bool finished = 3;
+}
+
+// Scope：只填 account 为账号级；填 repo 为仓库级；再填 environment 为 environment 级。
+// environment 不填 repo 时为账号级 environment。
+message Scope {
+  string account = 1;
+  string repo = 2;
+  string environment = 3;
+}
+
+message SetSecretRequest {
+  Scope scope = 1;
+  string name = 2;
+  string value = 3;
+}
+
+message SetSecretResponse {}
+
+message DeleteSecretRequest {
+  Scope scope = 1;
+  string name = 2;
+}
+
+message DeleteSecretResponse {}
+
+message SecretInfo {
+  string name = 1;
+  int64 updated_at = 2;
+}
+
+message ListSecretsRequest {
+  Scope scope = 1;
+}
+
+message ListSecretsResponse {
+  repeated SecretInfo secrets = 1;
+}
+
+message SetNpmAccountRequest {
+  // 账号登录名（GitHub 用户或组织）。
+  string account = 1;
+  // npm scope，如 @acme（可以不写 @）。
+  string scope = 2;
+  // registry 地址，空表示 https://registry.npmjs.org/。
+  string registry = 3;
+  // 可以免 OTP 发布的 token（granular access token 或 automation token）。
+  string token = 4;
+}
+
+message SetNpmAccountResponse {
+  NpmAccount account = 1;
+}
+
+message DeleteNpmAccountRequest {
+  string account = 1;
+}
+
+message DeleteNpmAccountResponse {}
+
+message ListNpmAccountsRequest {}
+
+message ListNpmAccountsResponse {
+  repeated NpmAccount accounts = 1;
+}
+
+// NpmAccount 是一个账号的 npm 配置（不含 token）。
+message NpmAccount {
+  string account = 1;
+  string scope = 2;
+  string registry = 3;
+  string updated_by = 4;
+  int64 updated_at = 5;
+}
+
+message SetVariableRequest {
+  Scope scope = 1;
+  string name = 2;
+  string value = 3;
+}
+
+message SetVariableResponse {}
+
+message DeleteVariableRequest {
+  Scope scope = 1;
+  string name = 2;
+}
+
+message DeleteVariableResponse {}
+
+message Variable {
+  string name = 1;
+  string value = 2;
+}
+
+message ListVariablesRequest {
+  Scope scope = 1;
+}
+
+message ListVariablesResponse {
+  repeated Variable variables = 1;
+}
+
+message Environment {
+  string name = 1;
+  string account = 2;
+  // 为空表示账号级 environment。
+  string repo = 3;
+  repeated string ref_policy = 4;
+  // 5、6 曾是审批人和等待时间（审批功能已移除，Kiln 只做 CI）。
+  reserved 5, 6;
+  reserved "reviewers", "wait_timer_minutes";
+  repeated string allowed_publish_repos = 7;
+}
+
+message UpsertEnvironmentRequest {
+  Environment environment = 1;
+}
+
+message UpsertEnvironmentResponse {}
+
+message DeleteEnvironmentRequest {
+  Scope scope = 1;
+}
+
+message DeleteEnvironmentResponse {}
+
+message ListEnvironmentsRequest {
+  string account = 1;
+}
+
+message ListEnvironmentsResponse {
+  repeated Environment environments = 1;
+}
+
+message OutboxItem {
+  int64 id = 1;
+  string dedupe_key = 2;
+  string kind = 3;
+  string state = 4;
+  int32 attempts = 5;
+  string last_error = 6;
+  int64 updated_at = 7;
+}
+
+message ListOutboxRequest {
+  // 为空时列出 pending 和 dead。
+  string state = 1;
+}
+
+message ListOutboxResponse {
+  repeated OutboxItem items = 1;
+}
+
+message RetryOutboxRequest {
+  int64 id = 1;
+}
+
+message RetryOutboxResponse {}
+
+message GetAdminBindingRequest {}
+
+message GetAdminBindingResponse {
+  // bound 为 false 表示还没有绑定，此时 Dashboard 总是允许 admin token 登录。
+  bool bound = 1;
+  int64 github_id = 2;
+  string github_login = 3;
+  bool token_login = 4;
+  int64 bound_at = 5;
+  string bound_by = 6;
+}
+
+message SetTokenLoginRequest {
+  bool enabled = 1;
+}
+
+message SetTokenLoginResponse {}
+
+message UnbindAdminRequest {}
+
+message UnbindAdminResponse {}
+
+message TriggerAIReviewRequest {
+  // owner/name
+  string repo = 1;
+  // 分支名、refs/heads/x 或 commit sha；为空时用默认分支。
+  string ref = 2;
+  // 幂等键：同一个 request_id 只创建一个 AI 审计请求。
+  string request_id = 3;
+}
+
+message TriggerAIReviewResponse {
+  reserved 1;
+  reserved "run_id";
+  string sha = 2;
+  // AI 审计请求的 ID（PLAN #30.4）。
+  int64 ai_request_id = 3;
+}
+
+// MergeQueueEntry 是合并队列中的一项（PR 的一次入队）。
+message MergeQueueEntry {
+  int64 id = 1;
+  int32 pr = 2;
+  // queued | merged | removed
+  string state = 3;
+  string head_sha = 4;
+  string enqueued_by = 5;
+  // 当前在等什么（排队中时）。
+  string status = 6;
+  // 出队原因，或者"在队列之外被合并"。
+  string reason = 7;
+  string merge_sha = 8;
+  int64 enqueued_at = 9;
+  int64 finished_at = 10;
+  // 自动出队的类别（PLAN #28.3）：conflict_dev（与目标分支冲突，已交给 AI 开发返修）、conflict_author（冲突，等待提交者
+  // 或人解决）；其他出队为空。
+  string removal = 11;
+  // PR 最近观测到的目标分支（PLAN #28.5）：合并队列按目标分支分别排队。旧记录为空。
+  string base_ref = 12;
+}
+
+message ListMergeQueueRequest {
+  // owner/name
+  string repo = 1;
+}
+
+message ListMergeQueueResponse {
+  // 排队中的项，第一个是队首。
+  repeated MergeQueueEntry queued = 1;
+  // 最近结束（合并或出队）的项，新的在前。
+  repeated MergeQueueEntry recent = 2;
+}
+
+message AddToMergeQueueRequest {
+  string repo = 1;
+  int32 pr = 2;
+}
+
+message AddToMergeQueueResponse {
+  // 为 false 表示 PR 已经在队列中。
+  bool added = 1;
+}
+
+message RemoveFromMergeQueueRequest {
+  string repo = 1;
+  int32 pr = 2;
+}
+
+message RemoveFromMergeQueueResponse {}
+
+// AutoTag 是一个合并进默认分支的 commit 的自动打 tag 记录。
+message AutoTag {
+  int64 id = 1;
+  string sha = 2;
+  int32 pr = 3;
+  repeated string labels = 4;
+  string merged_by = 5;
+  // queue | webhook
+  string source = 6;
+  // pending | tagging | tagged | planned | skipped | failed
+  string state = 7;
+  string tag = 8;
+  string reason = 9;
+  int32 tries = 10;
+  int64 created_at = 11;
+  int64 updated_at = 12;
+  // 认定的 AI 开发工作项（审计关联；没有可信归属时为 0）。
+  int64 work_item_id = 13;
+  // 真实的发布发起者是否是机器人。
+  bool sender_is_bot = 14;
+  // PR 的目标分支（PLAN #29.4）：只有合入发版分支的才会打 tag。旧记录为空。
+  string base_ref = 15;
+}
+
+message ListAutoTagsRequest {
+  string repo = 1;
+  // 最多返回的条数，0 表示默认（50）。
+  int32 limit = 2;
+}
+
+message ListAutoTagsResponse {
+  // 新的在前。
+  repeated AutoTag tags = 1;
+}
+
+message RetryAutoTagRequest {
+  string repo = 1;
+  // commit sha（完整）。
+  string sha = 2;
+}
+
+message RetryAutoTagResponse {}
+
+message GetRunnerUpgradeRequest {}
+
+message GetRunnerUpgradeResponse {
+  // 设置的 registry；为空表示用官方 registry（default_registry）。
+  string registry = 1;
+  string default_registry = 2;
+}
+
+message SetRunnerUpgradeRegistryRequest {
+  // 为空表示恢复为官方 registry。
+  string registry = 1;
+}
+
+message SetRunnerUpgradeRegistryResponse {}
+
+message RequestRunnerUpgradeRequest {
+  // Runner 名称。
+  string runner = 1;
+  // 管理员确认的目标版本（可以带 v）：不为空时必须等于 Runner 现在上报的最新版本，否则拒绝（确认之后 Runner 查到了
+  // 更新的版本），不会升级到没有确认过的版本。为空时升级到 Runner 上报的最新版本。
+  string version = 2;
+}
+
+message RequestRunnerUpgradeResponse {
+  RunnerUpgradeRequest request = 1;
+  // false 表示已有进行中的请求，返回的是那一个。
+  bool created = 2;
+}
+
+message CancelRunnerUpgradeRequest {
+  string runner = 1;
+}
+
+message CancelRunnerUpgradeResponse {
+  RunnerUpgradeRequest request = 1;
+}
+
+message CheckRunnerUpgradeRequest {
+  // Runner 名称；为空表示全部没有吊销的 Runner。
+  string runner = 1;
+}
+
+message CheckRunnerUpgradeResponse {
+  // 请求检查的 Runner 数量。
+  int32 count = 1;
+}
+
+message SyncAIDevRequest {
+  // owner/name
+  string repo = 1;
+}
+
+message SyncAIDevResponse {
+  // GitHub 上打开的、有 kiln:ready 的 Issue 数；complete 为假表示太多没有读完（没读到的不移出任务池）。
+  int32 listed = 1;
+  bool complete = 2;
+  // 任务池中有变化（加入、移出、内容变了）的 Issue 数。
+  int32 changed = 3;
+  // 同步后可选的 Issue 数（有空闲的开发机时开始选题）。
+  int32 candidates = 4;
+}
+
+message PauseAIDevRequest {
+  string repo = 1;
+  // true 暂停新的领取（已有的工作项照常收尾），false 恢复。
+  bool paused = 2;
+}
+
+message PauseAIDevResponse {}
+
+message ListWorkItemsRequest {
+  // 为空时列出全部仓库。
+  string repo = 1;
+  int32 limit = 2;
+}
+
+// WorkItem 是一个 AI 开发工作项（PLAN #26.8）。
+message WorkItem {
+  int64 id = 1;
+  string repo = 2;
+  string state = 3;
+  repeated int32 issues = 4;
+  int32 pr_number = 5;
+  string branch = 6;
+  string head_sha = 7;
+  int32 fix_rounds = 8;
+  int32 max_fix_rounds = 9;
+  string agent = 10;
+  string reason = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+  // 交付改动了敏感路径、提交说明有关闭关键字等，PR 加了 kiln:hold（不自动入队）。
+  bool hold = 14;
+  // 领取之后有 Issue 的标题或正文被修改过。
+  bool requirements_changed = 15;
+  // 阶段（PLAN #31.3）：design | implement；design_first 表示先设计（有设计阶段）；design_pr 是已合并的设计 PR（没有时为 0）；
+  // impl_round 是实现的轮次；round_fixes 是本阶段、本轮因为审计、CI 没有通过的返修轮数，round_conflicts 是冲突返修的轮数
+  // （两者分开计，上限都是 max_fix_rounds，PLAN #26.11）。
+  string phase = 16;
+  bool design_first = 17;
+  int32 design_pr = 18;
+  int32 impl_round = 19;
+  int32 round_fixes = 20;
+  int32 round_conflicts = 21;
+}
+
+message ListWorkItemsResponse {
+  repeated WorkItem items = 1;
+  // 只列一个仓库时是它的 AI 开发占用（PLAN #26.9 I14：同一个仓库按工作项串行）；列全部仓库时没有。
+  RepoOccupancy occupancy = 2;
+}
+
+// RepoOccupancy 是仓库的 AI 开发占用：占用者是未结束的工作项中编号最小的，它合并或终止之后才开始下一项。
+message RepoOccupancy {
+  // 占用者（没有被占用时为 0）。
+  int64 work_item = 1;
+  // 不能开始新的工作项的原因（占用者、阶段 / 状态、它在等什么）；没有被占用时为空。
+  string reason = 2;
+  // 排在占用者之后的未结束的工作项（升级前留下的，按编号）。
+  repeated int64 waiting = 3;
+}
+
+message StopWorkItemRequest {
+  int64 id = 1;
+}
+
+message StopWorkItemResponse {}
+
+message RetryWorkItemRequest {
+  int64 id = 1;
+}
+
+// 返修 job 由仓库的执行者随后规划（与返修相同的路径），不在这里返回。
+message RetryWorkItemResponse {
+  reserved 1;
+  reserved "run_id";
+}
+
+// DocBinding 是仓库与外部文档集的绑定（不含 API token）。
+message DocBinding {
+  // 仓库的 owner/name。
+  string repo = 1;
+  // 文档提供方，首期只有 outline。
+  string provider = 2;
+  // 文档系统地址，例如 https://outline.example.com。
+  string base_url = 3;
+  // 文档集（Outline Collection）的 id 和名称。
+  string collection_id = 4;
+  string collection_name = 5;
+  reserved 6;
+  reserved "hook_enabled";
+  string updated_by = 7;
+  int64 updated_at = 8;
+}
+
+message ListDocBindingsRequest {}
+
+message ListDocBindingsResponse {
+  repeated DocBinding bindings = 1;
+}
+
+message BindDocCollectionRequest {
+  string repo = 1;
+  string base_url = 2;
+  string collection_id = 3;
+  string collection_name = 4;
+  // Outline API token，由 Server 加密保存；只写不读。
+  string token = 5;
+}
+
+message BindDocCollectionResponse {
+  DocBinding binding = 1;
+}
+
+message UnbindDocCollectionRequest {
+  string repo = 1;
+}
+
+message UnbindDocCollectionResponse {}
+
+// DecisionDoc 是仓库的「待决策清单」配置（不含 token）。
+message DecisionDoc {
+  // 仓库的 owner/name。
+  string repo = 1;
+  string provider = 2;
+  string base_url = 3;
+  // 目标文档的 UUID。
+  string doc_id = 4;
+  string collection_id = 5;
+  // generation 是配置代次，重设（含只轮换 token）时推进。
+  int64 generation = 6;
+  // has_token 表示已经保存了写 token（token 本身只写不读）。
+  bool has_token = 7;
+  string updated_by = 8;
+  int64 updated_at = 9;
+  // observed_units 是最近一次按 UTF-16 code unit 量到的文档篇幅；warning_code 非空表示需要轮转到新文档。
+  int64 observed_units = 10;
+  int64 observed_at = 11;
+  string warning_code = 12;
+  int64 warned_at = 13;
+  // pending_count / unknown_count 是这个仓库待处理 / 结果不明的条目数量。
+  int64 pending_count = 14;
+  int64 unknown_count = 15;
+}
+
+// DecisionSync 是一条决策同步记录。
+message DecisionSync {
+  int64 id = 1;
+  string repo = 2;
+  int64 work_item_id = 3;
+  int64 task_id = 4;
+  int32 entry_idx = 5;
+  // decision 或 blocked。
+  string entry_kind = 6;
+  // confirmed_decision / acceptance / policy / other（blocked 条目为空）。
+  string category = 7;
+  // confirmed_decision 是 category 的生成列：改动已确认的决定需要人确认（PR 会加 kiln:hold）。
+  bool confirmed_decision = 8;
+  // marker 是文档里的精确行内代码标识。
+  string marker = 9;
+  string target_doc_id = 10;
+  // pending / attempted / delivered / unknown / cancelled。
+  string state = 11;
+  int32 attempts = 12;
+  string last_error_code = 13;
+  string last_error = 14;
+  int64 created_at = 15;
+  int64 attempted_at = 16;
+  int64 delivered_at = 17;
+  string resolved_by = 18;
+  string resolution_note = 19;
+}
+
+message SetDecisionDocRequest {
+  string repo = 1;
+  // 文档系统地址；留空时回退到仓库只读绑定的地址。
+  string base_url = 2;
+  // 目标文档的 UUID。
+  string doc_id = 3;
+  // 独立、受限的 Outline 写 token，只写不读。
+  string token = 4;
+}
+
+message SetDecisionDocResponse {
+  DecisionDoc decision_doc = 1;
+  // 文档轮转（换了 doc_id 或 base_url）时被取消 / 转为 unknown 的旧条目数量。
+  int64 cancelled_count = 2;
+  int64 unknown_count = 3;
+}
+
+message ClearDecisionDocRequest {
+  string repo = 1;
+}
+
+message ClearDecisionDocResponse {
+  int64 cancelled_count = 1;
+  int64 unknown_count = 2;
+}
+
+message ListDecisionDocsRequest {}
+
+message ListDecisionDocsResponse {
+  repeated DecisionDoc decision_docs = 1;
+}
+
+message ListDecisionSyncsRequest {
+  // 只列出这个仓库的条目；为空时列出全部。
+  string repo = 1;
+  // 只列出这个状态的条目；为空时列出全部。
+  string state = 2;
+  int32 limit = 3;
+}
+
+message ListDecisionSyncsResponse {
+  repeated DecisionSync syncs = 1;
+}
+
+message ReconcileDecisionSyncRequest {
+  int64 id = 1;
+}
+
+message ReconcileDecisionSyncResponse {
+  DecisionSync sync = 1;
+  // found 表示文档里找到了精确 marker（条目已转为 delivered）。
+  bool found = 2;
+}
+
+message ResolveDecisionSyncRequest {
+  int64 id = 1;
+  // delivered 或 cancelled。
+  string state = 2;
+  // 人工结案的原因（必填）。
+  string note = 3;
+}
+
+message ResolveDecisionSyncResponse {
+  DecisionSync sync = 1;
+}

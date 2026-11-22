@@ -1,0 +1,236 @@
+[1m[36m▶ 准备执行环境[0m
+Runner mac-mini（darwin/arm64，colima）· attempt #31 · epoch 2
+拉取镜像 golang:1.27.3@sha256:5c1f0e3a…（已缓存，7 天后重新拉取）
+启动服务 postgres（postgres:18）… 就绪，用时 3.1 秒
+恢复缓存 go-mod-9f3c2a71 … 命中（182.4 MiB）
+
+[1m[36m▶ go mod download[0m
+[2m$ go mod download[0m
+
+[1m[36m▶ go test -race ./...[0m
+[2m$ go test -race -count=1 ./...[0m
+?   	github.com/hewenyu/kilnflow.dev/cmd/kiln	[no test files]
+?   	github.com/hewenyu/kilnflow.dev/cmd/kiln-runner	[no test files]
+ok  	github.com/hewenyu/kilnflow.dev/cmd/kiln-server	13.760s
+ok  	github.com/hewenyu/kilnflow.dev/internal/bytesize	6.670s
+ok  	github.com/hewenyu/kilnflow.dev/internal/cas	16.670s
+ok  	github.com/hewenyu/kilnflow.dev/internal/cas/castest	0.340s
+ok  	github.com/hewenyu/kilnflow.dev/internal/config	3.460s
+ok  	github.com/hewenyu/kilnflow.dev/internal/expr	22.440s
+ok  	github.com/hewenyu/kilnflow.dev/internal/fakegithub	0.580s
+ok  	github.com/hewenyu/kilnflow.dev/internal/fakeupload	1.970s
+ok  	github.com/hewenyu/kilnflow.dev/internal/github	2.870s
+ok  	github.com/hewenyu/kilnflow.dev/internal/lockfile	21.280s
+ok  	github.com/hewenyu/kilnflow.dev/internal/oci	9.290s
+ok  	github.com/hewenyu/kilnflow.dev/internal/oci/ocitest	0.290s
+ok  	github.com/hewenyu/kilnflow.dev/internal/pgtest	0.540s
+=== RUN   TestLoginDenied0
+[32m--- PASS: TestLoginDenied0 (0.31s)[0m
+=== RUN   TestRerunOrdering1
+[32m--- PASS: TestRerunOrdering1 (0.55s)[0m
+=== RUN   TestPageValidation2
+[32m--- PASS: TestPageValidation2 (0.16s)[0m
+=== RUN   TestOutputsAudit3
+[32m--- PASS: TestOutputsAudit3 (0.81s)[0m
+=== RUN   TestSecretRender4
+[32m--- PASS: TestSecretRender4 (0.74s)[0m
+=== RUN   TestSecretEtag5
+[32m--- PASS: TestSecretEtag5 (0.07s)[0m
+=== RUN   TestOutputsRender6
+[32m--- PASS: TestOutputsRender6 (0.72s)[0m
+=== RUN   TestDispatchRedirect7
+[32m--- PASS: TestDispatchRedirect7 (0.38s)[0m
+=== RUN   TestLoginRedirect8
+[32m--- PASS: TestLoginRedirect8 (0.70s)[0m
+=== RUN   TestRerunValidation9
+[32m--- PASS: TestRerunValidation9 (0.40s)[0m
+=== RUN   TestScopeAudit10
+[32m--- PASS: TestScopeAudit10 (0.24s)[0m
+=== RUN   TestRerunValidation11
+[32m--- PASS: TestRerunValidation11 (0.74s)[0m
+=== RUN   TestEnvNotFound12
+[32m--- PASS: TestEnvNotFound12 (0.48s)[0m
+=== RUN   TestRerunOrdering13
+[32m--- PASS: TestRerunOrdering13 (0.92s)[0m
+=== RUN   TestRerunValidation14
+[32m--- PASS: TestRerunValidation14 (0.08s)[0m
+=== RUN   TestSecretNotFound15
+[32m--- PASS: TestSecretNotFound15 (0.64s)[0m
+=== RUN   TestEnvOrdering16
+[32m--- PASS: TestEnvOrdering16 (0.55s)[0m
+=== RUN   TestActivityJSON17
+[32m--- PASS: TestActivityJSON17 (0.60s)[0m
+=== RUN   TestSecretScope18
+[32m--- PASS: TestSecretScope18 (0.47s)[0m
+=== RUN   TestLogNotFound19
+[32m--- PASS: TestLogNotFound19 (1.02s)[0m
+=== RUN   TestCancelNotFound20
+[32m--- PASS: TestCancelNotFound20 (0.11s)[0m
+=== RUN   TestSecretFlash21
+[32m--- PASS: TestSecretFlash21 (0.68s)[0m
+=== RUN   TestRunnerJSON22
+[32m--- PASS: TestRunnerJSON22 (0.94s)[0m
+=== RUN   TestRunnerFlash23
+[32m--- PASS: TestRunnerFlash23 (0.78s)[0m
+=== RUN   TestRerunDenied24
+[32m--- PASS: TestRerunDenied24 (0.66s)[0m
+=== RUN   TestLoginRedirect25
+[32m--- PASS: TestLoginRedirect25 (0.97s)[0m
+=== RUN   TestSessionRedirect26
+[32m--- PASS: TestSessionRedirect26 (1.20s)[0m
+=== RUN   TestRunnerEtag27
+[32m--- PASS: TestRunnerEtag27 (0.06s)[0m
+=== RUN   TestEnvDenied28
+[32m--- PASS: TestEnvDenied28 (0.98s)[0m
+=== RUN   TestScopeValidation29
+[32m--- PASS: TestScopeValidation29 (1.02s)[0m
+=== RUN   TestPurgeJSON30
+[32m--- PASS: TestPurgeJSON30 (0.44s)[0m
+ok  	github.com/hewenyu/kilnflow.dev/internal/planner	14.840s
+ok  	github.com/hewenyu/kilnflow.dev/internal/release	20.840s
+ok  	github.com/hewenyu/kilnflow.dev/internal/runner	19.180s
+ok  	github.com/hewenyu/kilnflow.dev/internal/runner/executor	3.310s
+ok  	github.com/hewenyu/kilnflow.dev/internal/runner/signing	4.330s
+ok  	github.com/hewenyu/kilnflow.dev/internal/runtime	11.550s
+ok  	github.com/hewenyu/kilnflow.dev/internal/server	19.910s
+=== RUN   TestPageFlash0
+[32m--- PASS: TestPageFlash0 (0.83s)[0m
+=== RUN   TestSecretAudit1
+[32m--- PASS: TestSecretAudit1 (1.06s)[0m
+=== RUN   TestRunnerFlash2
+[32m--- PASS: TestRunnerFlash2 (0.92s)[0m
+=== RUN   TestLoginAudit3
+[32m--- PASS: TestLoginAudit3 (0.45s)[0m
+=== RUN   TestPageScope4
+[32m--- PASS: TestPageScope4 (0.46s)[0m
+=== RUN   TestCancelValidation5
+[32m--- PASS: TestCancelValidation5 (0.15s)[0m
+=== RUN   TestRunnerRender6
+[32m--- PASS: TestRunnerRender6 (0.28s)[0m
+=== RUN   TestActivityFlash7
+[32m--- PASS: TestActivityFlash7 (0.17s)[0m
+=== RUN   TestRepoNotFound8
+[32m--- PASS: TestRepoNotFound8 (0.51s)[0m
+=== RUN   TestLoginScope9
+[32m--- PASS: TestLoginScope9 (0.11s)[0m
+=== RUN   TestCancelScope10
+[32m--- PASS: TestCancelScope10 (0.52s)[0m
+=== RUN   TestScopeFlash11
+[32m--- PASS: TestScopeFlash11 (1.14s)[0m
+=== RUN   TestCancelEtag12
+[32m--- PASS: TestCancelEtag12 (1.11s)[0m
+=== RUN   TestScopeFlash13
+[32m--- PASS: TestScopeFlash13 (0.91s)[0m
+=== RUN   TestLoginJSON14
+[32m--- PASS: TestLoginJSON14 (0.88s)[0m
+=== RUN   TestPurgeEtag15
+[32m--- PASS: TestPurgeEtag15 (0.30s)[0m
+=== RUN   TestCancelDenied16
+[32m--- PASS: TestCancelDenied16 (0.23s)[0m
+=== RUN   TestCancelNotFound17
+[32m--- PASS: TestCancelNotFound17 (0.85s)[0m
+=== RUN   TestOutputsRender18
+[32m--- PASS: TestOutputsRender18 (0.63s)[0m
+=== RUN   TestDispatchValidation19
+[32m--- PASS: TestDispatchValidation19 (0.24s)[0m
+ok  	github.com/hewenyu/kilnflow.dev/internal/server/admin	11.260s
+ok  	github.com/hewenyu/kilnflow.dev/internal/server/auth	12.040s
+ok  	github.com/hewenyu/kilnflow.dev/internal/server/dispatch	0.660s
+ok  	github.com/hewenyu/kilnflow.dev/internal/server/outbox	6.460s
+ok  	github.com/hewenyu/kilnflow.dev/internal/server/retention	17.660s
+=== RUN   TestClaimAssignsLease
+[32m--- PASS: TestClaimAssignsLease (0.69s)[0m
+=== RUN   TestClaimRespectsPool
+[32m--- PASS: TestClaimRespectsPool (0.48s)[0m
+=== RUN   TestClaimEpochIncrements
+[32m--- PASS: TestClaimEpochIncrements (0.79s)[0m
+=== RUN   TestLeaseExpiryRequeues
+[32m--- PASS: TestLeaseExpiryRequeues (0.73s)[0m
+=== RUN   TestRerunJobKeepsDownstream
+    sched_test.go:214: 规划 rerun 1：job build (linux, amd64) 应沿用结果
+    sched_test.go:231: [31mgot state = "waiting", want "succeeded"[0m
+    sched_test.go:232: [31mdownstream jobs = [build (linux, amd64) build (darwin, arm64)][0m
+[31m--- FAIL: TestRerunJobKeepsDownstream (0.42s)[0m
+=== RUN   TestConcurrencyCancelInProgress
+[32m--- PASS: TestConcurrencyCancelInProgress (0.41s)[0m
+=== RUN   TestPriorityOrder
+[32m--- PASS: TestPriorityOrder (0.17s)[0m
+[31mFAIL[0m
+[31mFAIL	github.com/hewenyu/kilnflow.dev/internal/server/sched	4.118s[0m
+=== RUN   TestSecretAudit0
+[32m--- PASS: TestSecretAudit0 (0.87s)[0m
+=== RUN   TestRepoRender1
+[32m--- PASS: TestRepoRender1 (0.59s)[0m
+=== RUN   TestPurgeAudit2
+[32m--- PASS: TestPurgeAudit2 (1.03s)[0m
+=== RUN   TestScopeEtag3
+[32m--- PASS: TestScopeEtag3 (0.51s)[0m
+=== RUN   TestLoginEtag4
+[32m--- PASS: TestLoginEtag4 (0.14s)[0m
+=== RUN   TestRunnerAudit5
+[32m--- PASS: TestRunnerAudit5 (0.52s)[0m
+=== RUN   TestPageNotFound6
+[32m--- PASS: TestPageNotFound6 (0.09s)[0m
+=== RUN   TestOutputsScope7
+[32m--- PASS: TestOutputsScope7 (0.21s)[0m
+=== RUN   TestRerunJSON8
+[32m--- PASS: TestRerunJSON8 (0.77s)[0m
+=== RUN   TestPageDenied9
+[32m--- PASS: TestPageDenied9 (0.01s)[0m
+=== RUN   TestSecretRedirect10
+[32m--- PASS: TestSecretRedirect10 (0.69s)[0m
+=== RUN   TestRerunJSON11
+[32m--- PASS: TestRerunJSON11 (0.79s)[0m
+=== RUN   TestPageDenied12
+[32m--- PASS: TestPageDenied12 (1.12s)[0m
+=== RUN   TestOutputsValidation13
+[32m--- PASS: TestOutputsValidation13 (0.49s)[0m
+=== RUN   TestCancelAudit14
+[32m--- PASS: TestCancelAudit14 (0.33s)[0m
+=== RUN   TestSessionValidation15
+[32m--- PASS: TestSessionValidation15 (0.47s)[0m
+=== RUN   TestRunnerDenied16
+[32m--- PASS: TestRunnerDenied16 (0.15s)[0m
+=== RUN   TestDispatchScope17
+[32m--- PASS: TestDispatchScope17 (0.60s)[0m
+=== RUN   TestRunnerScope18
+[32m--- PASS: TestRunnerScope18 (0.40s)[0m
+=== RUN   TestRerunRedirect19
+[32m--- PASS: TestRerunRedirect19 (0.14s)[0m
+=== RUN   TestRepoJSON20
+[32m--- PASS: TestRepoJSON20 (0.95s)[0m
+=== RUN   TestLogScope21
+[32m--- PASS: TestLogScope21 (1.07s)[0m
+=== RUN   TestRepoRedirect22
+[32m--- PASS: TestRepoRedirect22 (0.67s)[0m
+=== RUN   TestPageNotFound23
+[32m--- PASS: TestPageNotFound23 (0.68s)[0m
+=== RUN   TestSessionRedirect24
+[32m--- PASS: TestSessionRedirect24 (0.89s)[0m
+=== RUN   TestScopeRender25
+[32m--- PASS: TestScopeRender25 (0.98s)[0m
+=== RUN   TestScopeFlash26
+[32m--- PASS: TestScopeFlash26 (0.83s)[0m
+=== RUN   TestDispatchDenied27
+[32m--- PASS: TestDispatchDenied27 (0.90s)[0m
+=== RUN   TestDispatchFlash28
+[32m--- PASS: TestDispatchFlash28 (0.67s)[0m
+=== RUN   TestSessionRedirect29
+[32m--- PASS: TestSessionRedirect29 (0.46s)[0m
+=== RUN   TestActivityNotFound30
+[32m--- PASS: TestActivityNotFound30 (0.69s)[0m
+=== RUN   TestScopeOrdering31
+[32m--- PASS: TestScopeOrdering31 (0.43s)[0m
+=== RUN   TestEnvNotFound32
+[32m--- PASS: TestEnvNotFound32 (0.79s)[0m
+=== RUN   TestActivityNotFound33
+[32m--- PASS: TestActivityNotFound33 (1.04s)[0m
+ok  	github.com/hewenyu/kilnflow.dev/internal/server/web	10.300s
+ok  	github.com/hewenyu/kilnflow.dev/internal/workflow	16.910s
+ok  	github.com/hewenyu/kilnflow.dev/internal/workflow/schema	9.780s
+[31mFAIL[0m
+
+[31m[1m✕ 步骤 go test ./... 失败（退出码 1），用时 2 分 42 秒[0m
+[33m保存缓存 go-build-9f3c2a71 … 跳过（job 失败时不保存）[0m
+停止服务 postgres … 完成
+清理工作区 … 完成

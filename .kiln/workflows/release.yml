@@ -1,0 +1,139 @@
+# Kiln 的二进制发布：推送 v* tag 后，在各目标平台的 Runner 上编译二进制，
+# PR 执行相同构建但不发布；tag 由 Server 发布到本仓库的 GitHub Release（PLAN #13.4）。先打 tag 再构建：
+# tag 由人推送，或由 Server 在 PR 合入 master 后按 .kiln/merge.yml 的 tag: 创建（PLAN #29）。
+# 一个二进制一个文件，不打包：
+# - asset：<程序名>-<os>-<arch>（kiln-server、kiln-runner、kiln 三个平台各一个）和 SHA256SUMS。名字不带版本号，
+#   releases/latest/download/<文件名> 固定不变。
+# - npm（PLAN #27.4、#33.3）：CI Runner 每个平台一个包，包中只有这一个二进制：@<账号级 scope>/kiln-runner-<os>-<arch>，
+#   供 Runner 自升级（PLAN #27）；AI 执行节点的连接器是一个与平台无关的包 @<账号级 scope>/kiln-orca（pnpm pack 打好，
+#   原样发布）。kiln-server 和 CLI 不发到 npm。registry、scope、token 在 Kiln 中按账号配置（kiln npm set），这里不写凭据，
+#   没有配置时 publish 失败。npm 先于 GitHub Release 提交（DEPLOY.md #7.3）。Go 二进制中带模块路径（含仓库名），
+#   所以 kiln-runner 的包 allow-source-name: true；kiln-orca 中没有仓库名，不放开这项检查。
+# - publish 引用 Kiln 中的 environment release（只有 ref 策略 refs/tags/v*：推送 tag 即全自动发布，Kiln 不提供审批），不读取 GitHub Settings；
+#   这个 environment 必须先由运维创建，否则规划失败，见 docs/DEPLOY.md #7.3。GitHub Release 用 App 的 Contents 权限发布，
+#   不需要 secret。
+# - 名字中含 -docker-test 的 v* tag 只用于镜像隔离验收（docker.yml、docs/DEPLOY.md #7.2），这里排除，不发布 Release。
+name: release
+on:
+  push:
+    tags: ["v*", "!v*-docker-test*"]
+  pull_request:
+jobs:
+  # Dashboard 前端（web/）：先构建，build 把它放到 internal/server/web/ui/dist/ 后由 go:embed 内嵌进 kiln-server。
+  web:
+    runs-on: linux/arm64
+    # 与 ci.yml 相同的官方 Node 26 镜像，固定 digest。
+    container: docker.io/library/node@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68
+    inputs: [web/]
+    # pnpm 是 Runner 管理的 runtime（版本和摘要在 runtimes.lock，取自 package.json 的 packageManager），不在 job 里安装。
+    runtimes: [pnpm]
+    network: true            # 安装依赖
+    # pnpm 的包存储（按内容寻址、自校验）：依赖不变时不再下载。
+    toolcache:
+      - { name: pnpm-store, env: PNPM_CONFIG_STORE_DIR }
+    resources: { cpu: 2, memory: 4Gi }
+    timeout-minutes: 20
+    steps:
+      - name: 构建 Dashboard 前端
+        run: |
+          cd web && pnpm install --frozen-lockfile && pnpm build
+    outputs:
+      dist: internal/server/web/ui/dist/
+  build:
+    needs: [web]
+    runs-on: ${{ matrix.os }}/${{ matrix.arch }}
+    # host executor 使用目标平台的 Go runtime；版本和三个平台的摘要由 runtimes.lock 固定。
+    runtimes: [go]
+    network: true            # go mod download
+    # host job 的资源只用于调度（不限制）。linux/amd64 的 Runner 只有 2 核 / 约 2GiB，声明的资源必须放得下，
+    # 否则一直等待（Server 按机器规格严格匹配，PLAN #14.1）。
+    resources: { cpu: 1, memory: 1536Mi }
+    timeout-minutes: 30
+    strategy:
+      # 保持逐个构建，避免同一 Runner 上的 Go toolcache 争用。
+      max-parallel: 1
+      matrix:
+        include:
+          - { os: darwin, arch: arm64 }
+          - { os: linux, arch: arm64 }
+          - { os: linux, arch: amd64 }
+    fetch:
+      - from: web.dist
+        to: internal/server/web/ui/dist/
+    # 与 ci.yml 同名：Runner 按执行身份（host / oci-root）分开保存，不会用到 OCI job 中 root 写入的目录（PLAN #4.6）。
+    toolcache:
+      - { name: gomod, env: GOMODCACHE }
+      - { name: gocache, env: GOCACHE }
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: "2"
+      GOFLAGS: "-p=2"
+      CGO_ENABLED: "0"
+      TARGETOS: ${{ matrix.os }}
+      TARGETARCH: ${{ matrix.arch }}
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - name: 本平台编译并核对 ${{ matrix.os }}/${{ matrix.arch }}
+        run: bash .kiln/scripts/release-build.sh kiln-server kiln-runner kiln
+    outputs:
+      server: dist/kiln-server
+      runner: dist/kiln-runner
+      cli: dist/kiln
+  # AI 执行节点的连接器（kiln-orca/，TypeScript）：版本改为 tag 去掉 v 后 pnpm pack；PR 用 0.0.0-pr 只验证能打包。
+  # 平台列表与 build 的 matrix 相同（kiln-runner 的 npm 包）。
+  kiln-orca:
+    runs-on: linux/arm64
+    # 与 web 相同的官方 Node 26 镜像，固定 digest。
+    container: docker.io/library/node@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68
+    inputs: [kiln-orca/]
+    # pnpm 是 Runner 管理的 runtime（版本和摘要在 runtimes.lock，取自 package.json 的 packageManager），不在 job 里安装。
+    runtimes: [pnpm]
+    network: true            # 安装依赖
+    # pnpm 的包存储（按内容寻址、自校验）：依赖不变时不再下载。
+    toolcache:
+      - { name: pnpm-store, env: PNPM_CONFIG_STORE_DIR }
+    resources: { cpu: 2, memory: 2Gi }
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - name: 打包 kiln-orca
+        run: |
+          cd kiln-orca && pnpm install --frozen-lockfile
+          v="${VERSION#v}"
+          case "${v}" in [0-9]*.[0-9]*.[0-9]*) ;; *) v=0.0.0-pr ;; esac
+          npm pkg set version="${v}"
+          # 本平台的 kiln-runner 作为可选依赖、版本与 kiln-orca 相同（准备受管理的工具链，PLAN #33.12）：npm 只装与本机
+          # os/cpu 一致的那个，没有的平台跳过。只写进发布的包，源码中的 package.json 不列（开发时用 config.json 的 kiln_runner）。
+          for p in darwin-arm64 linux-arm64 linux-amd64; do npm pkg set "optionalDependencies.@yuebanlaosiji/kilnflow-runner-${p}=${v}"; done
+          out="$(mktemp -d)"
+          pnpm pack --pack-destination "${out}"
+          mkdir -p ../dist && mv "${out}"/*.tgz ../dist/kiln-orca.tgz
+          tar -xOzf ../dist/kiln-orca.tgz package/package.json | grep -q "\"version\": \"${v}\""
+          tar -xOzf ../dist/kiln-orca.tgz package/package.json | grep -q "\"@yuebanlaosiji/kilnflow-runner-linux-amd64\": \"${v}\""
+    outputs:
+      package: dist/kiln-orca.tgz
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, kiln-orca]
+    environment: release
+    release:
+      # 每个二进制一个 asset（archive: none，不打包）；校验和文件默认是 SHA256SUMS（覆盖全部 asset）
+      assets:
+        - { from: build.server, archive: none, name: "kiln-server-${{ matrix.os }}-${{ matrix.arch }}" }
+        - { from: build.runner, archive: none, name: "kiln-runner-${{ matrix.os }}-${{ matrix.arch }}" }
+        - { from: build.cli, archive: none, name: "kiln-${{ matrix.os }}-${{ matrix.arch }}" }
+      github: {}   # 发布到本仓库的 GitHub Release
+      npm:
+        - from: build.runner
+          name: kilnflow-runner-${{ matrix.os }}-${{ matrix.arch }}   # 发布为 @yuebanlaosiji/kilnflow-runner-darwin-arm64 等
+          package:
+            description: Kiln CI Runner（${{ matrix.os }}/${{ matrix.arch }}）
+            license: Apache-2.0
+            os: ["${{ matrix.os }}"]
+            cpu: ["${{ matrix.arch == 'amd64' && 'x64' || matrix.arch }}"]   # npm 用 x64 表示 amd64
+          access: public
+          allow-source-name: true
+        - from: kiln-orca.package
+          name: kilnflow-orca                                       # 发布为 @yuebanlaosiji/kilnflow-orca
+          access: public

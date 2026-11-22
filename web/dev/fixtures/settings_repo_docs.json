@@ -1,0 +1,52 @@
+{
+ "Page": "settings_repo_docs",
+ "Title": "设置 · acme/kiln · 外部文档",
+ "Nav": "settings",
+ "Status": 200,
+ "Session": {"Login": "octocat", "Admin": true, "ViaToken": false, "Bound": true},
+ "CSRF": "csrf",
+ "OAuth": true,
+ "Active": 0,
+ "Flash": "",
+ "Data": {
+  "Section": "repos",
+  "Repo": "acme/kiln",
+  "Active": true,
+  "Binding": {
+   "Provider": "outline",
+   "BaseURL": "https://outline.example.com",
+   "SiteURL": "https://outline.example.com",
+   "CollectionID": "3f6f2c1e-6a1a-4c6f-9f43-1f0a2d8b7c11",
+   "CollectionName": "Kiln 设计",
+   "CollectionURL": "https://outline.example.com/collection/3f6f2c1e-6a1a-4c6f-9f43-1f0a2d8b7c11",
+   "CreatedBy": "octocat",
+   "UpdatedBy": "octocat",
+   "CreatedAt": "2026-11-08T09:12:00+08:00",
+   "UpdatedAt": "2026-11-16T14:30:00+08:00",
+   "Generation": 3,
+   "CheckStatus": "ok",
+   "CheckStartedAt": "2026-11-16T14:29:58+08:00",
+   "CheckedAt": "2026-11-16T14:30:00+08:00",
+   "CheckedBy": "octocat",
+   "CheckErrorCode": "",
+   "CheckErrorText": "",
+   "CheckDocCount": 7,
+   "CheckSampleDocID": "0b8f7f04-6a4a-4d0e-9c1b-9a6f0f6a1c21",
+   "ObservedCollectionName": "Kiln 设计"
+  },
+  "Decision": {
+   "Configured": true,
+   "Provider": "outline",
+   "BaseURL": "https://outline.example.com",
+   "SiteURL": "https://outline.example.com",
+   "DocID": "11111111-1111-4111-8111-111111111111",
+   "CollectionID": "3f6f2c1e-6a1a-4c6f-9f43-1f0a2d8b7c11",
+   "DocURL": "https://outline.example.com/doc/11111111-1111-4111-8111-111111111111",
+   "ObservedUnits": 18200,
+   "WarningCode": "doc_near_limit",
+   "CreatedBy": "octocat",
+   "UpdatedBy": "octocat",
+   "UpdatedAt": "2026-11-15T10:05:00+08:00"
+  }
+ }
+}

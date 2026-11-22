@@ -1,0 +1,291 @@
+{
+ "Page": "runner_cache",
+ "Title": "mini-01 · 本地缓存",
+ "Nav": "runners",
+ "Status": 200,
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
+ "CSRF": "preview",
+ "OAuth": true,
+ "Active": 2,
+ "Flash": "",
+ "Data": {
+  "Runner": {
+   "ID": 1,
+   "Name": "mini-01",
+   "Pool": "default",
+   "Platforms": [
+    "darwin/arm64",
+    "linux/arm64"
+   ],
+   "Executors": [
+    "host",
+    "oci",
+    "buildkit"
+   ],
+   "Version": "v0.4.2",
+   "Revoked": false,
+   "Drain": false,
+   "Online": true,
+   "LastSeen": "2026-11-05T04:55:28-08:00",
+   "Jobs": [
+    {
+     "RunnerID": 1,
+     "JobID": 9812,
+     "Name": "build (darwin/arm64)",
+     "RunID": 412,
+     "Workflow": "Release",
+     "Repo": "acme/kiln",
+     "Started": "2026-11-05T04:52:46-08:00"
+    },
+    {
+     "RunnerID": 1,
+     "JobID": 9815,
+     "Name": "test",
+     "RunID": 413,
+     "Workflow": "CI",
+     "Repo": "acme/kiln",
+     "Started": "2026-11-05T04:54:46-08:00"
+    }
+   ],
+   "Accepting": true,
+   "ConnLabel": "在线",
+   "ConnClass": "ok",
+   "Capacity": {
+    "Machine": "10 核 / 16.0 GiB",
+    "Reserved": "2 核 / 4.0 GiB",
+    "Allocatable": "8 核 / 12.0 GiB",
+    "Allocated": "2 核 / 2.0 GiB",
+    "Limits": [
+     "oci 上限 8 核 / 7.7 GiB"
+    ],
+    "MaxJobs": 4
+   },
+   "CacheBytes": 3412000000,
+   "CacheReportedAt": "2026-11-05T04:41:10-08:00",
+   "KindLabel": "CI Runner",
+   "URL": "/runners/detail/mini-01"
+  },
+  "Generated": "2026-11-05T04:41:10-08:00",
+  "Entries": [
+   {
+    "Kind": "toolcache",
+    "KindLabel": "toolcache",
+    "Repo": "acme/kiln",
+    "Platform": "darwin/arm64",
+    "Domain": "host",
+    "Name": "gomod",
+    "Path": "toolcache/host/88123/darwin-arm64/gomod",
+    "Size": 612000000,
+    "LastUsed": "2026-11-05T04:52:46-08:00",
+    "Expires": null
+   },
+   {
+    "Kind": "toolcache",
+    "KindLabel": "toolcache",
+    "Repo": "acme/kiln",
+    "Platform": "darwin/arm64",
+    "Domain": "host",
+    "Name": "gocache",
+    "Path": "toolcache/host/88123/darwin-arm64/gocache",
+    "Size": 1204000000,
+    "LastUsed": "2026-11-05T04:52:46-08:00",
+    "Expires": null
+   },
+   {
+    "Kind": "toolcache",
+    "KindLabel": "toolcache",
+    "Repo": "acme/kiln",
+    "Platform": "linux/arm64",
+    "Domain": "oci-root",
+    "Name": "gomod",
+    "Path": "toolcache/oci-root/88123/linux-arm64/gomod",
+    "Size": 598000000,
+    "LastUsed": "2026-11-04T22:10:00-08:00",
+    "Expires": null
+   },
+   {
+    "Kind": "toolcache",
+    "KindLabel": "toolcache",
+    "Repo": "acme/notes",
+    "Platform": "darwin/arm64",
+    "Domain": "host",
+    "Name": "pnpm-store",
+    "Path": "toolcache/host/90211/darwin-arm64/pnpm-store",
+    "Size": 341000000,
+    "LastUsed": "2026-11-01T09:30:00-08:00",
+    "Expires": null
+   },
+   {
+    "Kind": "git",
+    "KindLabel": "git 镜像",
+    "Repo": "acme/kiln",
+    "Platform": "",
+    "Domain": "",
+    "Name": "88123.git",
+    "Path": "git/88123.git",
+    "Size": 96000000,
+    "LastUsed": "2026-11-05T04:52:40-08:00",
+    "Expires": null
+   },
+   {
+    "Kind": "git",
+    "KindLabel": "git 镜像",
+    "Repo": "acme/notes",
+    "Platform": "",
+    "Domain": "",
+    "Name": "90211.git",
+    "Path": "git/90211.git",
+    "Size": 12400000,
+    "LastUsed": "2026-11-01T09:29:00-08:00",
+    "Expires": null
+   },
+   {
+    "Kind": "runtime",
+    "KindLabel": "runtime",
+    "Repo": "",
+    "Platform": "darwin/arm64",
+    "Domain": "",
+    "Name": "go 1.27.3",
+    "Path": "rt/7f3a9c1e",
+    "Size": 289000000,
+    "LastUsed": "2026-11-05T04:52:41-08:00",
+    "Expires": "2026-11-12T04:52:41-08:00"
+   },
+   {
+    "Kind": "runtime",
+    "KindLabel": "runtime",
+    "Repo": "",
+    "Platform": "darwin/arm64",
+    "Domain": "",
+    "Name": "node 24.11.0",
+    "Path": "rt/2b8d04aa",
+    "Size": 118000000,
+    "LastUsed": "2026-11-01T09:29:30-08:00",
+    "Expires": "2026-11-08T09:29:30-08:00"
+   },
+   {
+    "Kind": "cas",
+    "KindLabel": "CAS 缓存",
+    "Repo": "",
+    "Platform": "",
+    "Domain": "",
+    "Name": "action cache",
+    "Path": "cas",
+    "Size": 41000000,
+    "LastUsed": "2026-11-05T04:50:00-08:00",
+    "Expires": null
+   },
+   {
+    "Kind": "image",
+    "KindLabel": "镜像",
+    "Repo": "",
+    "Platform": "linux/arm64",
+    "Domain": "",
+    "Name": "postgres:17",
+    "Path": "image/postgres:17",
+    "Size": 0,
+    "LastUsed": "2026-11-03T15:00:00-08:00",
+    "Expires": "2026-11-10T15:00:00-08:00"
+   }
+  ],
+  "TotalBytes": 3311400000,
+  "DiskTotal": 494384795648,
+  "DiskFree": 131072000000,
+  "GC": {
+   "At": "2026-11-05T03:41:10-08:00",
+   "Removed": 4,
+   "RemovedBytes": 1830000000,
+   "Failures": [
+    {
+     "Kind": "toolcache",
+     "Path": "toolcache/oci-root/88123/linux-arm64/gocache",
+     "Error": "unlinkat gocache/00/0a1b-d: permission denied；用清理容器删除也失败：docker run busybox:1.37：exit status 125：Cannot connect to the Docker daemon"
+    }
+   ]
+  },
+  "Purges": [
+   {
+    "ID": 7,
+    "Repo": "acme/notes",
+    "Kinds": [
+     "toolcache"
+    ],
+    "Domain": "",
+    "State": "pending",
+    "Actor": "octocat",
+    "Created": "2026-11-05T04:54:00-08:00",
+    "Done": null,
+    "Removed": 0,
+    "RemovedBytes": 0,
+    "Failures": null
+   },
+   {
+    "ID": 6,
+    "Repo": "",
+    "Kinds": [
+     "runtime"
+    ],
+    "Domain": "",
+    "State": "done",
+    "Actor": "octocat",
+    "Created": "2026-11-03T10:00:00-08:00",
+    "Done": "2026-11-03T10:02:13-08:00",
+    "Removed": 5,
+    "RemovedBytes": 1420000000,
+    "Failures": null
+   }
+  ],
+  "Kinds": [
+   {
+    "Value": "toolcache",
+    "Label": "toolcache"
+   },
+   {
+    "Value": "runtime",
+    "Label": "runtime"
+   },
+   {
+    "Value": "git",
+    "Label": "git 镜像"
+   },
+   {
+    "Value": "cas",
+    "Label": "CAS 缓存"
+   },
+   {
+    "Value": "buildkit",
+    "Label": "buildctl"
+   },
+   {
+    "Value": "work",
+    "Label": "保留的工作区"
+   },
+   {
+    "Value": "image",
+    "Label": "镜像"
+   },
+   {
+    "Value": "legacy",
+    "Label": "旧布局的 toolcache"
+   }
+  ],
+  "Repos": [
+   "acme/kiln",
+   "acme/notes"
+  ],
+  "Domains": [
+   "host",
+   "oci-root"
+  ],
+  "Repo": "",
+  "KindsPicked": null,
+  "Domain": "",
+  "Preview": null,
+  "Self": "/runners/cache/mini-01"
+ }
+}

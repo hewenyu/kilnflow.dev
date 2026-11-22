@@ -1,0 +1,77 @@
+/* AI 开发：工作项列表（每行标题 + Issue + 灰字说明，右侧是管理员操作），暂停的仓库、任务池各一个 Box。 */
+.page > * + * {
+  margin-top: 16px;
+}
+
+.start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.strong {
+  font-weight: 600;
+}
+
+.issues {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  margin: 4px 0 0;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.synced {
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.reason {
+  color: var(--fgColor-danger);
+}
+
+.muted {
+  color: var(--fgColor-muted);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+}

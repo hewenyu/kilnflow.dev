@@ -1,0 +1,79 @@
+{
+  "ok": true,
+  "result": {
+    "workers": [
+      {
+        "dispatchId": "ctx_000000000722",
+        "taskId": "task_000000000727",
+        "runId": "run_000000000601",
+        "workerState": "succeeded",
+        "dispatchStatus": "completed",
+        "agentTerminalHandle": null,
+        "terminalState": null,
+        "coordinatedFrom": null,
+        "resource": null,
+        "projection": {
+          "id": "ctx_000000000722",
+          "dispatchId": "ctx_000000000722",
+          "taskId": "task_000000000727",
+          "runId": "run_000000000601",
+          "role": "worker",
+          "parent": null,
+          "provider": null,
+          "host": {
+            "kind": "local",
+            "id": "local"
+          },
+          "workspace": {
+            "id": "00000000-0000-4000-8000-000000000712::/Users/kiln/orca/workspaces/target/kiln-a9159-e1",
+            "kind": "folder_or_worktree"
+          },
+          "stage": {
+            "worker": "succeeded",
+            "dispatch": "completed",
+            "detail": "settled",
+            "activity": "unknown"
+          },
+          "outcome": "succeeded",
+          "liveness": {
+            "verdict": "unverifiable",
+            "reason": "missing_status"
+          },
+          "evidence": {
+            "durable": true,
+            "liveStatus": "unavailable",
+            "lastObservedAt": null
+          },
+          "resource": {
+            "state": "absent",
+            "reason": "not_materialized"
+          },
+          "nextAction": {
+            "kind": "none",
+            "argv": []
+          },
+          "attention": {
+            "categories": [
+              "unverifiable",
+              "root_completion"
+            ],
+            "requiresAction": true
+          }
+        }
+      }
+    ],
+    "counts": {
+      "retained": 3
+    },
+    "page": {
+      "limit": 3,
+      "total": 7,
+      "hasMore": false,
+      "nextCursor": null
+    },
+    "scope": {
+      "run": "run_000000000601",
+      "source": "flag"
+    }
+  }
+}

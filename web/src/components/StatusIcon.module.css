@@ -1,0 +1,36 @@
+.ok {
+  color: var(--fgColor-success);
+}
+
+.bad {
+  color: var(--fgColor-danger);
+}
+
+.wait {
+  color: var(--fgColor-attention);
+}
+
+.muted {
+  color: var(--fgColor-muted);
+}
+
+.icon {
+  flex: none;
+  vertical-align: text-bottom;
+}
+
+/* 执行中：黄色圆环，带一段转动的缺口（与 GitHub Actions 相同） */
+.run {
+  color: var(--fgColor-attention);
+}
+
+.run .arc {
+  transform-origin: 50% 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
