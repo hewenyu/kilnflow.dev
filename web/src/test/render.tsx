@@ -4,7 +4,7 @@ import { fireEvent, render, screen, type RenderResult } from '@testing-library/r
 import type { z } from 'zod'
 import { App } from '../app/App'
 import { storageKey } from '../i18n/locale'
-import type { Locale } from '../i18n/messages'
+import { msg, translate, type Locale, type MsgKey, type Params } from '../i18n/messages'
 import { envelopeSchema, type Envelope } from '../lib/envelope'
 
 /** envelope 把测试数据（例如 dev/fixtures/ 中的 JSON）校验为页面数据；overrides 按服务端的格式覆盖其中的字段（例如 Flash 可以是字符串或消息）。 */
@@ -52,3 +52,19 @@ export async function switchLocale(name: 'English' | '简体中文'): Promise<vo
   fireEvent.click(screen.getByRole('button', { name: /的菜单$|^Menu for /, hidden: true }))
   fireEvent.click(await screen.findByRole('menuitemradio', { name, hidden: true }))
 }
+
+/** tFor 返回按语言 locale 翻译前端消息的函数（与 useT 的返回值相同），测试中直接调用接收 t 的函数时用。 */
+export function tFor(locale: Locale): (id: MsgKey, params?: Params) => string {
+  return (id, params) => translate(locale, msg(id, params))
+}
+
+/**
+ * chineseLeft 返回 root 的文字中去掉原样显示的内容（raw，例如 Runner 上报的错误）之后剩下的中文片段：
+ * 英文界面中界面文字都应该来自词典，剩下的中文就是残留的硬编码文案。
+ */
+export function chineseLeft(root: HTMLElement, raw: readonly string[] = []): string[] {
+  let text = root.textContent
+  for (const r of raw) text = text.split(r).join(' ')
+  return text.match(/[\u4e00-\u9fff][^a-zA-Z0-9]*/g) ?? []
+}
+

@@ -54,13 +54,13 @@ const (
 type runnerView struct {
 	ID         int64
 	Name, Pool string
-	// KindLabel 是 Runner 类型的显示名称（CI Runner；注册页、升级设置页上的 AI 执行节点为 AI 审计节点 或 AI 开发节点），
-	// URL 是它的详情页。
-	KindLabel, URL string
-	Platforms      []string
-	Executors      []string
-	Version        string
-	Revoked        bool
+	// Kind 是 Runner 类型（ci；注册页上的 AI 执行节点为 ai），Role 是 AI 执行节点的角色（review、development，CI Runner 为空），
+	// 前端按它们显示类型名称；URL 是它的详情页。
+	Kind, Role, URL string
+	Platforms       []string
+	Executors       []string
+	Version         string
+	Revoked         bool
 	// Drain 表示已暂停接单（Server 上的 drain 标记）。
 	Drain bool
 	// Online 表示最近 admin.RunnerOfflineAfter 内联系过 Server（见 admin.RunnerOnline）。
@@ -79,43 +79,54 @@ type runnerView struct {
 	capacity *store.RunnerCapacity
 }
 
-// ciKindLabel 是 CI Runner 的类型的显示名称。
-const ciKindLabel = "CI Runner"
+// resourcesView 是一组资源：CPU 是核数（例如"2""1.5"），Memory 是内存（例如"1.9 GiB"），没有时为空；
+// 单位"核"和组合的写法由前端按语言显示。
+type resourcesView struct{ CPU, Memory string }
 
-// capacityView 是 Runner 的规格与容量的文字（例如"2 核 / 1.9 GiB"）。规格是静态的，不是实时占用；
+// newResourcesView 返回资源的文字（为 0 的一项为空）。
+func newResourcesView(r store.Resources) resourcesView {
+	var v resourcesView
+	if r.CPU > 0 {
+		v.CPU = store.FormatCPU(r.CPU)
+	}
+	if r.Memory > 0 {
+		v.Memory = store.FormatMemory(r.Memory)
+	}
+	return v
+}
+
+// limitView 是一种 executor 的固定上限（CPU、Memory 至少有一项）。
+type limitView struct {
+	Executor string
+	resourcesView
+}
+
+// capacityView 是 Runner 的规格与容量。规格是静态的，不是实时占用；
 // 已分配是正在执行的 job 声明的 resources 之和，可分配是机器规格 - 预留（PLAN #14.1）。
 type capacityView struct {
-	Machine     string
-	Reserved    string
-	Allocatable string
-	Allocated   string
-	// Limits 是各 executor 的固定上限，例如"host 上限 2 核 / 6.0 GiB"（按 executor 排序）。
-	Limits  []string
+	Machine     resourcesView
+	Reserved    resourcesView
+	Allocatable resourcesView
+	Allocated   resourcesView
+	// Limits 是各 executor 的固定上限（按 executor 排序）。
+	Limits  []limitView
 	MaxJobs int
 }
 
-// resourcesText 返回"2 核 / 1.9 GiB"。
-func resourcesText(r store.Resources) string {
-	return store.FormatCPU(r.CPU) + " 核 / " + store.FormatMemory(r.Memory)
+// fullResources 返回规格、预留等总是显示两项的资源：为 0 的一项显示为 0。
+func fullResources(r store.Resources) resourcesView {
+	return resourcesView{CPU: store.FormatCPU(r.CPU), Memory: store.FormatMemory(r.Memory)}
 }
 
-// newCapacityView 返回容量的文字；allocated 是正在执行的 job 声明的资源之和。
+// newCapacityView 返回容量；allocated 是正在执行的 job 声明的资源之和。
 func newCapacityView(c *store.RunnerCapacity, allocated store.Resources) *capacityView {
 	v := &capacityView{
-		Machine: resourcesText(c.Machine), Reserved: resourcesText(c.Reserved), Allocatable: resourcesText(c.Allocatable()),
-		Allocated: resourcesText(allocated), MaxJobs: c.MaxJobs,
+		Machine: fullResources(c.Machine), Reserved: fullResources(c.Reserved), Allocatable: fullResources(c.Allocatable()),
+		Allocated: fullResources(allocated), MaxJobs: c.MaxJobs,
 	}
 	for _, k := range slices.Sorted(maps.Keys(c.Limits)) {
-		l := c.Limits[k]
-		var parts []string
-		if l.CPU > 0 {
-			parts = append(parts, store.FormatCPU(l.CPU)+" 核")
-		}
-		if l.Memory > 0 {
-			parts = append(parts, store.FormatMemory(l.Memory))
-		}
-		if len(parts) > 0 {
-			v.Limits = append(v.Limits, k+" 上限 "+strings.Join(parts, " / "))
+		if l := newResourcesView(c.Limits[k]); l != (resourcesView{}) {
+			v.Limits = append(v.Limits, limitView{Executor: k, resourcesView: l})
 		}
 	}
 	return v
@@ -124,7 +135,7 @@ func newCapacityView(c *store.RunnerCapacity, allocated store.Resources) *capaci
 // newRunnerView 返回 Runner r 在 now 时的显示数据（不含正在执行的 job 和已分配的资源）。
 func newRunnerView(r *cistore.CIRunner, now time.Time) *runnerView {
 	v := &runnerView{
-		ID: r.ID, Name: r.Name, Pool: r.Pool, KindLabel: ciKindLabel, URL: runnerURL(r.Name), Platforms: r.Platforms, Executors: r.Executors, Version: r.Version,
+		ID: r.ID, Name: r.Name, Pool: r.Pool, Kind: store.RunnerKindCI, URL: runnerURL(r.Name), Platforms: r.Platforms, Executors: r.Executors, Version: r.Version,
 		Revoked: r.Revoked(), Drain: r.Drain, Online: admin.RunnerOnline(&r.Runner, now), LastSeen: r.LastSeen,
 		capacity: r.Capacity, CacheReportedAt: r.CacheReportedAt,
 	}
@@ -140,15 +151,18 @@ func newRunnerView(r *cistore.CIRunner, now time.Time) *runnerView {
 // Accepting 表示 Runner 在线并且接单：有空闲时会领取新任务。
 func (v *runnerView) Accepting() bool { return !v.Revoked && v.Online && !v.Drain }
 
-// Conn 返回连接状态的文字和徽章样式（页面数据中的 ConnLabel、ConnClass，见 json.go）。
-func (v *runnerView) Conn() (string, string) {
+// ConnClass 返回连接状态的徽章样式（bad：已吊销，ok：在线，warn：离线）；连接状态的文字由前端按 Revoked、Online 显示。
+func (v *runnerView) ConnClass() string { return connClass(v.Revoked, v.Online) }
+
+// connClass 是 CI Runner 和 AI 执行节点共用的连接状态样式。
+func connClass(revoked, online bool) string {
 	switch {
-	case v.Revoked:
-		return "已吊销", "bad"
-	case v.Online:
-		return "在线", "ok"
+	case revoked:
+		return "bad"
+	case online:
+		return "ok"
 	}
-	return "离线", "warn"
+	return "warn"
 }
 
 // match 判断 Runner 是否符合状态筛选（取值见 runnerStateOptions，空字符串表示不筛选）。
@@ -171,22 +185,23 @@ func (v *runnerView) match(state string) bool {
 }
 
 // runnerStateOptions 是 Runners 页面按状态筛选的选项。
-var runnerStateOptions = []option{
-	{runnerStateOnline, "在线"},
-	{runnerStateAccepting, "在线并接单"},
-	{runnerStatePaused, "已暂停接单"},
-	{runnerStateBusy, "正在执行任务"},
-	{runnerStateOffline, "离线"},
-	{runnerStateRevoked, "已吊销"},
+var runnerStateOptions = []textOption{
+	{runnerStateOnline, message(msgRunnerFilterOnline)},
+	{runnerStateAccepting, message(msgRunnerFilterAccepting)},
+	{runnerStatePaused, message(msgRunnerFilterPaused)},
+	{runnerStateBusy, message(msgRunnerFilterBusy)},
+	{runnerStateOffline, message(msgRunnerFilterOffline)},
+	{runnerStateRevoked, message(msgRunnerFilterRevoked)},
 }
 
-func runnerStateLabel(s string) string {
+// runnerStateLabel 返回状态筛选的文字；不是筛选的取值时为空。
+func runnerStateLabel(s string) uiText {
 	for _, o := range runnerStateOptions {
 		if o.Value == s {
 			return o.Label
 		}
 	}
-	return ""
+	return uiText{}
 }
 
 // runnerCounts 是全部 Runner（不受筛选影响）的统计。
@@ -200,20 +215,20 @@ type runnersPage struct {
 	Counts  runnerCounts
 	// State、Pool 是筛选条件（已校验，无效的取值视为不筛选）。
 	State, Pool string
-	States      []option
+	States      []textOption
 	Pools       []string
 	// Self 是当前页面的地址（带筛选条件），操作后回到这里。
 	Self string
 	Now  time.Time
-	// OfflineAfter、LeaseTTL、LongPoll 是页面说明中用到的时长。
-	OfflineAfter, LeaseTTL, LongPoll string
+	// OfflineAfter、LeaseTTL、LongPoll 是页面说明中用到的时长（秒）。
+	OfflineAfter, LeaseTTL, LongPoll int64
 }
 
 // Filtered 表示设置了筛选条件。
 func (p *runnersPage) Filtered() bool { return p.State != "" || p.Pool != "" }
 
 // StateLabel 返回状态筛选的文字。
-func (p *runnersPage) StateLabel() string { return runnerStateLabel(p.State) }
+func (p *runnersPage) StateLabel() uiText { return runnerStateLabel(p.State) }
 
 // runnersURL 返回带筛选条件的 Runners 页面地址。
 func runnersURL(state, pool string) string {
@@ -286,9 +301,9 @@ type runnerUpgradeView struct {
 	CheckedAt       *time.Time
 	CheckError      string
 	CheckPending    bool
-	// CanUpgrade 表示现在可以请求升级到 Latest；不能时 Reason 说明原因。
+	// CanUpgrade 表示现在可以请求升级到 Latest；不能时 Reason 说明原因（upgradectl 的原因码映射的消息）。
 	CanUpgrade bool
-	Reason     string
+	Reason     uiText
 	// Request 是最近一次升级请求（没有时为 nil）。
 	Request *upgradeRequestView
 }
@@ -314,14 +329,15 @@ func newUpgradeRequestView(r *apiv1.RunnerUpgradeRequest) *upgradeRequestView {
 	}
 }
 
-func newRunnerUpgradeView(i *apiv1.RunnerUpgradeInfo) *runnerUpgradeView {
+func newRunnerUpgradeView(ri upgradectl.RunnerInfo) *runnerUpgradeView {
+	i := ri.Info
 	if i == nil {
 		return &runnerUpgradeView{}
 	}
 	return &runnerUpgradeView{
 		State: i.State, Target: i.Target, Error: i.Error, Launcher: i.Launcher, Disabled: i.Disabled, Current: i.Current, Previous: i.Previous,
 		Package: i.Package, Latest: i.Latest, CheckedAt: unixTime(i.CheckedAt), CheckError: i.CheckError, CheckPending: i.CheckPending,
-		CanUpgrade: i.CanUpgrade, Reason: i.Reason, Request: newUpgradeRequestView(i.Request),
+		CanUpgrade: i.CanUpgrade, Reason: upgradeReasonText(ri.Reason), Request: newUpgradeRequestView(i.Request),
 	}
 }
 
@@ -352,9 +368,9 @@ func (d *Dashboard) pageRunners(w http.ResponseWriter, r *http.Request, _ *sessi
 	q := r.URL.Query()
 	p := &runnersPage{
 		States: runnerStateOptions, Now: time.Now(),
-		OfflineAfter: humanDuration(admin.RunnerOfflineAfter), LeaseTTL: humanDuration(d.leaseTTL()), LongPoll: humanDuration(d.longPoll()),
+		OfflineAfter: seconds(admin.RunnerOfflineAfter), LeaseTTL: seconds(d.leaseTTL()), LongPoll: seconds(d.longPoll()),
 	}
-	if s := q.Get("state"); runnerStateLabel(s) != "" {
+	if s := q.Get("state"); !runnerStateLabel(s).IsZero() {
 		p.State = s
 	}
 	all, err := d.loadRunners(r.Context(), store.RunnerFilter{})
@@ -377,10 +393,10 @@ func (d *Dashboard) pageRunners(w http.ResponseWriter, r *http.Request, _ *sessi
 		}
 	}
 	p.Self = runnersURL(p.State, p.Pool)
-	d.render(w, r, "runners", "Runners", p)
+	d.renderPage(w, r, "runners", message(msgRunnersTitle), p, http.StatusOK)
 }
 
-// humanDuration 把时长写成"2 分钟""90 秒"。
+// humanDuration 把时长写成"2 分钟""90 秒"（还没有迁移的设置页用；迁移后的页面传秒数，见 seconds）。
 func humanDuration(d time.Duration) string {
 	if d >= time.Minute && d%time.Minute == 0 {
 		return fmt.Sprintf("%d 分钟", int(d/time.Minute))
@@ -575,7 +591,7 @@ func (d *Dashboard) newRunnerPage(ctx context.Context, f *formState) (*runnerNew
 // renderRunnerNew 渲染注册页面；页面可能含有一次性令牌，不允许缓存。
 func (d *Dashboard) renderRunnerNew(w http.ResponseWriter, r *http.Request, p *runnerNewPage, status int) {
 	w.Header().Set("Cache-Control", "no-store")
-	d.renderStatus(w, r, "runner_new", "注册新的 Runner", p, status)
+	d.renderPage(w, r, "runner_new", message(msgRunnerNewTitle), p, status)
 }
 
 // pageRunnerNew 是注册新的 Runner 的第一步：准备条件和生成令牌的表单。地址中的 pool、name、kind 用于预填（例如重新注册被吊销的

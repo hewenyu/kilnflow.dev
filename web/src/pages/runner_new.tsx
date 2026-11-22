@@ -7,13 +7,13 @@ import { liveSeconds, useLive } from '../app/live'
 import { Callout } from '../components/Callout'
 import { CopyButton } from '../components/CopyButton'
 import { Form, SubmitButton } from '../components/Form'
-import { runnerViewSchema, type RunnerView } from '../components/RunnerSchema'
+import { connLabel, runnerKindLabel, runnerViewSchema, type RunnerView, type TFn } from '../components/RunnerSchema'
 import { RunnerLabels } from '../components/RunnerStatus'
 import { Ago, secondMs, useNow } from '../components/Time'
+import { Msg, Trans, useLocale, useT, type Tags } from '../i18n/locale'
 import { fieldError, fieldValue, formStateSchema, list, type FormState } from '../lib/envelope'
 import { clock, shortVersion, toDate } from '../lib/format'
 import css from './runner_new.module.css'
-import { Msg } from '../i18n/locale'
 
 // 注册新的 Runner（/runners/new）和生成令牌后的一次性展示页（/runners/enroll/{id}）：
 // 按顺序完成四步：准备机器，生成一次性注册令牌，在机器上执行命令，确认上线。令牌只在第一次打开展示页时返回。
@@ -62,27 +62,34 @@ export function formKind(kind: string, role: string): string {
   return role === 'development' ? 'ai-dev' : 'ai'
 }
 
-/** enrollKindLabel 返回令牌对应的 Runner 类型的显示名称。 */
-export function enrollKindLabel(kind: string, role: string): string {
-  if (kind !== 'ai') return 'CI Runner'
-  return role === 'development' ? 'AI 开发节点' : 'AI 审计节点'
+/** TokenLeft 是令牌的剩余有效期：expired 表示已过期（样式按它决定，不看文字），minutes 是剩余的整分钟数。 */
+export interface TokenLeft {
+  expired: boolean
+  minutes: number
 }
 
-/** expiresText 返回令牌的剩余有效期，精度是分钟。 */
-export function expiresText(expires: string, now: number): string {
+/** tokenLeft 返回令牌在 now 时的剩余有效期，精度是分钟；时间无效时返回 null。 */
+export function tokenLeft(expires: string, now: number): TokenLeft | null {
   const d = toDate(expires)
-  if (!d) return ''
+  if (!d) return null
   const left = (d.getTime() - now) / 1000
-  if (left <= 0) return '已过期'
-  if (left < 60) return '剩余不到 1 分钟'
-  return `剩余 ${Math.floor(left / 60)} 分钟`
+  return { expired: left <= 0, minutes: left <= 0 ? 0 : Math.floor(left / 60) }
+}
+
+/** expiresText 返回令牌的剩余有效期的文字，例如"剩余 12 分钟"。 */
+export function expiresText(left: TokenLeft, t: TFn): string {
+  if (left.expired) return t('runnerNew.expired')
+  if (left.minutes < 1) return t('runnerNew.leftUnderMinute')
+  return t('runnerNew.leftMinutes', { count: left.minutes })
 }
 
 /** Countdown 是令牌的有效期倒计时，每 10 秒更新（精度是分钟）。 */
 function Countdown({ expires }: { expires: string }) {
+  const t = useT()
   const now = useNow(10 * secondMs)
-  const text = expiresText(expires, now)
-  return <span className={text === '已过期' ? css.expired : css.left}>{text}</span>
+  const left = tokenLeft(expires, now)
+  if (!left) return null
+  return <span className={left.expired ? css.expired : css.left}>{expiresText(left, t)}</span>
 }
 
 function Step({ n, title, done, todo, children }: { n: number; title: string; done?: boolean; todo?: boolean; children: ReactNode }) {
@@ -113,38 +120,43 @@ function Code({ code, label }: { code: string; label: string }) {
   )
 }
 
+const rich: Tags = { b: (c) => <b>{c}</b>, code: (c) => <code>{c}</code> }
+
 function Prepare({ data }: { data: Data }) {
+  const t = useT()
   const ver = shortVersion(data.ServerVersion)
   return (
-    <Step n={1} title="准备机器">
+    <Step n={1} title={t('runnerNew.step1')}>
       <ul className={css.list}>
         <li>
-          安装 <code>kiln-runner</code>：从 Kiln 的 Release 下载对应平台的 <code>{'kiln-<版本>-<os>-<arch>.tar.gz'}</code>，把其中的{' '}
-          <code>kiln-runner</code> 放进 PATH（例如 <code>/usr/local/bin</code>）。建议与 Server 版本一致（Server 当前为{' '}
-          <span className="mono" title={data.ServerVersion}>
-            {ver}
-          </span>
-          ）。
+          <Trans
+            id="runnerNew.prepInstall"
+            params={{ archive: `kiln-<${t('runnerNew.archiveVersion')}>-<os>-<arch>.tar.gz` }}
+            tags={{
+              ...rich,
+              ver: () => (
+                <span className="mono" title={data.ServerVersion}>
+                  {ver}
+                </span>
+              ),
+            }}
+          />
         </li>
         <li>
-          确认这台机器能访问 Server：下面的命令输出 <code>ok</code>。Runner 只发出站连接，不需要开放端口。
-          <Code code={`curl -fsS ${data.PublicURL}/healthz`} label="复制检查命令" />
+          <Trans id="runnerNew.prepHealth" tags={rich} />
+          <Code code={`curl -fsS ${data.PublicURL}/healthz`} label={t('runnerNew.copyCheck')} />
         </li>
         <li>
-          用将来运行 Runner 的普通用户执行后面的命令，不要用 root。Linux 上先执行 <code>sudo loginctl enable-linger "$USER"</code>
-          ，让用户服务在退出登录后继续运行。
+          <Trans id="runnerNew.prepUser" tags={rich} />
         </li>
         <li>
-          需要容器 job 时装好 docker（OrbStack、colima 或 Docker Engine），<code>docker info</code> 能用即可；没有 docker 时只有 host executor。
+          <Trans id="runnerNew.prepDocker" tags={rich} />
         </li>
-        <li>不要把 Server 的 admin token 或 GitHub App 私钥复制到这台机器，只用一次性注册令牌。</li>
+        <li>{t('runnerNew.prepSecrets')}</li>
         <li>
-          <b>AI 执行节点</b>（AI 审计、AI 开发）不用 <code>kiln-runner</code>，而是执行机器上常驻的 Orca 加连接器 <code>kiln-orca</code>：
-          需要 Node.js 24+，Orca 已运行（macOS 已验证；Linux 可以注册为审计、开发节点，实机验证进行中），Codex 和 / 或 Claude Code
-          已安装并登录；git 凭据由 Server 按任务签发，机器上不用配置；可选 Docker Compose，为需要 pg、redis 的仓库拉起测试服务。用 npm 安装连接器：
-          <Code code="npm install -g @yuebanlaosiji/kilnflow-orca" label="复制安装命令" />
-          审计 AI 开发的 PR 时用的 Agent 不能是开发时用过的（例如 Claude Code 开发、Codex 审计），所以一台装了两种 Agent 的机器可以同时注册一个审计节点和一个开发节点：
-          第二个节点的每条命令都加 <code>--home &lt;另一个数据目录&gt;</code>。AI 执行节点可以与 kiln-runner 装在同一台机器上。
+          <Trans id="runnerNew.prepAI" tags={rich} />
+          <Code code="npm install -g @yuebanlaosiji/kilnflow-orca" label={t('runnerNew.copyInstall')} />
+          <Trans id="runnerNew.prepAIAgents" params={{ home: `--home <${t('runnerNew.dataDir')}>` }} tags={rich} />
         </li>
       </ul>
     </Step>
@@ -158,50 +170,58 @@ function Field({ form, name, label, caption, children }: { form: FormState; name
       <FormControl.Label>{label}</FormControl.Label>
       {children({ value: fieldValue(form, name), invalid: Boolean(err) })}
       <FormControl.Caption>{caption}</FormControl.Caption>
-      {err && <FormControl.Validation variant="error"><Msg text={err} /></FormControl.Validation>}
+      {err && (
+        <FormControl.Validation variant="error">
+          <Msg text={err} />
+        </FormControl.Validation>
+      )}
     </FormControl>
   )
 }
 
 function TokenForm({ data }: { data: Data }) {
+  const t = useT()
   const f = data.Form
   const general = fieldError(f, '_')
   const kindErr = fieldError(f, 'kind')
   return (
     <Form action="/runners/token" aria-labelledby="s2">
       <input type="hidden" name="request_id" value={data.RequestID} />
-      <Step n={2} title="生成一次性注册令牌">
+      <Step n={2} title={t('runnerNew.step2')}>
         {f?.Failed && (
-          <Callout tone="critical" title="没有生成令牌" className={css.gap}>
-            {general ? <Msg text={general} /> : '请按字段旁的提示修改后再生成。'}
+          <Callout tone="critical" title={t('runnerNew.failedTitle')} className={css.gap}>
+            {general ? <Msg text={general} /> : t('runnerNew.failedFields')}
           </Callout>
         )}
         <div className={css.fields}>
           <RadioGroup name="kind">
-            <RadioGroup.Label>Runner 类型</RadioGroup.Label>
+            <RadioGroup.Label>{t('runnerNew.kind')}</RadioGroup.Label>
             <FormControl>
               <Radio value="ci" defaultChecked={(fieldValue(f, 'kind') || 'ci') === 'ci'} />
-              <FormControl.Label>CI Runner</FormControl.Label>
+              <FormControl.Label>{t('runnerKind.ci')}</FormControl.Label>
               <FormControl.Caption>
-                <code>kiln-runner</code>：执行 <code>.kiln/workflows</code> 中的 job。
+                <Trans id="runnerNew.kindCI" tags={rich} />
               </FormControl.Caption>
             </FormControl>
             <FormControl>
               <Radio value="ai" defaultChecked={fieldValue(f, 'kind') === 'ai'} />
-              <FormControl.Label>AI 审计节点</FormControl.Label>
+              <FormControl.Label>{t('runnerKind.aiReview')}</FormControl.Label>
               <FormControl.Caption>
-                <code>kiln-orca</code>：只执行 PR 的 AI 审计（仓库的 <code>.kiln/agent/config.yml</code>），在 Orca 中运行 Codex 或 Claude Code，可以同时执行多个任务。
+                <Trans id="runnerNew.kindAIReview" tags={rich} />
               </FormControl.Caption>
             </FormControl>
             <FormControl>
               <Radio value="ai-dev" defaultChecked={fieldValue(f, 'kind') === 'ai-dev'} />
-              <FormControl.Label>AI 开发节点</FormControl.Label>
+              <FormControl.Label>{t('runnerKind.aiDev')}</FormControl.Label>
               <FormControl.Caption>
-                <code>kiln-orca</code>：从标了 <code>kiln:ready</code> 的 Issue 中选题、设计、开发并交付为 PR（仓库开启 <code>development</code> 后）。
-                它开发的 PR 由审计节点用另一个 Agent 审计；角色注册后不能修改。
+                <Trans id="runnerNew.kindAIDev" tags={rich} />
               </FormControl.Caption>
             </FormControl>
-            {kindErr && <RadioGroup.Validation variant="error"><Msg text={kindErr} /></RadioGroup.Validation>}
+            {kindErr && (
+              <RadioGroup.Validation variant="error">
+                <Msg text={kindErr} />
+              </RadioGroup.Validation>
+            )}
           </RadioGroup>
           <Field
             form={f}
@@ -209,8 +229,8 @@ function TokenForm({ data }: { data: Data }) {
             label="pool"
             caption={
               <>
-                机器组，留空为 default。写了 <code>pool: X</code> 的 job 只在 pool X 的 Runner 上执行；没有写 pool 的 job 可以在任何 pool 上执行。
-                {data.Pools.length > 0 && `已有：${data.Pools.join('、')}。`}
+                <Trans id="runnerNew.poolCaption" tags={rich} />
+                {data.Pools.length > 0 && t('runnerNew.poolExisting', { pools: data.Pools.join(t('runner.enumSeparator')) })}
               </>
             }
           >
@@ -232,17 +252,12 @@ function TokenForm({ data }: { data: Data }) {
               <option key={p} value={p} />
             ))}
           </datalist>
-          <Field
-            form={f}
-            name="name"
-            label="Runner 名称（可选）"
-            caption="只用于生成第 3 步的命令，留空时取机器的主机名。名称不能重复：与已有 Runner 同名时，注册会替换那台 Runner 的身份（用于重新注册同一台机器）。"
-          >
+          <Field form={f} name="name" label={t('runnerNew.name')} caption={t('runnerNew.nameCaption')}>
             {({ value, invalid }) => (
               <TextInput
                 name="name"
                 defaultValue={value}
-                placeholder="例如 mini-01"
+                placeholder={t('runnerNew.namePlaceholder')}
                 spellCheck={false}
                 autoCapitalize="off"
                 validationStatus={invalid ? 'error' : undefined}
@@ -252,9 +267,9 @@ function TokenForm({ data }: { data: Data }) {
           </Field>
         </div>
         <div className={css.actions}>
-          <SubmitButton variant="primary">生成注册令牌</SubmitButton>
+          <SubmitButton variant="primary">{t('runnerNew.generate')}</SubmitButton>
         </div>
-        <p className={css.hint}>令牌 1 小时内有效、只能使用一次，生成后只显示一次；刷新或返回不会重新生成，也不会再次显示。</p>
+        <p className={css.hint}>{t('runnerNew.tokenHint')}</p>
       </Step>
     </Form>
   )
@@ -262,6 +277,7 @@ function TokenForm({ data }: { data: Data }) {
 
 /** Regen 是重新生成令牌的表单（沿用这次的 pool 和名称）。 */
 function Regen({ data }: { data: Data }) {
+  const t = useT()
   return (
     <Form action="/runners/token" className={css.gapTop}>
       <input type="hidden" name="request_id" value={data.RegenID} />
@@ -272,113 +288,111 @@ function Regen({ data }: { data: Data }) {
         name="kind"
         value={data.Reveal ? formKind(data.Reveal.Kind, data.Reveal.Role) : fieldValue(data.Form, 'kind')}
       />
-      <SubmitButton>重新生成令牌</SubmitButton>
+      <SubmitButton>{t('runnerNew.regenerate')}</SubmitButton>
     </Form>
   )
 }
 
 function TokenStatus({ data, v, token }: { data: Data; v: Enroll; token: string }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const mono: Tags = { m: (c) => <b className="mono">{c}</b> }
   return (
-    <Step n={2} title="一次性注册令牌" done={v.Status === 'used'}>
+    <Step n={2} title={t('runnerNew.tokenTitle')} done={v.Status === 'used'}>
       <p className={css.facts}>
-        {enrollKindLabel(v.Kind, v.Role)}
+        {runnerKindLabel(v.Kind, v.Role, t)}
         {v.Pool && (
           <>
-            {' '}
-            · pool <b className="mono">{v.Pool}</b>
+            {' · '}
+            <Trans id="runnerNew.factPool" params={{ pool: v.Pool }} tags={mono} />
           </>
         )}
         {v.Name && (
           <>
-            {' '}
-            · 名称 <b className="mono">{v.Name}</b>
+            {' · '}
+            <Trans id="runnerNew.factName" params={{ name: v.Name }} tags={mono} />
           </>
-        )}{' '}
-        · 生成于 {clock(v.Created)} · 有效期到 {clock(v.Expires)}
+        )}
+        {' · '}
+        {t('runnerNew.factTimes', { created: clock(v.Created, locale), expires: clock(v.Expires, locale) })}
         {v.Status === 'unused' && (
           <>
-            （<Countdown expires={v.Expires} />）
+            {t('runnerNew.leftOpen')}
+            <Countdown expires={v.Expires} />
+            {t('runnerNew.leftClose')}
           </>
-        )}{' '}
-        · 只能使用一次。
+        )}
+        {' · '}
+        {t('runnerNew.factOnce')}
       </p>
       {token ? (
-        <Callout tone="warning" title="令牌只显示这一次">
-          离开或刷新本页后不会再显示，也不会重新生成。请现在复制第 3 步的命令。
+        <Callout tone="warning" title={t('runnerNew.onceTitle')}>
+          {t('runnerNew.onceText')}
         </Callout>
       ) : v.Status === 'unused' ? (
-        <Callout tone="info" title="令牌已经显示过，不会再次显示">
-          已经复制的话，直接在机器上执行即可；没有保存下来时，重新生成一个。之前的令牌没有被使用时，到期后自动失效。
+        <Callout tone="info" title={t('runnerNew.shownTitle')}>
+          {t('runnerNew.shownText')}
           <Regen data={data} />
         </Callout>
       ) : v.Status === 'expired' ? (
-        <Callout tone="critical" title="令牌已过期，没有被使用">
-          过期的令牌不能注册，请重新生成。
+        <Callout tone="critical" title={t('runnerNew.expiredTitle')}>
+          {t('runnerNew.expiredText')}
           <Regen data={data} />
         </Callout>
       ) : (
-        <p className={css.muted}>令牌已被使用，不能再次使用，见第 4 步。</p>
+        <p className={css.muted}>{t('runnerNew.usedText')}</p>
       )}
     </Step>
   )
 }
 
 function Existing({ r }: { r: RunnerView }) {
+  const t = useT()
+  const params = { kind: runnerKindLabel(r.Kind, r.Role, t), conn: connLabel(r, t), name: r.Name }
   return (
-    <Callout tone="warning" title={`已经有名为 ${r.Name} 的 Runner`} className={css.gapTop}>
-      （{r.KindLabel}，{r.ConnLabel}
-      {r.Pool && `，pool ${r.Pool}`}）用这个名称注册会替换它的身份：
-      {r.Revoked
-        ? `被吊销的 ${r.Name} 会恢复为在线并接单。`
-        : '原来那台机器之后无法再连接。如果是同一台机器重新注册，可以继续；否则请换一个名称后重新生成。'}
+    <Callout tone="warning" title={t('runnerNew.existingTitle', { name: r.Name })} className={css.gapTop}>
+      {t(r.Pool ? 'runnerNew.existingFactsPool' : 'runnerNew.existingFacts', { ...params, pool: r.Pool })}
+      {t(r.Revoked ? 'runnerNew.existingRevoked' : 'runnerNew.existingActive', params)}
     </Callout>
   )
 }
 
 function Commands({ v, command }: { v: Enroll; command: string }) {
+  const t = useT()
   const ai = v.Kind === 'ai'
+  const tags: Tags = { ...rich, m: (c) => <span className="mono">{c}</span> }
   return (
-    <Step n={3} title="在机器上执行命令" todo={!command}>
+    <Step n={3} title={t('runnerNew.step3')} todo={!command}>
       {command ? (
         <>
-          <Code code={command} label="复制命令" />
+          <Code code={command} label={t('runnerNew.copyCommand')} />
           <ul className={css.list}>
             <li>
-              <code>enroll</code>：用令牌注册
               {v.Name ? (
-                <>
-                  为 <span className="mono">{v.Name}</span>
-                </>
+                <Trans id="runnerNew.cmdEnrollNamed" params={{ name: v.Name }} tags={tags} />
               ) : (
-                <>
-                  ，名称默认取机器的主机名（去掉域名部分），需要别的名称时加 <code>--name</code>
-                </>
+                <Trans id="runnerNew.cmdEnroll" tags={tags} />
               )}
-              。
             </li>
             {ai ? (
               <>
                 <li>
-                  <code>doctor</code>：检查注册、与 Server 的连接、Orca、Agent、git 和 Docker（可选）。
+                  <Trans id="runnerNew.cmdDoctorAI" tags={tags} />
                 </li>
                 <li>
-                  <code>service install</code>：安装并启动服务。macOS 为 LaunchAgent，Linux 为 systemd 用户服务；日志在数据目录的{' '}
-                  <code>logs/</code>。也可以先用 <code>kiln-orca run</code> 在前台运行，直接看输出。
+                  <Trans id="runnerNew.cmdServiceAI" tags={tags} />
                 </li>
                 <li>
-                  同一台机器上已经有一个 AI 执行节点时，每条命令都加 <code>--home &lt;另一个数据目录&gt;</code>，例如{' '}
-                  <code>--home ~/kiln-orca-dev</code>。
+                  <Trans id="runnerNew.cmdHomeAI" params={{ home: `--home <${t('runnerNew.dataDir')}>`, example: '--home ~/kiln-orca-dev' }} tags={tags} />
                 </li>
               </>
             ) : (
               <>
                 <li>
-                  <code>doctor</code>：检查平台、executor 和与 Server 的连接。
+                  <Trans id="runnerNew.cmdDoctor" tags={tags} />
                 </li>
                 <li>
-                  <code>service install</code>：安装并启动服务。macOS 为 LaunchAgent（开机自启，日志在 <code>~/kiln/logs/runner.log</code>）；Linux 为
-                  systemd 用户服务（日志用 <code>journalctl --user -u kiln-runner -f</code> 查看）。也可以先用 <code>kiln-runner run</code>{' '}
-                  在前台运行，直接看输出。
+                  <Trans id="runnerNew.cmdService" tags={tags} />
                 </li>
               </>
             )}
@@ -387,7 +401,7 @@ function Commands({ v, command }: { v: Enroll; command: string }) {
         </>
       ) : (
         <p className={css.muted}>
-          {v.Status === 'used' ? '令牌已使用' : v.Status === 'expired' ? '令牌已过期' : '令牌已经显示过'}，这里不再显示命令。
+          {t(v.Status === 'used' ? 'runnerNew.noCmdUsed' : v.Status === 'expired' ? 'runnerNew.noCmdExpired' : 'runnerNew.noCmdShown')}
         </p>
       )}
     </Step>
@@ -395,18 +409,22 @@ function Commands({ v, command }: { v: Enroll; command: string }) {
 }
 
 function Online({ v, live }: { v: Enroll; live: boolean }) {
+  const t = useT()
   const r = v.Runner
   const bin = v.Kind === 'ai' ? 'kiln-orca' : 'kiln-runner'
   const online = v.Status === 'used' && r?.Accepting === true
   return (
-    <Step n={4} title="确认上线" done={online}>
+    <Step n={4} title={t('runnerNew.step4')} done={online}>
       <div aria-live="polite">
         {v.Status === 'used' ? (
           r ? (
             <>
               <p className={css.p}>
-                令牌已被 <a href={r.URL}>{r.Name}</a> 使用（<Ago t={v.UsedAt} />
-                {r.Pool && `，pool ${r.Pool}`}）。
+                <Trans
+                  id={r.Pool ? 'runnerNew.usedByPool' : 'runnerNew.usedBy'}
+                  params={{ name: r.Name, pool: r.Pool }}
+                  tags={{ link: (c) => <a href={r.URL}>{c}</a>, ago: () => <Ago t={v.UsedAt} /> }}
+                />
               </p>
               <p className={css.labels}>
                 <RunnerLabels runner={r} />
@@ -415,33 +433,33 @@ function Online({ v, live }: { v: Enroll; live: boolean }) {
               </p>
               {r.Accepting ? (
                 <p className={css.ok}>
-                  <b>已上线，可以接收任务。</b>
+                  <b>{t('runnerNew.online')}</b>
                 </p>
               ) : !r.Revoked && !r.Online ? (
                 <p className={css.p}>
-                  已注册，但还没有连接：在机器上执行 <code>{bin} service install</code> 启动服务，或用 <code>{bin} run</code>{' '}
-                  在前台运行查看输出。
+                  <Trans id="runnerNew.notConnected" params={{ install: `${bin} service install`, run: `${bin} run` }} tags={rich} />
                 </p>
               ) : null}
             </>
           ) : (
-            <p className={css.p}>令牌已被使用，但对应的 Runner 已不存在。</p>
+            <p className={css.p}>{t('runnerNew.usedGone')}</p>
           )
         ) : v.Status === 'expired' ? (
-          <p className={css.p}>令牌已过期，没有 Runner 用它注册。</p>
+          <p className={css.p}>{t('runnerNew.expiredUnused')}</p>
         ) : (
-          <p className={css.p}>等待注册：令牌还没有被使用。在机器上执行第 3 步的命令后，这里会自动更新。</p>
+          <p className={css.p}>{t('runnerNew.waiting')}</p>
         )}
       </div>
       <p className={css.hint}>
-        <Link href={v.Kind === 'ai' ? '/ai/runners' : '/runners'}>在 {v.Kind === 'ai' ? 'AI 执行节点列表' : 'Runner 列表'}中查看</Link>
-        {live && ` · 每 ${liveSeconds} 秒自动更新`}
+        <Link href={v.Kind === 'ai' ? '/ai/runners' : '/runners'}>{t(v.Kind === 'ai' ? 'runnerNew.viewAIList' : 'runnerNew.viewList')}</Link>
+        {live && t('runnerNew.autoRefresh', { seconds: liveSeconds })}
       </p>
     </Step>
   )
 }
 
 function RunnerNew({ data }: PageProps<Data>) {
+  const t = useT()
   const v = data.Reveal
   // 令牌只在第一次取数据时返回：定时刷新拿到的数据中没有令牌，保留第一次的令牌和命令
   const [first] = useState(() => ({ token: v?.Token ?? '', command: data.Command }))
@@ -453,16 +471,16 @@ function RunnerNew({ data }: PageProps<Data>) {
   return (
     <div className={css.page}>
       <Breadcrumbs>
-        <Breadcrumbs.Item href="/runners">Runner</Breadcrumbs.Item>
+        <Breadcrumbs.Item href="/runners">{t('runners.title')}</Breadcrumbs.Item>
         <Breadcrumbs.Item href={v ? `/runners/enroll/${v.ID}` : '/runners/new'} selected>
-          注册新的 Runner
+          {t('runnerNew.title')}
         </Breadcrumbs.Item>
       </Breadcrumbs>
-      <h1 className={css.title}>注册新的 Runner</h1>
-      <p className={css.lead}>按顺序完成四步：准备机器，生成一次性注册令牌，在机器上执行命令，确认上线。</p>
+      <h1 className={css.title}>{t('runnerNew.title')}</h1>
+      <p className={css.lead}>{t('runnerNew.lead')}</p>
       {data.Missing && (
-        <Callout tone="critical" title="找不到这次生成的令牌">
-          这个地址只对生成令牌的用户有效，令牌过期一小时后或 Server 重启后不再保存。令牌不会再次显示；需要时在下面重新生成。
+        <Callout tone="critical" title={t('runnerNew.missingTitle')}>
+          {t('runnerNew.missingText')}
         </Callout>
       )}
       <Prepare data={data} />
@@ -475,12 +493,12 @@ function RunnerNew({ data }: PageProps<Data>) {
       ) : (
         <>
           <TokenForm data={data} />
-          <Step n={3} title="在机器上执行命令" todo>
-            <p className={css.muted}>生成令牌后显示要执行的命令。</p>
+          <Step n={3} title={t('runnerNew.step3')} todo>
+            <p className={css.muted}>{t('runnerNew.step3Todo')}</p>
           </Step>
-          <Step n={4} title="确认上线" todo>
+          <Step n={4} title={t('runnerNew.step4')} todo>
             <p className={css.muted}>
-              Runner 注册并启动服务后，在下一页或 <Link href="/runners">Runner 列表</Link>中确认它在线并接单。
+              <Trans id="runnerNew.step4Todo" tags={{ link: (c) => <Link href="/runners">{c}</Link> }} />
             </p>
           </Step>
         </>

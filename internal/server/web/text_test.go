@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hewenyu/kilnflow.dev/internal/shorten"
 )
@@ -56,8 +57,8 @@ func entryForms(t *testing.T, raw json.RawMessage) []string {
 	return slices.Collect(maps.Values(forms))
 }
 
-// placeholderRe 与前端 messages.ts 的占位符相同：{name}、{name, number}、{name, time}。
-var placeholderRe = regexp.MustCompile(`\{(\w+)(?:,\s*(number|time))?\}`)
+// placeholderRe 与前端 messages.ts 的占位符相同：{name}、{name, number}、{name, time}、{name, duration}。
+var placeholderRe = regexp.MustCompile(`\{(\w+)(?:,\s*(number|time|duration))?\}`)
 
 // entryParams 返回文案中的参数名和格式（复数的各个形式合在一起）。
 func entryParams(t *testing.T, raw json.RawMessage) map[string]string {
@@ -84,11 +85,16 @@ func textZH(t *testing.T, x uiText) string {
 	forms := entryForms(t, raw)
 	s := forms[0]
 	return placeholderRe.ReplaceAllStringFunc(s, func(p string) string {
-		name := placeholderRe.FindStringSubmatch(p)[1]
+		m := placeholderRe.FindStringSubmatch(p)
+		name := m[1]
 		v, ok := x.params[name]
 		if !ok {
 			t.Errorf("%q 缺少参数 %q", x.id, name)
 			return "…"
+		}
+		if m[2] == "duration" {
+			// 时长（秒）：与前端相同，整分钟显示为分钟，其余显示为秒
+			return humanDuration(time.Duration(toInt64(t, v)) * time.Second)
 		}
 		if f, ok := v.(float64); ok {
 			// 从页面数据解码的数字是 float64：按整数显示，与前端相同
@@ -96,6 +102,24 @@ func textZH(t *testing.T, x uiText) string {
 		}
 		return fmt.Sprint(v)
 	})
+}
+
+// toInt64 返回整数参数的值（直接构造的是 int64，从页面数据解码的是 float64）。
+func toInt64(t *testing.T, v any) int64 {
+	t.Helper()
+	switch n := v.(type) {
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	case json.Number:
+		i, err := n.Int64()
+		if err == nil {
+			return i
+		}
+	}
+	t.Errorf("参数 %v 不是整数", v)
+	return 0
 }
 
 // textsZH 按中文词典显示一组 uiText。

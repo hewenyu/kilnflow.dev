@@ -1,6 +1,8 @@
 {
  "Page": "runners",
- "Title": "Runners",
+ "Title": {
+  "id": "runners.pageTitle"
+ },
  "Nav": "runners",
  "Status": 200,
  "Session": {
@@ -54,15 +56,30 @@
      }
     ],
     "Accepting": true,
-    "ConnLabel": "在线",
     "ConnClass": "ok",
     "Capacity": {
-     "Machine": "10 核 / 16.0 GiB",
-     "Reserved": "2 核 / 4.0 GiB",
-     "Allocatable": "8 核 / 12.0 GiB",
-     "Allocated": "2 核 / 2.0 GiB",
+     "Machine": {
+      "CPU": "10",
+      "Memory": "16.0 GiB"
+     },
+     "Reserved": {
+      "CPU": "2",
+      "Memory": "4.0 GiB"
+     },
+     "Allocatable": {
+      "CPU": "8",
+      "Memory": "12.0 GiB"
+     },
+     "Allocated": {
+      "CPU": "2",
+      "Memory": "2.0 GiB"
+     },
      "Limits": [
-      "oci 上限 8 核 / 7.7 GiB"
+      {
+       "CPU": "8",
+       "Memory": "7.7 GiB",
+       "Executor": "oci"
+      }
      ],
      "MaxJobs": 4
     },
@@ -82,7 +99,12 @@
      "CheckError": "",
      "CheckPending": false,
      "CanUpgrade": false,
-     "Reason": "正在升级到 0.4.3",
+     "Reason": {
+      "id": "upgradeReason.upgrading",
+      "params": {
+       "version": "0.4.3"
+      }
+     },
      "Request": {
       "ID": 1003,
       "Version": "0.4.3",
@@ -94,8 +116,8 @@
       "Finished": null
      }
     },
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/mini-01"
+    "URL": "/runners/detail/mini-01",
+    "Kind": "ci"
    },
    {
     "ID": 2,
@@ -124,13 +146,24 @@
      }
     ],
     "Accepting": false,
-    "ConnLabel": "在线",
     "ConnClass": "ok",
     "Capacity": {
-     "Machine": "10 核 / 16.0 GiB",
-     "Reserved": "2 核 / 4.0 GiB",
-     "Allocatable": "8 核 / 12.0 GiB",
-     "Allocated": "1 核 / 1.0 GiB",
+     "Machine": {
+      "CPU": "10",
+      "Memory": "16.0 GiB"
+     },
+     "Reserved": {
+      "CPU": "2",
+      "Memory": "4.0 GiB"
+     },
+     "Allocatable": {
+      "CPU": "8",
+      "Memory": "12.0 GiB"
+     },
+     "Allocated": {
+      "CPU": "1",
+      "Memory": "1.0 GiB"
+     },
      "Limits": [],
      "MaxJobs": 4
     },
@@ -162,8 +195,8 @@
       "Finished": "2026-11-05T03:52:13-08:00"
      }
     },
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/mini-02"
+    "URL": "/runners/detail/mini-02",
+    "Kind": "ci"
    },
    {
     "ID": 3,
@@ -183,15 +216,30 @@
     "LastSeen": "2026-11-05T04:08:46-08:00",
     "Jobs": null,
     "Accepting": false,
-    "ConnLabel": "离线",
     "ConnClass": "warn",
     "Capacity": {
-     "Machine": "2 核 / 1.9 GiB",
-     "Reserved": "0 核 / 0 MiB",
-     "Allocatable": "2 核 / 1.9 GiB",
-     "Allocated": "0 核 / 0 MiB",
+     "Machine": {
+      "CPU": "2",
+      "Memory": "1.9 GiB"
+     },
+     "Reserved": {
+      "CPU": "0",
+      "Memory": "0 MiB"
+     },
+     "Allocatable": {
+      "CPU": "2",
+      "Memory": "1.9 GiB"
+     },
+     "Allocated": {
+      "CPU": "0",
+      "Memory": "0 MiB"
+     },
      "Limits": [
-      "host 上限 2 核 / 1.5 GiB"
+      {
+       "CPU": "2",
+       "Memory": "1.5 GiB",
+       "Executor": "host"
+      }
      ],
      "MaxJobs": 1
     },
@@ -211,11 +259,16 @@
      "CheckError": "",
      "CheckPending": false,
      "CanUpgrade": false,
-     "Reason": "没有经过启动器运行（前台 run 或旧的服务入口），不能自动切换：在机器上执行一次 kiln-runner service install",
+     "Reason": {
+      "id": "upgradeReason.noLauncher",
+      "params": {
+       "program": "kiln-runner"
+      }
+     },
      "Request": null
     },
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/linux-01"
+    "URL": "/runners/detail/linux-01",
+    "Kind": "ci"
    },
    {
     "ID": 4,
@@ -234,7 +287,6 @@
     "LastSeen": "2026-10-27T04:55:46-08:00",
     "Jobs": null,
     "Accepting": false,
-    "ConnLabel": "已吊销",
     "ConnClass": "bad",
     "Capacity": null,
     "CacheBytes": 0,
@@ -253,11 +305,13 @@
      "CheckError": "",
      "CheckPending": false,
      "CanUpgrade": false,
-     "Reason": "Runner 已吊销",
+     "Reason": {
+      "id": "upgradeReason.revoked"
+     },
      "Request": null
     },
-    "KindLabel": "CI Runner",
-    "URL": "/runners/detail/mac-02"
+    "URL": "/runners/detail/mac-02",
+    "Kind": "ci"
    }
   ],
   "Counts": {
@@ -274,27 +328,39 @@
   "States": [
    {
     "Value": "online",
-    "Label": "在线"
+    "Label": {
+     "id": "runnerFilter.online"
+    }
    },
    {
     "Value": "accepting",
-    "Label": "在线并接单"
+    "Label": {
+     "id": "runnerFilter.accepting"
+    }
    },
    {
     "Value": "paused",
-    "Label": "已暂停接单"
+    "Label": {
+     "id": "runnerFilter.paused"
+    }
    },
    {
     "Value": "busy",
-    "Label": "正在执行任务"
+    "Label": {
+     "id": "runnerFilter.busy"
+    }
    },
    {
     "Value": "offline",
-    "Label": "离线"
+    "Label": {
+     "id": "runnerFilter.offline"
+    }
    },
    {
     "Value": "revoked",
-    "Label": "已吊销"
+    "Label": {
+     "id": "runnerFilter.revoked"
+    }
    }
   ],
   "Pools": [
@@ -303,9 +369,9 @@
   ],
   "Self": "/runners",
   "Now": "2026-11-05T04:55:46-08:00",
-  "OfflineAfter": "2 分钟",
-  "LeaseTTL": "1 分钟",
-  "LongPoll": "25 秒",
+  "OfflineAfter": 120,
+  "LeaseTTL": 60,
+  "LongPoll": 25,
   "Filtered": false,
   "StateLabel": ""
  }

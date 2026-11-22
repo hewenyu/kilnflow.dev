@@ -1,28 +1,25 @@
-import { lookup } from '../../lib/lookup'
+import type { TFn } from '../../components/RunnerSchema'
+import { useT } from '../../i18n/locale'
+import { isMsgKey } from '../../i18n/messages'
 import css from './ai.module.css'
 import type { OrcaBinding } from './schema'
 
 // AI 执行节点页面和 AI 任务页面共用的 Orca 部分（PLAN #33.4、#33.6）：心跳上报的进度，以及一次执行在 Orca 中的关联
 // （dispatch、worktree、启动请求），用于在 Orca 中找到对应的 Agent 和 worktree。
 
-const stages: Record<string, string> = {
-  prepare: '准备',
-  start: '启动 Agent',
-  running: '执行中',
-  finishing: '结束处理',
+/** stageText 返回进度阶段的显示名称（未知的阶段原样显示）。阶段由节点上报，可以是任意字符串，只按词典中有的键查。 */
+export function stageText(stage: string, t: TFn): string {
+  const key = `orca.stage.${stage}`
+  return isMsgKey(key) ? t(key) : stage
 }
 
-/** stageText 返回进度阶段的显示名称（未知的阶段原样显示）。阶段由节点上报，可以是任意字符串，用 lookup 查表。 */
-export function stageText(stage: string): string {
-  return lookup(stages, stage) ?? stage
-}
-
-/** Progress 是心跳上报的进度，例如"执行中：运行测试"。 */
+/** Progress 是心跳上报的进度，例如"执行中：运行测试"（上报的说明原样显示）。 */
 function Progress({ stage, text }: { stage: string; text: string }) {
+  const t = useT()
   return (
     <span>
-      {stage && stageText(stage)}
-      {stage && text && '：'}
+      {stage && stageText(stage, t)}
+      {stage && text && t('orca.separator')}
       {text}
     </span>
   )
@@ -30,7 +27,8 @@ function Progress({ stage, text }: { stage: string; text: string }) {
 
 interface Ref {
   key: string
-  label: string
+  /** label 是关联的名称：dispatch、worktree 原样显示，启动请求按语言显示。 */
+  label: string | { id: 'orca.startRequest' }
   value: string
   title?: string
 }
@@ -41,18 +39,19 @@ function orcaRefs(o: OrcaBinding, startRequest?: string): Ref[] {
   const wt = o.worktree_name || o.worktree_path
   if (o.dispatch_id) refs.push({ key: 'dispatch', label: 'dispatch', value: o.dispatch_id })
   if (wt) refs.push({ key: 'worktree', label: 'worktree', value: wt, title: o.worktree_path })
-  if (startRequest) refs.push({ key: 'start', label: '启动请求', value: startRequest })
+  if (startRequest) refs.push({ key: 'start', label: { id: 'orca.startRequest' }, value: startRequest })
   return refs
 }
 
 function OrcaRefs({ items }: { items: Ref[] }) {
+  const t = useT()
   return (
     <span className={css.orca}>
-      Orca：
+      {t('orca.refs')}
       {items.map((it, i) => (
         <span key={it.key}>
-          {i > 0 && '，'}
-          {it.label}{' '}
+          {i > 0 && t('list.separator')}
+          {typeof it.label === 'string' ? it.label : t(it.label.id)}{' '}
           <span className="mono" title={it.title}>
             {it.value}
           </span>

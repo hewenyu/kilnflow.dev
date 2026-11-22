@@ -126,7 +126,15 @@ function template(locale: Locale, id: string, params: Params | undefined): strin
   return e[plural(locale).select(count)] ?? e.other
 }
 
-const placeholder = /\{(\w+)(?:,\s*(number|time))?\}/g
+const placeholder = /\{(\w+)(?:,\s*(number|time|duration))?\}/g
+
+/** formatSpan 按语言写出时长（秒）：整分钟写成分钟（"2 分钟"、"2 minutes"），其余写成秒。 */
+export function formatSpan(locale: Locale, seconds: number): string {
+  const s = Math.round(seconds)
+  const [id, count] = s >= 60 && s % 60 === 0 ? ['span.minutes', s / 60] : ['span.seconds', s]
+  const params = { count }
+  return fill(locale, template(locale, id, params) ?? String(count), params)
+}
 
 /** fill 把文案中的参数占位符替换为参数值；缺少参数或类型不对时插入 missingParam。 */
 function fill(locale: Locale, s: string, params: Params | undefined): string {
@@ -138,6 +146,8 @@ function fill(locale: Locale, s: string, params: Params | undefined): string {
         return typeof v === 'number' ? formatNumber(locale, v) : missingParam
       case 'time':
         return typeof v === 'number' ? formatClock(locale, new Date(v * 1000)) : missingParam
+      case 'duration':
+        return typeof v === 'number' && Number.isFinite(v) ? formatSpan(locale, v) : missingParam
       default:
         return String(v)
     }

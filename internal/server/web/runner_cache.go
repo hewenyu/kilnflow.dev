@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -14,22 +15,11 @@ import (
 
 	apiv1 "github.com/hewenyu/kilnflow.dev/gen/go/kiln/api/v1"
 	"github.com/hewenyu/kilnflow.dev/internal/server/admin"
+	"github.com/hewenyu/kilnflow.dev/internal/server/store"
 )
 
 // Runner 的本地缓存页面（PLAN #8.3）：Runner 最近一次上报的缓存清单、上一次清理的结果和清理请求；
 // 管理员可以按仓库、类别和执行身份预览（GET 参数，服务端算好）并发起清理（POST，Runner 空闲时执行）。
-
-// cacheKindLabels 是缓存类别的说明。
-var cacheKindLabels = map[string]string{
-	"toolcache": "toolcache",
-	"runtime":   "runtime",
-	"git":       "git 镜像",
-	"cas":       "CAS 缓存",
-	"buildkit":  "buildctl",
-	"work":      "保留的工作区",
-	"image":     "镜像",
-	"legacy":    "旧布局的 toolcache",
-}
 
 // defaultCacheDomains 是执行身份下拉框中总是列出的值（清单中出现的其他值也会列出）。
 var defaultCacheDomains = []string{"host", "oci-root"}
@@ -38,8 +28,9 @@ var defaultCacheDomains = []string{"host", "oci-root"}
 func runnerCacheURL(name string) string { return "/runners/cache/" + url.PathEscape(name) }
 
 // cacheEntryView 是清单中的一项。
+// Kind 是缓存类别（admin.CacheKinds），类别的名称由前端按语言显示。
 type cacheEntryView struct {
-	Kind, KindLabel string
+	Kind string
 	// Repo 是所属仓库（owner/name）；仓库不在 Kiln 中时为 #ID，不属于单个仓库时为空。
 	Repo     string
 	Platform string
@@ -81,9 +72,10 @@ type cachePreviewView struct {
 	Matched      []cacheEntryView
 	MatchedBytes int64
 	Shared       []cacheEntryView
-	Notes        []string
+	// Notes 是预览的说明（admin.CacheNote 的原因码映射的消息）。
+	Notes []uiText
 	// Error 不为空时预览失败（例如仓库不在 Kiln 中）。
-	Error string
+	Error uiText
 }
 
 // runnerCachePage 是 Runner 缓存页的数据。
@@ -97,8 +89,8 @@ type runnerCachePage struct {
 	DiskFree   int64
 	GC         *cacheGCView
 	Purges     []cachePurgeView
-	// 清理表单的选项和当前取值。
-	Kinds       []option
+	// 清理表单的选项和当前取值；Kinds 是缓存类别（名称由前端按语言显示）。
+	Kinds       []string
 	Repos       []string
 	Domains     []string
 	Repo        string
@@ -126,18 +118,11 @@ func cacheEntryViews(list []*apiv1.RunnerCacheEntry) []cacheEntryView {
 			repo = fmt.Sprintf("#%d", e.RepoId)
 		}
 		out = append(out, cacheEntryView{
-			Kind: e.Kind, KindLabel: cmpLabel(cacheKindLabels[e.Kind], e.Kind), Repo: repo, Platform: e.Platform, Domain: e.Domain,
+			Kind: e.Kind, Repo: repo, Platform: e.Platform, Domain: e.Domain,
 			Name: e.Name, Path: e.Path, Size: e.SizeBytes, LastUsed: unixTime(e.LastUsedAt), Expires: unixTime(e.ExpiresAt),
 		})
 	}
 	return out
-}
-
-func cmpLabel(label, fallback string) string {
-	if label == "" {
-		return fallback
-	}
-	return label
 }
 
 func cacheFailureViews(list []*apiv1.RunnerCacheFailure) []cacheFailureView {
@@ -155,15 +140,6 @@ func (d *Dashboard) activeRepos(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, pgx.RowTo[string])
-}
-
-// cacheKindOptions 返回清理表单的类别选项。
-func cacheKindOptions() []option {
-	out := make([]option, 0, len(admin.CacheKinds()))
-	for _, k := range admin.CacheKinds() {
-		out = append(out, option{Value: k, Label: cmpLabel(cacheKindLabels[k], k)})
-	}
-	return out
 }
 
 // purgeScope 读取清理范围（GET 参数或表单）：仓库、类别（kind 可以重复，也可以用逗号分隔）、执行身份；
@@ -190,7 +166,7 @@ func (d *Dashboard) pageRunnerCache(w http.ResponseWriter, r *http.Request, se *
 		return
 	}
 	if v == nil {
-		d.notFound(w, r, fmt.Sprintf("没有名为 %s 的 Runner。", name))
+		d.notFoundText(w, r, message(msgRunnerNotFound, strArg(argName, name)))
 		return
 	}
 	c, err := d.admin.GetRunnerCache(ctx, name)
@@ -200,7 +176,7 @@ func (d *Dashboard) pageRunnerCache(w http.ResponseWriter, r *http.Request, se *
 	}
 	p := &runnerCachePage{
 		Runner: v, Generated: unixTime(c.GeneratedAt), Entries: cacheEntryViews(c.Entries), DiskTotal: c.DiskTotalBytes, DiskFree: c.DiskFreeBytes,
-		Kinds: cacheKindOptions(), Self: runnerCacheURL(name),
+		Kinds: admin.CacheKinds(), Self: runnerCacheURL(name),
 	}
 	domains := map[string]bool{}
 	for _, dm := range defaultCacheDomains {
@@ -232,18 +208,21 @@ func (d *Dashboard) pageRunnerCache(w http.ResponseWriter, r *http.Request, se *
 		p.Repo, p.KindsPicked, p.Domain = purgeScope(q)
 		if q.Get("preview") == "1" && !v.Revoked {
 			p.Preview = &cachePreviewView{}
-			resp, err := d.admin.PurgeRunnerCache(ctx, &apiv1.PurgeRunnerCacheRequest{
-				Name: name, Repo: p.Repo, Kinds: p.KindsPicked, Domain: p.Domain, DryRun: true,
+			resp, notes, err := d.admin.PreviewRunnerCachePurge(ctx, &apiv1.PurgeRunnerCacheRequest{
+				Name: name, Repo: p.Repo, Kinds: p.KindsPicked, Domain: p.Domain,
 			}, se.Login)
-			if err != nil {
-				p.Preview.Error = d.failure(r, err)
-			} else {
+			switch {
+			case errors.Is(err, store.ErrRepoNotFound):
+				p.Preview.Error = message(msgCacheRepoNotFound, strArg(argRepo, p.Repo))
+			case err != nil:
+				p.Preview.Error = d.failureText(r, err)
+			default:
 				p.Preview.Matched, p.Preview.MatchedBytes = cacheEntryViews(resp.Matched), resp.MatchedBytes
-				p.Preview.Shared, p.Preview.Notes = cacheEntryViews(resp.RetainedShared), resp.Notes
+				p.Preview.Shared, p.Preview.Notes = cacheEntryViews(resp.RetainedShared), cacheNoteTexts(notes)
 			}
 		}
 	}
-	d.render(w, r, "runner_cache", name+" · 本地缓存", p)
+	d.renderPage(w, r, "runner_cache", message(msgRunnerCacheTitle, strArg(argName, name)), p, http.StatusOK)
 }
 
 // postRunnerCachePurge 发起一次缓存清理请求（管理员），回到缓存页并给出结果。
@@ -257,18 +236,18 @@ func (d *Dashboard) postRunnerCachePurge(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if v == nil {
-		d.flashBack(w, r, "/runners", fmt.Sprintf("没有名为 %s 的 Runner，没有执行任何操作。", name))
+		d.flashMsg(w, r, "/runners", message(msgRunnerOpNotFound, strArg(argName, name)))
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		d.flashBack(w, r, back, "表单无效，没有执行任何操作。")
+		d.flashMsg(w, r, back, message(msgCacheFormInvalid))
 		return
 	}
 	repo, kinds, domain := purgeScope(r.PostForm)
 	resp, err := d.admin.PurgeRunnerCache(ctx, &apiv1.PurgeRunnerCacheRequest{Name: name, Repo: repo, Kinds: kinds, Domain: domain}, se.Login)
 	if err != nil {
-		d.flashBack(w, r, back, "发起清理失败："+d.failure(r, err))
+		d.flashMsg(w, r, back, d.failureFlash(r, err, msgCachePurgeFailed, msgCachePurgeFailedRef))
 		return
 	}
-	d.flashBack(w, r, back, fmt.Sprintf("已发起清理请求 #%d：%s 在没有正在执行的 job 时执行，完成后在下面显示结果。", resp.PurgeId, name))
+	d.flashMsg(w, r, back, message(msgCachePurgeRequested, intArg(argID, resp.PurgeId), strArg(argName, name)))
 }

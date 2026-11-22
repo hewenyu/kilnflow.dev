@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	apiv1 "github.com/hewenyu/kilnflow.dev/gen/go/kiln/api/v1"
 	runnerv1 "github.com/hewenyu/kilnflow.dev/gen/go/kiln/runner/v1"
@@ -218,35 +219,92 @@ func matchPurge(e *runnerv1.CacheEntry, repoID int64, kinds []string, domain str
 	return domain == "" || e.Domain == domain
 }
 
+// CacheNoteCode 是清理预览说明的稳定原因码（不随语言变化；Dashboard 按它取文案）。
+type CacheNoteCode string
+
+const (
+	// CacheNoteNoReport：Runner 还没有上报缓存清单，预览为空，清理仍按范围执行。
+	CacheNoteNoReport CacheNoteCode = "no_report"
+	// CacheNoteReport：预览依据 GeneratedAt 上报的清单。
+	CacheNoteReport CacheNoteCode = "report"
+	// CacheNoteBusy：Runner 正在执行 Jobs 个 job，清理在它们结束后进行。
+	CacheNoteBusy CacheNoteCode = "busy"
+	// CacheNoteSharedKept：不属于单个仓库的共享缓存继续保留。
+	CacheNoteSharedKept CacheNoteCode = "shared_kept"
+)
+
+// CacheNote 是清理预览的一条说明：原因码和原始参数（时间是 Unix 秒）。String 是给 CLI 的中文说明（PurgeRunnerCacheResponse.notes）。
+type CacheNote struct {
+	Code CacheNoteCode
+	// Runner 是 Runner 名称，GeneratedAt 是清单的生成时间（Unix 秒），Jobs 是正在执行的 job 数；没有用到的为零值。
+	Runner      string
+	GeneratedAt int64
+	Jobs        int
+}
+
+func (n CacheNote) String() string {
+	switch n.Code {
+	case CacheNoteNoReport:
+		return "这台 Runner 还没有上报缓存清单（旧版 kiln-runner 或刚注册），预览为空；清理请求仍会在 Runner 上按范围执行"
+	case CacheNoteReport:
+		return fmt.Sprintf("预览依据 %s 上报的清单，执行时以 Runner 上的实际内容为准", time.Unix(n.GeneratedAt, 0).Format(time.DateTime))
+	case CacheNoteBusy:
+		return fmt.Sprintf("%s 正在执行 %d 个 job：清理在它们结束后进行，期间不领取新任务", n.Runner, n.Jobs)
+	case CacheNoteSharedKept:
+		return "runtime、CAS、镜像等不属于单个仓库的共享缓存继续保留，按各自的到期时间清理"
+	}
+	return string(n.Code)
+}
+
 // PurgeRunnerCache 按最近一次上报的清单预览清理范围；不是 dry_run 时发起清理请求并记录审计日志。
 // Runner 在没有正在执行的 job 时执行（有待执行的请求时暂停领取新任务），完成后回报结果。
 func (s *Service) PurgeRunnerCache(ctx context.Context, req *apiv1.PurgeRunnerCacheRequest, actor string) (*apiv1.PurgeRunnerCacheResponse, error) {
-	r, err := s.runnerByName(ctx, req.Name)
+	resp, notes, err := s.purgeRunnerCache(ctx, req, actor)
 	if err != nil {
 		return nil, err
 	}
+	for _, n := range notes {
+		resp.Notes = append(resp.Notes, n.String())
+	}
+	return resp, nil
+}
+
+// PreviewRunnerCachePurge 与 dry_run 的 PurgeRunnerCache 相同（不发起清理），说明是原因码和参数（Dashboard 按语言显示），
+// resp.Notes 为空。
+func (s *Service) PreviewRunnerCachePurge(ctx context.Context, req *apiv1.PurgeRunnerCacheRequest, actor string) (*apiv1.PurgeRunnerCacheResponse, []CacheNote, error) {
+	dry, _ := proto.Clone(req).(*apiv1.PurgeRunnerCacheRequest) // 不修改调用方的请求
+	dry.DryRun = true
+	return s.purgeRunnerCache(ctx, dry, actor)
+}
+
+// purgeRunnerCache 是 PurgeRunnerCache 的实现，预览的说明单独返回。
+func (s *Service) purgeRunnerCache(ctx context.Context, req *apiv1.PurgeRunnerCacheRequest, actor string) (*apiv1.PurgeRunnerCacheResponse, []CacheNote, error) {
+	r, err := s.runnerByName(ctx, req.Name)
+	if err != nil {
+		return nil, nil, err
+	}
 	if r.Revoked() {
-		return nil, invalid(fmt.Errorf("已吊销的 Runner %s 不能清理缓存", r.Name))
+		return nil, nil, invalid(fmt.Errorf("已吊销的 Runner %s 不能清理缓存", r.Name))
 	}
 	for _, k := range req.Kinds {
 		if !slices.Contains(CacheKinds(), k) {
-			return nil, invalid(fmt.Errorf("未知的缓存类别 %q（可选：%v）", k, CacheKinds()))
+			return nil, nil, invalid(fmt.Errorf("未知的缓存类别 %q（可选：%v）", k, CacheKinds()))
 		}
 	}
 	var repoID int64
 	if req.Repo != "" {
 		repo, err := store.FindRepo(ctx, s.db, req.Repo)
 		if errors.Is(err, store.ErrRepoNotFound) {
-			return nil, notFound("%v", err)
+			return nil, nil, notFound("%w", err)
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		repoID = repo.ID
 	}
 	rep, err := decodeCacheReport(r.CacheReport)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var matched, shared []*runnerv1.CacheEntry
 	var size int64
@@ -261,28 +319,29 @@ func (s *Service) PurgeRunnerCache(ctx context.Context, req *apiv1.PurgeRunnerCa
 	}
 	resp := &apiv1.PurgeRunnerCacheResponse{MatchedBytes: size}
 	if resp.Matched, err = s.cacheEntries(ctx, matched); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.RetainedShared, err = s.cacheEntries(ctx, shared); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	var notes []CacheNote
 	if rep.GeneratedAt == 0 {
-		resp.Notes = append(resp.Notes, "这台 Runner 还没有上报缓存清单（旧版 kiln-runner 或刚注册），预览为空；清理请求仍会在 Runner 上按范围执行")
+		notes = append(notes, CacheNote{Code: CacheNoteNoReport})
 	} else {
-		resp.Notes = append(resp.Notes, fmt.Sprintf("预览依据 %s 上报的清单，执行时以 Runner 上的实际内容为准", time.Unix(rep.GeneratedAt, 0).Format(time.DateTime)))
+		notes = append(notes, CacheNote{Code: CacheNoteReport, GeneratedAt: rep.GeneratedAt})
 	}
 	jobs, err := cistore.RunningJobs(ctx, s.db, []int64{r.ID})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(jobs) > 0 {
-		resp.Notes = append(resp.Notes, fmt.Sprintf("%s 正在执行 %d 个 job：清理在它们结束后进行，期间不领取新任务", r.Name, len(jobs)))
+		notes = append(notes, CacheNote{Code: CacheNoteBusy, Runner: r.Name, Jobs: len(jobs)})
 	}
 	if repoID != 0 && len(shared) > 0 {
-		resp.Notes = append(resp.Notes, "runtime、CAS、镜像等不属于单个仓库的共享缓存继续保留，按各自的到期时间清理")
+		notes = append(notes, CacheNote{Code: CacheNoteSharedKept})
 	}
 	if req.DryRun {
-		return resp, nil
+		return resp, notes, nil
 	}
 	err = s.db.Tx(ctx, func(tx pgx.Tx) error {
 		var repo *int64
@@ -299,8 +358,8 @@ func (s *Service) PurgeRunnerCache(ctx context.Context, req *apiv1.PurgeRunnerCa
 		})
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s.hub.All() // 唤醒正在长轮询的 Runner，让它尽快收到请求
-	return resp, nil
+	return resp, notes, nil
 }

@@ -116,7 +116,9 @@ func TestRequestUpgrade(t *testing.T) {
 		t.Fatalf("没有被请求的 Runner 不应收到指令：%+v", res.Directive)
 	}
 	// 管理员确认的是 0.1.42，期间 mac-b 查到了 0.1.43：拒绝，不升级到没有确认过的版本
-	if _, _, err := RequestUpgrade(e.ctx, e.db, "mac-b", "v0.1.42", "admin"); err == nil || !strings.Contains(err.Error(), "最新版本是 0.1.43") {
+	_, _, err := RequestUpgrade(e.ctx, e.db, "mac-b", "v0.1.42", "admin")
+	if re, ok := errors.AsType[*RefusedError](err); !ok || !strings.Contains(err.Error(), "最新版本是 0.1.43") ||
+		re.Reason != (Reason{Code: ReasonLatestChanged, Latest: "0.1.43", Expected: "0.1.42"}) {
 		t.Fatalf("确认的版本与 latest 不同时应拒绝：%v", err)
 	}
 	if req, created, err := RequestUpgrade(e.ctx, e.db, "mac-b", "v0.1.43", "admin"); err != nil || !created || req.Version != "0.1.43" {
@@ -180,28 +182,39 @@ func TestRequestUpgradeRefused(t *testing.T) {
 		name, version string
 		st            *runnerv1.UpgradeStatus
 		want          string
+		reason        Reason
 	}{
-		{"旧版本 Runner", "v0.1.40", nil, "service install"},
-		{"前台运行", "v0.1.40", &runnerv1.UpgradeStatus{State: StateIdle, Latest: "0.1.42"}, "service install"},
-		{"本地关闭", "v0.1.40", &runnerv1.UpgradeStatus{State: StateIdle, Launcher: true, Disabled: true, Latest: "0.1.42"}, "upgrade = false"},
-		{"还没有查到", "v0.1.40", status(StateIdle, ""), "还没有查到最新版本"},
-		{"查询失败", "v0.1.40", &runnerv1.UpgradeStatus{State: StateIdle, Launcher: true, CheckError: "npm 上没有这个包"}, "npm 上没有这个包"},
-		{"已是最新", "v0.1.42", status(StateIdle, "0.1.42"), "已是最新"},
-		{"当前更高", "v0.1.43", status(StateIdle, "0.1.42"), "不降级"},
+		{"旧版本 Runner", "v0.1.40", nil, "service install", Reason{Code: ReasonUnsupported}},
+		{"前台运行", "v0.1.40", &runnerv1.UpgradeStatus{State: StateIdle, Latest: "0.1.42"}, "service install", Reason{Code: ReasonNoLauncher}},
+		{"本地关闭", "v0.1.40", &runnerv1.UpgradeStatus{State: StateIdle, Launcher: true, Disabled: true, Latest: "0.1.42"}, "upgrade = false", Reason{Code: ReasonDisabled}},
+		{"还没有查到", "v0.1.40", status(StateIdle, ""), "还没有查到最新版本", Reason{Code: ReasonNotChecked}},
+		{
+			"查询失败", "v0.1.40", &runnerv1.UpgradeStatus{State: StateIdle, Launcher: true, CheckError: "npm 上没有这个包"}, "npm 上没有这个包",
+			Reason{Code: ReasonCheckFailed, Detail: "npm 上没有这个包"},
+		},
+		{"已是最新", "v0.1.42", status(StateIdle, "0.1.42"), "已是最新", Reason{Code: ReasonUpToDate, Current: "v0.1.42", Latest: "0.1.42"}},
+		{"当前更高", "v0.1.43", status(StateIdle, "0.1.42"), "不降级", Reason{Code: ReasonNewer, Current: "v0.1.43", Latest: "0.1.42"}},
 	}
 	for i, tc := range cases {
 		name := "r" + string(rune('a'+i))
 		id := e.addRunner(name, store.RunnerKindCI, tc.version)
 		e.acquire(id, name, tc.version, tc.st)
 		_, _, err := RequestUpgrade(e.ctx, e.db, name, "", "admin")
-		if _, ok := errors.AsType[*RefusedError](err); !ok || !strings.Contains(err.Error(), tc.want) {
+		re, ok := errors.AsType[*RefusedError](err)
+		if !ok || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s：应拒绝并说明 %q：%v", tc.name, tc.want, err)
+			continue
+		}
+		// Dashboard 按原因码显示：原因码和原始参数与 CLI 的说明来自同一个判断
+		if re.Reason != tc.reason || !strings.HasPrefix(re.Msg, name+"：") || !strings.HasSuffix(re.Msg, tc.reason.String()) {
+			t.Errorf("%s：原因 %+v，说明 %q，应为 %+v", tc.name, re.Reason, re.Msg, tc.reason)
 		}
 	}
 	revoked := e.addRunner("gone", store.RunnerKindCI, "v0.1.40")
 	e.acquire(revoked, "gone", "v0.1.40", status(StateIdle, "0.1.42"))
 	e.exec(`UPDATE runners SET state='revoked' WHERE id=$1`, revoked)
-	if _, _, err := RequestUpgrade(e.ctx, e.db, "gone", "", "admin"); err == nil || !strings.Contains(err.Error(), "吊销") {
+	if _, _, err := RequestUpgrade(e.ctx, e.db, "gone", "", "admin"); err == nil || !strings.Contains(err.Error(), "吊销") ||
+		reasonCode(err) != ReasonRevoked {
 		t.Errorf("已吊销：%v", err)
 	}
 	if _, _, err := RequestUpgrade(e.ctx, e.db, "nobody", "", "admin"); !errors.Is(err, ErrRunnerNotFound) {
@@ -303,12 +316,13 @@ func TestCancelUpgrade(t *testing.T) {
 	e := newEnv(t)
 	a := e.addRunner("mac-a", store.RunnerKindCI, "v0.1.40")
 	e.acquire(a, "mac-a", "v0.1.40", status(StateIdle, "0.1.42"))
-	if _, err := CancelUpgrade(e.ctx, e.db, "mac-a", "admin"); err == nil {
-		t.Fatal("没有进行中的请求时应拒绝")
+	if _, err := CancelUpgrade(e.ctx, e.db, "mac-a", "admin"); err == nil || reasonCode(err) != ReasonNoPending {
+		t.Fatalf("没有进行中的请求时应拒绝：%v", err)
 	}
 	id, _, _ := e.request("mac-a")
 	e.acquire(a, "mac-a", "v0.1.42", &runnerv1.UpgradeStatus{State: StateSwitching, Target: "0.1.42", Launcher: true})
-	if _, err := CancelUpgrade(e.ctx, e.db, "mac-a", "admin"); err == nil || !strings.Contains(err.Error(), "正在确认") {
+	if _, err := CancelUpgrade(e.ctx, e.db, "mac-a", "admin"); err == nil || !strings.Contains(err.Error(), "正在确认") ||
+		reasonCode(err) != ReasonSwitching {
 		t.Fatalf("切换中不应取消：%v", err)
 	}
 	e.acquire(a, "mac-a", "v0.1.40", &runnerv1.UpgradeStatus{State: StateDraining, Target: "0.1.42", Generation: id, Launcher: true, Latest: "0.1.42"})
@@ -357,10 +371,10 @@ func TestRegistryAndCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !infos[a].CheckPending || !infos[a].CanUpgrade || infos[a].Latest != "0.1.42" {
+	if !infos[a].Info.CheckPending || !infos[a].Info.CanUpgrade || infos[a].Info.Latest != "0.1.42" || !infos[a].Reason.IsZero() {
 		t.Fatalf("mac-a：%+v", infos[a])
 	}
-	if infos[b].CanUpgrade || !strings.Contains(infos[b].Reason, "没有按台升级") {
+	if infos[b].Info.CanUpgrade || !strings.Contains(infos[b].Info.Reason, "没有按台升级") || infos[b].Reason.Code != ReasonAINode {
 		t.Fatalf("AI 执行节点不按台升级（PLAN #33.3）：%+v", infos[b])
 	}
 	st := status(StateIdle, "0.1.42")
@@ -371,7 +385,8 @@ func TestRegistryAndCheck(t *testing.T) {
 	}
 	e.request("mac-a")
 	infos, _ = RunnerInfos(e.ctx, e.db, []int64{a})
-	if infos[a].CanUpgrade || infos[a].Request.GetState() != RequestPending || !strings.Contains(infos[a].Reason, "正在升级到 0.1.42") {
+	if infos[a].Info.CanUpgrade || infos[a].Info.Request.GetState() != RequestPending || !strings.Contains(infos[a].Info.Reason, "正在升级到 0.1.42") ||
+		infos[a].Reason != (Reason{Code: ReasonUpgrading, Version: "0.1.42"}) {
 		t.Fatalf("进行中：%+v", infos[a])
 	}
 	if err := SetRegistry(e.ctx, e.db, "", "admin"); err != nil {
@@ -411,4 +426,12 @@ func TestSettle(t *testing.T) {
 			t.Errorf("%s：%q，想要 %q", tc.name, got, tc.want)
 		}
 	}
+}
+
+// reasonCode 返回 *RefusedError 的原因码（不是时为空）。
+func reasonCode(err error) ReasonCode {
+	if re, ok := errors.AsType[*RefusedError](err); ok {
+		return re.Reason.Code
+	}
+	return ""
 }

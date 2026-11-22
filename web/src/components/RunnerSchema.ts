@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { list } from '../lib/envelope'
-import { lookup } from '../lib/lookup'
+import { isMsgKey, type MsgKey, type Params } from '../i18n/messages'
+import { list, textSchema } from '../lib/envelope'
 
 // Runner 的页面数据（internal/server/web 的 runnerView，以及 cistore.RunningJob）：Runner 列表、总览和注册页共用。
 // AI 执行节点的页面数据见 pages/ai/schema.ts。
@@ -18,21 +18,39 @@ export const runningJobSchema = z.object({
 })
 export type RunningJob = z.infer<typeof runningJobSchema>
 
-/** capacityView：Runner 上报的规格与容量的文字（例如"2 核 / 1.9 GiB"）。 */
+/** TFn 是按当前语言翻译前端消息的函数（useT 的返回值）。 */
+export type TFn = (id: MsgKey, params?: Params) => string
+
+/** resourcesView：一组资源。CPU 是核数（例如 "2"、"1.5"），Memory 是内存（例如 "1.9 GiB"）；没有时为空。 */
+export const resourcesSchema = z.object({ CPU: z.string(), Memory: z.string() })
+export type Resources = z.infer<typeof resourcesSchema>
+
+/** capacityView：Runner 上报的规格与容量。 */
 export const capacityViewSchema = z.object({
   /** 机器规格（静态，不是实时占用）。 */
-  Machine: z.string(),
+  Machine: resourcesSchema,
   /** config.toml 中为宿主机预留的资源。 */
-  Reserved: z.string(),
+  Reserved: resourcesSchema,
   /** 可分配：机器规格 - 预留。 */
-  Allocatable: z.string(),
+  Allocatable: resourcesSchema,
   /** 已分配：正在执行的 job 声明的 resources 之和。 */
-  Allocated: z.string(),
-  /** 各 executor 的固定上限，例如"host 上限 2 核 / 6.0 GiB"。 */
-  Limits: list(z.string()),
+  Allocated: resourcesSchema,
+  /** 各 executor 的固定上限（CPU、Memory 至少有一项）。 */
+  Limits: list(resourcesSchema.extend({ Executor: z.string() })),
   MaxJobs: z.number(),
 })
 export type CapacityView = z.infer<typeof capacityViewSchema>
+
+/** resourcesText 返回资源的文字，例如"2 核 / 1.9 GiB"、"2 CPU / 1.9 GiB"；只有一项时只写这一项。 */
+export function resourcesText(r: Resources, t: TFn): string {
+  const parts = [r.CPU && t('runner.cpu', { cpu: r.CPU }), r.Memory].filter(Boolean)
+  return parts.join(' / ')
+}
+
+/** limitsText 返回各 executor 的固定上限，例如"host 上限 2 核 / 6.0 GiB"。 */
+export function limitsText(c: CapacityView, t: TFn): string[] {
+  return c.Limits.map((l) => t('runner.limit', { executor: l.Executor, resources: resourcesText(l, t) }))
+}
 
 /** upgradeRequestView：一次按台升级的请求（PLAN #27.13）。 */
 export const upgradeRequestSchema = z.object({
@@ -73,19 +91,18 @@ export const runnerUpgradeSchema = z.object({
   CheckError: z.string(),
   /** 已经请求检查更新、Runner 还没有处理。 */
   CheckPending: z.boolean(),
-  /** 现在可以升级到 Latest；不能时 Reason 说明原因。 */
+  /** 现在可以升级到 Latest；不能时 Reason 说明原因（服务端按原因码给出的消息）。 */
   CanUpgrade: z.boolean(),
-  Reason: z.string(),
+  Reason: textSchema,
   /** 最近一次升级请求。 */
   Request: upgradeRequestSchema.nullable(),
 })
 export type RunnerUpgrade = z.infer<typeof runnerUpgradeSchema>
 
-const upgradeStates: Record<string, string> = {
-  downloading: '正在下载',
-  ready: '已下载，等待空闲后切换',
-  draining: '等待正在执行的任务结束后切换',
-  switching: '正在切换',
+/** upgradeStepKey 返回 Runner 上报的升级进度的消息键（不认识的状态返回 undefined）。 */
+function upgradeStepKey(state: string): MsgKey | undefined {
+  const key = `upgradeStep.${state}`
+  return isMsgKey(key) ? key : undefined
 }
 
 /** upgrading 返回进行中的升级请求（没有时为 null）。 */
@@ -99,17 +116,17 @@ function upToDate(version: string, u: RunnerUpgrade): boolean {
 }
 
 /** upgradeStateText 返回升级的一句话说明：进行中的请求的进度、上一次失败、可以升级或已是最新。 */
-export function upgradeStateText(r: Pick<RunnerView, 'Version' | 'Online'>, u: RunnerUpgrade): string {
+export function upgradeStateText(r: Pick<RunnerView, 'Version' | 'Online'>, u: RunnerUpgrade, t: TFn): string {
   const req = upgrading(u)
   if (req) {
-    const step = u.Target === req.Version ? lookup(upgradeStates, u.State) : undefined
-    if (step) return `${step}：${req.Version}`
-    return r.Online ? `等待开始升级到 ${req.Version}` : `离线，重新连接后升级到 ${req.Version}`
+    const step = u.Target === req.Version ? upgradeStepKey(u.State) : undefined
+    if (step) return t('upgradeState.step', { step: t(step), version: req.Version })
+    return t(r.Online ? 'upgradeState.waiting' : 'upgradeState.waitingOffline', { version: req.Version })
   }
-  if (u.Request?.State === 'failed' && !upToDate(r.Version, u)) return `升级到 ${u.Request.Version} 失败`
-  if (u.CanUpgrade) return `可以升级到 ${u.Latest}`
-  if (upToDate(r.Version, u)) return '已是最新版本'
-  return '不能按台升级'
+  if (u.Request?.State === 'failed' && !upToDate(r.Version, u)) return t('upgradeState.failed', { version: u.Request.Version })
+  if (u.CanUpgrade) return t('upgradeState.available', { version: u.Latest })
+  if (upToDate(r.Version, u)) return t('upgradeState.upToDate')
+  return t('upgradeState.unavailable')
 }
 
 /** upgradeTone 返回升级状态的提示级别：上一次升级失败为 bad，可以升级为 warn，正在升级为 run，已是最新为 ok。 */
@@ -121,16 +138,10 @@ export function upgradeTone(r: Pick<RunnerView, 'Version'>, u: RunnerUpgrade): '
   return 'muted'
 }
 
-const requestStates: Record<string, string> = {
-  pending: '进行中',
-  succeeded: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-}
-
-/** requestStateText 返回升级请求的状态文字。 */
-export function requestStateText(state: string): string {
-  return lookup(requestStates, state) ?? state
+/** requestStateText 返回升级请求的状态文字（不认识的状态原样显示）。 */
+export function requestStateText(state: string, t: TFn): string {
+  const key = `upgradeRequest.${state}`
+  return isMsgKey(key) ? t(key) : state
 }
 
 /** runnerView：CI Runner；注册页上也用它显示 AI 执行节点的摘要（没有 pool、executor、容量和升级）。 */
@@ -138,8 +149,9 @@ export const runnerViewSchema = z.object({
   ID: z.number(),
   Name: z.string(),
   Pool: z.string(),
-  /** 类型的显示名称：CI Runner；注册页上的 AI 执行节点为 AI 审计节点或 AI 开发节点。 */
-  KindLabel: z.string(),
+  /** 类型：ci；注册页上的 AI 执行节点为 ai，Role 是它的角色（review、development）。名称见 runnerKindLabel。 */
+  Kind: z.string().default('ci'),
+  Role: z.string().default(''),
   /** 详情页（CI Runner 在 /runners/{name}，AI 执行节点在 /ai/runners/{name}）。 */
   URL: z.string(),
   Platforms: list(z.string()),
@@ -160,8 +172,7 @@ export const runnerViewSchema = z.object({
   Upgrade: runnerUpgradeSchema.nullish(),
   /** 在线并接单。 */
   Accepting: z.boolean(),
-  /** 连接状态的文字（在线、离线、已吊销）和样式（ok、warn、bad）。 */
-  ConnLabel: z.string(),
+  /** 连接状态的样式（ok、warn、bad）；文字见 connLabel。 */
   ConnClass: z.string(),
 })
 export type RunnerView = z.infer<typeof runnerViewSchema>
@@ -179,12 +190,23 @@ export const runnerCountsSchema = z.object({
 export type RunnerCounts = z.infer<typeof runnerCountsSchema>
 
 /** RunnerConn 是 CI Runner 和 AI 执行节点共有的连接和接单状态。 */
-export type RunnerConn = Pick<RunnerView, 'Revoked' | 'Online' | 'Drain' | 'ConnLabel'>
+export type RunnerConn = Pick<RunnerView, 'Revoked' | 'Online' | 'Drain'>
+
+/** connLabel 返回连接状态的文字：已吊销、在线或离线。 */
+export function connLabel(r: Pick<RunnerConn, 'Revoked' | 'Online'>, t: TFn): string {
+  if (r.Revoked) return t('runnerConn.revoked')
+  return t(r.Online ? 'runnerConn.online' : 'runnerConn.offline')
+}
+
+/** runnerKindLabel 返回 Runner 类型的名称：CI Runner、AI 审计节点或 AI 开发节点。 */
+export function runnerKindLabel(kind: string, role: string, t: TFn): string {
+  if (kind !== 'ai') return t('runnerKind.ci')
+  return t(role === 'development' ? 'runnerKind.aiDev' : 'runnerKind.aiReview')
+}
 
 /** runnerIdle 返回 Runner 当前在做什么的一句话说明（没有正在执行的任务时）。 */
-export function runnerIdle(r: RunnerConn): string {
-  if (r.Revoked) return '已吊销，不能再连接。'
-  if (!r.Online) return r.Drain ? '离线。' : '离线，重新连接后才会领取任务。'
-  if (r.Drain) return '空闲，不领取新任务。'
-  return '空闲，等待任务。'
+export function runnerIdle(r: RunnerConn, t: TFn): string {
+  if (r.Revoked) return t('runnerIdle.revoked')
+  if (!r.Online) return t(r.Drain ? 'runnerIdle.offlinePaused' : 'runnerIdle.offline')
+  return t(r.Drain ? 'runnerIdle.paused' : 'runnerIdle.waiting')
 }

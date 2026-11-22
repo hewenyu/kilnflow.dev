@@ -1,6 +1,8 @@
 {
  "Page": "runner_new",
- "Title": "注册新的 Runner",
+ "Title": {
+  "id": "runnerNew.pageTitle"
+ },
  "Nav": "runners",
  "Status": 422,
  "Session": {
@@ -20,7 +22,9 @@
     "name": "mini-03"
    },
    "Errors": {
-    "pool": "pool 只能包含字母、数字、点、下划线和连字符，以字母或数字开头，最长 64 个字符"
+    "pool": {
+     "id": "runnerNew.errPool"
+    }
    },
    "Failed": true
   },

@@ -1,4 +1,5 @@
 import { act, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/runner_new.json'
 import existingFixture from '../../dev/fixtures/runner_new.existing.json'
@@ -10,8 +11,8 @@ import shownFixture from '../../dev/fixtures/runner_new.shown.json'
 import usedFixture from '../../dev/fixtures/runner_new.used.json'
 import aiFixture from '../../dev/fixtures/runner_new.ai.json'
 import aiDevFixture from '../../dev/fixtures/runner_new.aidev.json'
-import { envelope, renderPage } from '../test/render'
-import { expiresText, formKind } from './runner_new'
+import { chineseLeft, envelope, renderPage, switchLocale, tFor } from '../test/render'
+import { expiresText, formKind, tokenLeft } from './runner_new'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -162,12 +163,73 @@ describe('注册新的 Runner', () => {
     expect(screen.getByRole('button', { name: '生成注册令牌' })).toBeInTheDocument()
   })
 
-  it('剩余有效期精确到分钟', () => {
+  it('剩余有效期精确到分钟：是否过期是语义状态，文字按语言显示', () => {
     const exp = '2026-11-05T12:00:00Z'
     const at = (s: number) => Date.parse(exp) - s * 1000
-    expect(expiresText(exp, at(0))).toBe('已过期')
-    expect(expiresText(exp, at(-5))).toBe('已过期')
-    expect(expiresText(exp, at(59))).toBe('剩余不到 1 分钟')
-    expect(expiresText(exp, at(60 * 57 + 30))).toBe('剩余 57 分钟')
+    expect(tokenLeft(exp, at(0))).toEqual({ expired: true, minutes: 0 })
+    expect(tokenLeft(exp, at(-5))).toEqual({ expired: true, minutes: 0 })
+    expect(tokenLeft(exp, at(59))).toEqual({ expired: false, minutes: 0 })
+    expect(tokenLeft(exp, at(60 * 57 + 30))).toEqual({ expired: false, minutes: 57 })
+    expect(tokenLeft('', 0)).toBeNull()
+    const cases: [number, string, string][] = [
+      [0, '已过期', 'Expired'],
+      [59, '剩余不到 1 分钟', 'Less than 1 minute left'],
+      [90, '剩余 1 分钟', '1 minute left'],
+      [60 * 57 + 30, '剩余 57 分钟', '57 minutes left'],
+    ]
+    for (const [s, zh, en] of cases) {
+      const left = tokenLeft(exp, at(s))
+      if (!left) throw new Error('应有剩余有效期')
+      expect(expiresText(left, tFor('zh-CN'))).toBe(zh)
+      expect(expiresText(left, tFor('en'))).toBe(en)
+    }
+  })
+
+  it('倒计时的样式由是否过期决定，与语言无关：英文下到期后变为过期样式', async () => {
+    // 令牌在 05:53:46 到期：从到期前 2 分钟开始，倒计时每 10 秒更新
+    vi.useFakeTimers({ now: Date.parse('2026-11-05T05:51:46-08:00'), shouldAdvanceTime: true })
+    renderPage(envelope(revealFixture), '/runners/enroll/3f1c2a9b8e7d6c5b4a39281706f5e4d3', { locale: 'en' })
+    const left = screen.getByText('2 minutes left')
+    expect(left).toHaveClass('left')
+    expect(left).not.toHaveClass('expired')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000 + 10 * 1000)
+    })
+    const expired = await screen.findByText('Expired')
+    expect(expired).toHaveClass('expired')
+    expect(expired).not.toHaveClass('left')
+  })
+
+  it('英文：注册页的步骤、表单和服务端给的字段错误都按英文显示', () => {
+    renderPage(envelope(invalidFixture), '/runners/new', { locale: 'en' })
+    expect(screen.getByRole('heading', { name: 'Register a new runner', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('No token was generated')).toBeInTheDocument()
+    expect(screen.getByText(/A pool may contain only letters, digits/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'AI development runner' })).toHaveAttribute('value', 'ai-dev')
+    expect(screen.getByRole('button', { name: 'Generate registration token' })).toBeInTheDocument()
+    expect(screen.queryByText(/只能包含|生成注册令牌|准备机器/)).not.toBeInTheDocument()
+    expect(chineseLeft(document.body)).toEqual([])
+  })
+
+  it('英文：一次性展示页、命令说明和上线状态没有残留的中文界面文字', () => {
+    vi.useFakeTimers({ now: Date.parse('2026-11-05T05:30:00-08:00'), shouldAdvanceTime: true })
+    renderPage(envelope(aiFixture), '/runners/enroll/3f1c2a9b8e7d6c5b4a39281706f5e4d3', { locale: 'en' })
+    expect(screen.getByText('The token is shown only this once')).toBeInTheDocument()
+    expect(screen.getByText(/^AI review runner · pool/)).toBeInTheDocument()
+    expect(chineseLeft(document.body)).toEqual([])
+    renderPage(envelope(usedFixture), '/runners/enroll/x', { locale: 'en' })
+    expect(screen.getByText('Online and ready for jobs.')).toBeInTheDocument()
+  })
+
+  it('表单填写到一半时切换语言：输入和选择保留，文字立即切换', async () => {
+    renderPage(envelope(fixture), '/runners/new')
+    const name = screen.getByRole('textbox', { name: 'Runner 名称（可选）' })
+    await userEvent.type(name, 'mini-09')
+    await userEvent.click(screen.getByRole('radio', { name: 'AI 审计节点' }))
+    await switchLocale('English')
+    expect(screen.getByRole('textbox', { name: 'Runner name (optional)' })).toBe(name)
+    expect(name).toHaveValue('mini-09')
+    expect(screen.getByRole('radio', { name: 'AI review runner' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Generate registration token' })).toBeInTheDocument()
   })
 })

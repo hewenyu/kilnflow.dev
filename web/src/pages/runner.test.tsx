@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/runner.json'
 import failed from '../../dev/fixtures/runner.failed.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, envelope, renderPage, switchLocale, withData } from '../test/render'
 import { json, stubFetch } from '../test/fetch'
 import { stubSubmit } from './settings/testing'
 
@@ -114,3 +114,41 @@ describe('Runner 详情', () => {
     expect(screen.getByText('还没有升级过。')).toBeInTheDocument()
   })
 })
+
+describe('Runner 详情页（英文与切换语言）', () => {
+  const rawZH = ['0.4.3 连续 3 次启动后没有连上 Server，已回滚到 0.4.2']
+
+  it('英文：概况、升级、升级记录都按英文显示，没有残留的中文界面文字', () => {
+    renderPage(envelope(failed), '/runners/detail/mini-02', { locale: 'en' })
+    const up = section('Upgrade')
+    expect(up.getByText('Upgrade to 0.4.3 failed')).toBeInTheDocument()
+    expect(up.getByRole('button', { name: 'Upgrade to 0.4.3…' })).toBeInTheDocument()
+    const history = within(screen.getByRole('table', { name: 'Upgrade history' }))
+    expect(history.getByRole('columnheader', { name: 'Requested by' })).toBeInTheDocument()
+    expect(history.getByText('Failed')).toBeInTheDocument()
+    expect(history.getAllByText('Failed')[0]?.closest('td')).toHaveAttribute('data-label', 'State')
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('不能升级的原因来自服务端的原因码，按当前语言显示', async () => {
+    const r = failed.Data.Runner
+    const reason = { id: 'upgradeReason.disabled' }
+    const data = { Runner: { ...r, Upgrade: { ...r.Upgrade, Disabled: true, CanUpgrade: false, Reason: reason, Request: null } }, History: [] }
+    renderPage(withData(envelope(failed), data), '/runners/detail/mini-02', { locale: 'en' })
+    expect(section('Upgrade').getByText("Self-upgrade is turned off locally: upgrade = false in this machine's config.toml")).toBeInTheDocument()
+    await switchLocale('简体中文')
+    expect(section('升级').getByText('这台机器的 config.toml 中 upgrade = false，本地关闭了自升级')).toBeInTheDocument()
+  })
+
+  it('升级确认对话框打开时切换语言：对话框保持打开，文字立即切换', async () => {
+    renderPage(envelope(failed), '/runners/detail/mini-02')
+    await userEvent.click(section('升级').getByRole('button', { name: '升级到 0.4.3…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/等正在执行的 1 个任务结束后切换/)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('alertdialog')).toBe(dialog)
+    expect(within(dialog).getByText(/It switches after its 1 running job finishes/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Upgrade' })).toBeInTheDocument()
+  })
+})
+

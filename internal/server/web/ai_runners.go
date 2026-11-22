@@ -57,10 +57,10 @@ type aiAgentView struct {
 type aiRunnerView struct {
 	ID   int64
 	Name string
-	// Role 是 review（审计）或 development（开发），RoleLabel 是它的显示名称。
-	Role, RoleLabel string
-	Version         string
-	Platform        string
+	// Role 是 review（审计）或 development（开发），角色的名称由前端按语言显示。
+	Role     string
+	Version  string
+	Platform string
 	// Protocol 是上报的 AI 协议版本；NeedsUpgrade 表示不是 Server 支持的版本（不派任务）。
 	Protocol     int
 	NeedsUpgrade bool
@@ -87,20 +87,12 @@ type aiRunnerView struct {
 // Accepting 表示 AI 执行节点在线并且接单。
 func (v *aiRunnerView) Accepting() bool { return !v.Revoked && v.Online && !v.Drain }
 
-// Conn 返回连接状态的文字和徽章样式（与 CI Runner 相同）。
-func (v *aiRunnerView) Conn() (string, string) {
-	switch {
-	case v.Revoked:
-		return "已吊销", "bad"
-	case v.Online:
-		return "在线", "ok"
-	}
-	return "离线", "warn"
-}
+// ConnClass 返回连接状态的徽章样式（与 CI Runner 相同）。
+func (v *aiRunnerView) ConnClass() string { return connClass(v.Revoked, v.Online) }
 
 func newAIRunnerView(r *admin.AIRunner) *aiRunnerView {
 	v := &aiRunnerView{
-		ID: r.ID, Name: r.Name, Role: r.Role, RoleLabel: aiRoleLabel(r.Role), Version: r.Version, Platform: r.Platform,
+		ID: r.ID, Name: r.Name, Role: r.Role, Version: r.Version, Platform: r.Platform,
 		Protocol: r.Protocol, NeedsUpgrade: r.NeedsUpgrade, HostID: r.HostID, Capacity: r.Capacity,
 		Revoked: r.State == store.RunnerRevoked, Drain: r.Drain, Online: r.Online, LastSeen: r.LastSeen,
 		OrcaState: r.OrcaState, OrcaReason: r.OrcaReason, OrcaVersion: r.OrcaVersion, OrcaRuntimeID: r.OrcaRuntimeID,
@@ -113,14 +105,6 @@ func newAIRunnerView(r *admin.AIRunner) *aiRunnerView {
 		})
 	}
 	return v
-}
-
-// aiRoleLabel 返回 AI 执行节点角色的显示名称。
-func aiRoleLabel(role string) string {
-	if role == store.RunnerRoleDevelopment {
-		return "AI 开发节点"
-	}
-	return "AI 审计节点"
 }
 
 // loadAIRunners 返回 AI 执行节点（id 不为 0 时只返回这一台）及其正在执行的 AI 任务，按名称排序。
@@ -220,8 +204,8 @@ type aiRunnersPage struct {
 	Counts  aiRunnerCounts
 	// Self 是当前页面的地址，操作后回到这里。
 	Self string
-	// OfflineAfter、LeaseTTL、LongPoll 是页面说明中用到的时长。
-	OfflineAfter, LeaseTTL, LongPoll string
+	// OfflineAfter、LeaseTTL、LongPoll 是页面说明中用到的时长（秒）。
+	OfflineAfter, LeaseTTL, LongPoll int64
 }
 
 func (d *Dashboard) pageAIRunners(w http.ResponseWriter, r *http.Request, _ *session) {
@@ -232,15 +216,15 @@ func (d *Dashboard) pageAIRunners(w http.ResponseWriter, r *http.Request, _ *ses
 	}
 	p := &aiRunnersPage{
 		Runners: all, Counts: countAIRunners(all), Self: aiRunnersPath,
-		OfflineAfter: humanDuration(admin.RunnerOfflineAfter), LeaseTTL: humanDuration(d.leaseTTL()), LongPoll: humanDuration(d.longPoll()),
+		OfflineAfter: seconds(admin.RunnerOfflineAfter), LeaseTTL: seconds(d.leaseTTL()), LongPoll: seconds(d.longPoll()),
 	}
-	d.render(w, r, "ai_runners", "AI 执行节点", p)
+	d.renderPage(w, r, "ai_runners", message(msgAIRunnersTitle), p, http.StatusOK)
 }
 
-// aiRunnerPage 是 AI 执行节点详情页的数据（没有按台升级，PLAN #33.3）。
+// aiRunnerPage 是 AI 执行节点详情页的数据（没有按台升级，PLAN #33.3）；OfflineAfter、LongPoll 是时长（秒）。
 type aiRunnerPage struct {
 	Runner                 *aiRunnerView
-	OfflineAfter, LongPoll string
+	OfflineAfter, LongPoll int64
 }
 
 func (d *Dashboard) pageAIRunner(w http.ResponseWriter, r *http.Request, _ *session) {
@@ -257,20 +241,20 @@ func (d *Dashboard) pageAIRunner(w http.ResponseWriter, r *http.Request, _ *sess
 			d.redirect(w, r, runnerURL(name))
 			return
 		}
-		d.notFound(w, r, fmt.Sprintf("没有名为 %s 的 AI 执行节点。", name))
+		d.notFoundText(w, r, message(msgAIRunnerNotFound, strArg(argName, name)))
 		return
 	}
 	p := &aiRunnerPage{
-		Runner: v, OfflineAfter: humanDuration(admin.RunnerOfflineAfter), LongPoll: humanDuration(d.longPoll()),
+		Runner: v, OfflineAfter: seconds(admin.RunnerOfflineAfter), LongPoll: seconds(d.longPoll()),
 	}
-	d.render(w, r, "ai_runner", "AI 执行节点 · "+name, p)
+	d.renderPage(w, r, "ai_runner", message(msgAIRunnerTitle, strArg(argName, name)), p, http.StatusOK)
 }
 
 // asRunnerView 把 AI 执行节点换成注册页使用的 Runner 摘要（名称、连接和接单状态、平台、版本；没有 pool 和 executor，
 // 也没有按台升级）。
 func (v *aiRunnerView) asRunnerView() *runnerView {
 	rv := &runnerView{
-		ID: v.ID, Name: v.Name, KindLabel: v.RoleLabel, URL: aiRunnerURL(v.Name), Version: v.Version, Revoked: v.Revoked, Drain: v.Drain,
+		ID: v.ID, Name: v.Name, Kind: store.RunnerKindAI, Role: v.Role, URL: aiRunnerURL(v.Name), Version: v.Version, Revoked: v.Revoked, Drain: v.Drain,
 		Online: v.Online, LastSeen: v.LastSeen,
 	}
 	if v.Platform != "" {
@@ -308,10 +292,9 @@ func (d *Dashboard) runnerTarget(ctx context.Context, name string) (*opTarget, e
 // MarshalJSON 输出 AI 执行节点，加上接单和连接状态（与 runnerView 相同的计算值）。
 func (v *aiRunnerView) MarshalJSON() ([]byte, error) {
 	type plain aiRunnerView
-	label, class := v.Conn()
 	return json.Marshal(struct {
 		*plain
-		Accepting            bool
-		ConnLabel, ConnClass string
-	}{(*plain)(v), v.Accepting(), label, class})
+		Accepting bool
+		ConnClass string
+	}{(*plain)(v), v.Accepting(), v.ConnClass()})
 }

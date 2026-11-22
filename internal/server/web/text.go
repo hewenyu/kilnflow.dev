@@ -179,6 +179,84 @@ const (
 	msgLogServer              msgID = "log.errServer"
 )
 
+// CI Runner 与 AI 执行节点（列表、详情、注册、本地缓存、按台升级）的消息。
+const (
+	msgRunnersTitle     msgID = "runners.pageTitle"
+	msgRunnerTitle      msgID = "runner.pageTitle"
+	msgRunnerCacheTitle msgID = "runnerCache.pageTitle"
+	msgRunnerNewTitle   msgID = "runnerNew.pageTitle"
+	msgAIRunnersTitle   msgID = "aiRunners.pageTitle"
+	msgAIRunnerTitle    msgID = "aiRunner.pageTitle"
+	msgRunnerNotFound   msgID = "runner.notFound"
+	msgAIRunnerNotFound msgID = "aiRunner.notFound"
+	msgRunnerOpUnknown  msgID = "runner.opUnknown"
+
+	msgRunnerFilterOnline    msgID = "runnerFilter.online"
+	msgRunnerFilterAccepting msgID = "runnerFilter.accepting"
+	msgRunnerFilterPaused    msgID = "runnerFilter.paused"
+	msgRunnerFilterBusy      msgID = "runnerFilter.busy"
+	msgRunnerFilterOffline   msgID = "runnerFilter.offline"
+	msgRunnerFilterRevoked   msgID = "runnerFilter.revoked"
+
+	msgRunnerOpNotFound       msgID = "runnerOp.notFound"
+	msgRunnerOpNotRevoked     msgID = "runnerOp.notRevoked"
+	msgRunnerOpRevokedAlready msgID = "runnerOp.alreadyRevoked"
+	msgRunnerOpFailed         msgID = "runnerOp.failed"
+	msgRunnerOpFailedRef      msgID = "runnerOp.failedRef"
+	msgRunnerOpDrained        msgID = "runnerOp.drained"
+	msgRunnerOpDrainedBusy    msgID = "runnerOp.drainedBusy"
+	msgRunnerOpUndrained      msgID = "runnerOp.undrained"
+	msgRunnerOpUndrainedOff   msgID = "runnerOp.undrainedOffline"
+	msgRunnerOpDeleted        msgID = "runnerOp.deleted"
+	msgRunnerOpRevoked        msgID = "runnerOp.revoked"
+	msgRunnerOpRevokedBusy    msgID = "runnerOp.revokedBusy"
+	msgRunnerOpRevokedBusyAI  msgID = "runnerOp.revokedBusyAI"
+
+	msgRunnerNewErrKind msgID = "runnerNew.errKind"
+	msgRunnerNewErrPool msgID = "runnerNew.errPool"
+	msgRunnerNewErrName msgID = "runnerNew.errName"
+
+	msgUpgradeOpUnknown       msgID = "runnerUpgrade.opUnknown"
+	msgUpgradeRequested       msgID = "runnerUpgrade.requested"
+	msgUpgradeRequestedOff    msgID = "runnerUpgrade.requestedOffline"
+	msgUpgradeAlready         msgID = "runnerUpgrade.alreadyRequested"
+	msgUpgradeCancelled       msgID = "runnerUpgrade.cancelled"
+	msgUpgradeCheckRequested  msgID = "runnerUpgrade.checkRequested"
+	msgUpgradeStartFailed     msgID = "runnerUpgrade.startFailed"
+	msgUpgradeStartFailedRef  msgID = "runnerUpgrade.startFailedRef"
+	msgUpgradeCancelFailed    msgID = "runnerUpgrade.cancelFailed"
+	msgUpgradeCancelFailedRef msgID = "runnerUpgrade.cancelFailedRef"
+	msgUpgradeCheckFailed     msgID = "runnerUpgrade.checkFailed"
+	msgUpgradeCheckFailedRef  msgID = "runnerUpgrade.checkFailedRef"
+	msgUpgradeRunnerMissing   msgID = "runnerUpgrade.runnerMissing"
+
+	msgUpgradeReasonAINode        msgID = "upgradeReason.aiNode"
+	msgUpgradeReasonRevoked       msgID = "upgradeReason.revoked"
+	msgUpgradeReasonUnsupported   msgID = "upgradeReason.unsupported"
+	msgUpgradeReasonNoLauncher    msgID = "upgradeReason.noLauncher"
+	msgUpgradeReasonDisabled      msgID = "upgradeReason.disabled"
+	msgUpgradeReasonCheckFailed   msgID = "upgradeReason.checkFailed"
+	msgUpgradeReasonNotChecked    msgID = "upgradeReason.notChecked"
+	msgUpgradeReasonUpToDate      msgID = "upgradeReason.upToDate"
+	msgUpgradeReasonNewer         msgID = "upgradeReason.newer"
+	msgUpgradeReasonUpgrading     msgID = "upgradeReason.upgrading"
+	msgUpgradeReasonLatestChanged msgID = "upgradeReason.latestChanged"
+	msgUpgradeReasonNoPending     msgID = "upgradeReason.noPending"
+	msgUpgradeReasonSwitching     msgID = "upgradeReason.switching"
+	msgUpgradeReasonUnknown       msgID = "upgradeReason.unknown"
+
+	msgCacheFormInvalid    msgID = "runnerCache.formInvalid"
+	msgCachePurgeRequested msgID = "runnerCache.purgeRequested"
+	msgCachePurgeFailed    msgID = "runnerCache.purgeFailed"
+	msgCachePurgeFailedRef msgID = "runnerCache.purgeFailedRef"
+	msgCacheRepoNotFound   msgID = "runnerCache.errRepoNotFound"
+	msgCacheNoteNoReport   msgID = "cacheNote.noReport"
+	msgCacheNoteReport     msgID = "cacheNote.report"
+	msgCacheNoteBusy       msgID = "cacheNote.busy"
+	msgCacheNoteSharedKept msgID = "cacheNote.sharedKept"
+	msgCacheNoteUnknown    msgID = "cacheNote.unknown"
+)
+
 // 消息的参数名（同一个参数名在各条消息中的含义相同）。
 const (
 	argLogin = "login"
@@ -206,6 +284,19 @@ const (
 	argOptions = "options"
 	argOutput  = "output"
 	argPath    = "path"
+	// argVersion 是版本号；argCurrent、argLatest、argExpected 是 Runner 的当前版本、查到的最新版本和管理员确认的版本；
+	// argDetail 是 Runner 上报的错误原文；argProgram 是程序名（kiln-runner）；argCode 是不认识的原因码。
+	argVersion  = "version"
+	argCurrent  = "current"
+	argLatest   = "latest"
+	argExpected = "expected"
+	argDetail   = "detail"
+	argProgram  = "program"
+	argCode     = "code"
+	// argPoll、argLease 是时长（秒，按 {name, duration} 显示）：一轮领取的最长时间、租约有效期。argAt 是时间（Unix 秒）。
+	argPoll  = "poll"
+	argLease = "lease"
+	argAt    = "at"
 )
 
 // messages 是服务端给出的全部消息（只读）。
@@ -294,6 +385,73 @@ var messages = map[msgID]msgSpec{
 	msgLogTaskNotFound:        {params: map[string]paramKind{argID: paramInt}},
 	msgLogTaskAttemptNotFound: {params: map[string]paramKind{argID: paramInt, argAttempt: paramInt}},
 	msgLogServer:              {params: map[string]paramKind{argRef: paramString}},
+
+	msgRunnersTitle: {}, msgRunnerNewTitle: {}, msgAIRunnersTitle: {},
+	msgRunnerTitle:        {params: map[string]paramKind{argName: paramString}},
+	msgRunnerCacheTitle:   {params: map[string]paramKind{argName: paramString}},
+	msgAIRunnerTitle:      {params: map[string]paramKind{argName: paramString}},
+	msgRunnerNotFound:     {params: map[string]paramKind{argName: paramString}},
+	msgAIRunnerNotFound:   {params: map[string]paramKind{argName: paramString}},
+	msgRunnerOpUnknown:    {},
+	msgRunnerFilterOnline: {}, msgRunnerFilterAccepting: {}, msgRunnerFilterPaused: {},
+	msgRunnerFilterBusy: {}, msgRunnerFilterOffline: {}, msgRunnerFilterRevoked: {},
+
+	msgRunnerOpNotFound:       {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgRunnerOpNotRevoked:     {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgRunnerOpRevokedAlready: {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgRunnerOpFailed:         {params: map[string]paramKind{argName: paramString, argReason: paramString}, flash: true},
+	msgRunnerOpFailedRef:      {params: map[string]paramKind{argName: paramString, argRef: paramString}, flash: true},
+	msgRunnerOpDrained:        {params: map[string]paramKind{argName: paramString, argPoll: paramInt}, flash: true},
+	msgRunnerOpDrainedBusy:    {params: map[string]paramKind{argName: paramString, argPoll: paramInt, argCount: paramInt}, flash: true},
+	msgRunnerOpUndrained:      {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgRunnerOpUndrainedOff:   {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgRunnerOpDeleted:        {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgRunnerOpRevoked:        {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgRunnerOpRevokedBusy:    {params: map[string]paramKind{argName: paramString, argCount: paramInt, argLease: paramInt}, flash: true},
+	msgRunnerOpRevokedBusyAI:  {params: map[string]paramKind{argName: paramString, argCount: paramInt, argLease: paramInt}, flash: true},
+
+	msgRunnerNewErrKind: {}, msgRunnerNewErrPool: {}, msgRunnerNewErrName: {},
+
+	msgUpgradeOpUnknown:       {},
+	msgUpgradeRequested:       {params: map[string]paramKind{argName: paramString, argVersion: paramString}, flash: true},
+	msgUpgradeRequestedOff:    {params: map[string]paramKind{argName: paramString, argVersion: paramString}, flash: true},
+	msgUpgradeAlready:         {params: map[string]paramKind{argName: paramString, argVersion: paramString}, flash: true},
+	msgUpgradeCancelled:       {params: map[string]paramKind{argName: paramString, argVersion: paramString}, flash: true},
+	msgUpgradeCheckRequested:  {params: map[string]paramKind{argName: paramString, argPoll: paramInt}, flash: true},
+	msgUpgradeStartFailed:     {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgUpgradeStartFailedRef:  {params: map[string]paramKind{argRef: paramString}, flash: true},
+	msgUpgradeCancelFailed:    {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgUpgradeCancelFailedRef: {params: map[string]paramKind{argRef: paramString}, flash: true},
+	msgUpgradeCheckFailed:     {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgUpgradeCheckFailedRef:  {params: map[string]paramKind{argRef: paramString}, flash: true},
+	msgUpgradeRunnerMissing:   {params: map[string]paramKind{argName: paramString}, flash: true},
+
+	// 不能升级的原因：页面数据中显示，也作为升级操作被拒绝后的提示（flash）
+	msgUpgradeReasonAINode:        {flash: true},
+	msgUpgradeReasonRevoked:       {flash: true},
+	msgUpgradeReasonUnsupported:   {params: map[string]paramKind{argProgram: paramString}, flash: true},
+	msgUpgradeReasonNoLauncher:    {params: map[string]paramKind{argProgram: paramString}, flash: true},
+	msgUpgradeReasonDisabled:      {flash: true},
+	msgUpgradeReasonCheckFailed:   {params: map[string]paramKind{argDetail: paramString}, flash: true},
+	msgUpgradeReasonNotChecked:    {flash: true},
+	msgUpgradeReasonUpToDate:      {flash: true},
+	msgUpgradeReasonNewer:         {params: map[string]paramKind{argCurrent: paramString, argLatest: paramString}, flash: true},
+	msgUpgradeReasonUpgrading:     {params: map[string]paramKind{argVersion: paramString}, flash: true},
+	msgUpgradeReasonLatestChanged: {params: map[string]paramKind{argLatest: paramString, argExpected: paramString}, flash: true},
+	msgUpgradeReasonNoPending:     {flash: true},
+	msgUpgradeReasonSwitching:     {params: map[string]paramKind{argVersion: paramString}, flash: true},
+	msgUpgradeReasonUnknown:       {params: map[string]paramKind{argCode: paramString}, flash: true},
+
+	msgCacheFormInvalid:    {flash: true},
+	msgCachePurgeRequested: {params: map[string]paramKind{argID: paramInt, argName: paramString}, flash: true},
+	msgCachePurgeFailed:    {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgCachePurgeFailedRef: {params: map[string]paramKind{argRef: paramString}, flash: true},
+	msgCacheRepoNotFound:   {params: map[string]paramKind{argRepo: paramString}},
+	msgCacheNoteNoReport:   {},
+	msgCacheNoteReport:     {params: map[string]paramKind{argAt: paramInt}},
+	msgCacheNoteBusy:       {params: map[string]paramKind{argName: paramString, argCount: paramInt}},
+	msgCacheNoteSharedKept: {},
+	msgCacheNoteUnknown:    {params: map[string]paramKind{argCode: paramString}},
 }
 
 // uiText 是页面数据中的一段文字：消息（id 加参数，前端按当前语言显示），或原样显示的文字（raw）。零值是空串。

@@ -1,6 +1,11 @@
 {
  "Page": "runner",
- "Title": "Runner · mini-01",
+ "Title": {
+  "id": "runner.pageTitle",
+  "params": {
+   "name": "mini-01"
+  }
+ },
  "Nav": "runners",
  "Status": 200,
  "Session": {
@@ -53,15 +58,30 @@
     }
    ],
    "Accepting": true,
-   "ConnLabel": "在线",
    "ConnClass": "ok",
    "Capacity": {
-    "Machine": "10 核 / 16.0 GiB",
-    "Reserved": "2 核 / 4.0 GiB",
-    "Allocatable": "8 核 / 12.0 GiB",
-    "Allocated": "2 核 / 2.0 GiB",
+    "Machine": {
+     "CPU": "10",
+     "Memory": "16.0 GiB"
+    },
+    "Reserved": {
+     "CPU": "2",
+     "Memory": "4.0 GiB"
+    },
+    "Allocatable": {
+     "CPU": "8",
+     "Memory": "12.0 GiB"
+    },
+    "Allocated": {
+     "CPU": "2",
+     "Memory": "2.0 GiB"
+    },
     "Limits": [
-     "oci 上限 8 核 / 7.7 GiB"
+     {
+      "CPU": "8",
+      "Memory": "7.7 GiB",
+      "Executor": "oci"
+     }
     ],
     "MaxJobs": 4
    },
@@ -81,7 +101,12 @@
     "CheckError": "",
     "CheckPending": false,
     "CanUpgrade": false,
-    "Reason": "正在升级到 0.4.3",
+    "Reason": {
+     "id": "upgradeReason.upgrading",
+     "params": {
+      "version": "0.4.3"
+     }
+    },
     "Request": {
      "ID": 1003,
      "Version": "0.4.3",
@@ -93,8 +118,8 @@
      "Finished": null
     }
    },
-   "KindLabel": "CI Runner",
-   "URL": "/runners/detail/mini-01"
+   "URL": "/runners/detail/mini-01",
+   "Kind": "ci"
   },
   "History": [
    {
@@ -110,7 +135,7 @@
   ],
   "Registry": "https://registry.npmjs.org/",
   "RegistryDefault": true,
-  "OfflineAfter": "2 分钟",
-  "LongPoll": "25 秒"
+  "OfflineAfter": 120,
+  "LongPoll": 25
  }
 }

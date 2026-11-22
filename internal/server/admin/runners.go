@@ -135,7 +135,7 @@ func (s *Service) ListRunners(ctx context.Context) ([]*apiv1.Runner, error) {
 		v := &apiv1.Runner{
 			Id: r.ID, Name: r.Name, Pool: r.Pool, Kind: r.Kind, Platforms: r.Platforms, Executors: r.Executors, Version: r.Version,
 			State: RunnerState(&r.Runner, now), HostFingerprint: r.HostFingerprint, RunningJobs: clampInt32(running[r.ID]),
-			Capacity: capacityView(r.Capacity, alloc[r.ID]), CacheBytes: cacheBytes(r.CacheReport), Upgrade: upgrades[r.ID],
+			Capacity: capacityView(r.Capacity, alloc[r.ID]), CacheBytes: cacheBytes(r.CacheReport), Upgrade: upgrades[r.ID].Info,
 		}
 		if r.CacheReportedAt != nil {
 			v.CacheReportedAt = r.CacheReportedAt.Unix()

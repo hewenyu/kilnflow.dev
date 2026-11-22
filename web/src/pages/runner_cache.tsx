@@ -8,9 +8,11 @@ import { Callout } from '../components/Callout'
 import { EmptyState } from '../components/EmptyState'
 import { ConfirmForm, Form, SubmitButton } from '../components/Form'
 import { PageHeader } from '../components/PageHeader'
-import { runnerViewSchema } from '../components/RunnerSchema'
+import { runnerViewSchema, type TFn } from '../components/RunnerSchema'
 import { Ago } from '../components/Time'
-import { list } from '../lib/envelope'
+import { Msg, Trans, useLocale, useT, type Tags } from '../i18n/locale'
+import { isEmpty, isMsgKey } from '../i18n/messages'
+import { list, textSchema } from '../lib/envelope'
 import { clock, size } from '../lib/format'
 import css from './runner_cache.module.css'
 
@@ -18,8 +20,8 @@ import css from './runner_cache.module.css'
 // 管理员可以按仓库、类别和执行身份预览清理范围（GET 参数，服务端算好），确认后发起清理（Runner 空闲时执行）。
 
 const entrySchema = z.object({
+  /** 缓存类别；名称见 cacheKindText。 */
   Kind: z.string(),
-  KindLabel: z.string(),
   /** 所属仓库（owner/name）；仓库不在 Kiln 中时为 #ID，不属于单个仓库时为空。 */
   Repo: z.string(),
   Platform: z.string(),
@@ -53,8 +55,6 @@ const purgeSchema = z.object({
 })
 type Purge = z.infer<typeof purgeSchema>
 
-const optionSchema = z.object({ Value: z.string(), Label: z.string() })
-
 const schema = z.object({
   Runner: runnerViewSchema,
   /** 清单生成的时间；Runner 还没有上报过时为 null。 */
@@ -72,8 +72,8 @@ const schema = z.object({
     })
     .nullable(),
   Purges: list(purgeSchema),
-  /** 清理表单的选项（只有管理员有 Repos）和当前取值。 */
-  Kinds: list(optionSchema),
+  /** 清理表单的选项（只有管理员有 Repos）和当前取值；Kinds 是缓存类别。 */
+  Kinds: list(z.string()),
   Repos: list(z.string()),
   Domains: list(z.string()),
   Repo: z.string(),
@@ -85,35 +85,41 @@ const schema = z.object({
       Matched: list(entrySchema),
       MatchedBytes: z.number(),
       Shared: list(entrySchema),
-      Notes: list(z.string()),
-      Error: z.string(),
+      /** 预览的说明和失败原因：服务端按原因码给出的消息。 */
+      Notes: list(textSchema),
+      Error: textSchema,
     })
     .nullable(),
   Self: z.string(),
 })
 type Data = z.infer<typeof schema>
 
-/** kindText 返回类别的说明（未知的类别原样显示）。 */
-function kindText(data: Data, kind: string): string {
-  return data.Kinds.find((k) => k.Value === kind)?.Label ?? kind
+/** cacheKindText 返回缓存类别的名称（不认识的类别原样显示）。 */
+export function cacheKindText(kind: string, t: TFn): string {
+  const key = `cacheKind.${kind}`
+  return isMsgKey(key) ? t(key) : kind
 }
 
 /** scopeText 返回清理范围的一句话说明，例如"仓库 a/b，类别 toolcache、git 镜像，执行身份 host"。 */
-export function scopeText(data: Data, repo: string, kinds: readonly string[], domain: string): string {
+export function scopeText(repo: string, kinds: readonly string[], domain: string, t: TFn): string {
+  const sep = t('list.separator')
   return [
-    repo ? `仓库 ${repo}` : '全部仓库',
-    kinds.length > 0 ? `类别 ${kinds.map((k) => kindText(data, k)).join('、')}` : '全部类别',
-    domain ? `执行身份 ${domain}` : '全部执行身份',
-  ].join('，')
+    repo ? t('runnerCache.scopeRepo', { repo }) : t('runnerCache.scopeAllRepos'),
+    kinds.length > 0 ? t('runnerCache.scopeKinds', { kinds: kinds.map((k) => cacheKindText(k, t)).join(t('runner.enumSeparator')) }) : t('runnerCache.scopeAllKinds'),
+    domain ? t('runnerCache.scopeDomain', { domain }) : t('runnerCache.scopeAllDomains'),
+  ].join(sep)
 }
 
 function Failures({ list: items, label }: { list: Failure[]; label: string }) {
+  const t = useT()
   if (items.length === 0) return null
   return (
     <ul className={css.failures} aria-label={label}>
       {items.map((f) => (
         <li key={`${f.Kind}:${f.Path}`}>
-          <span className="mono">{f.Path || f.Kind}</span>：<span className={css.err}>{f.Error}</span>
+          <span className="mono">{f.Path || f.Kind}</span>
+          {t('runnerCache.colon')}
+          <span className={css.err}>{f.Error}</span>
         </li>
       ))}
     </ul>
@@ -121,43 +127,55 @@ function Failures({ list: items, label }: { list: Failure[]; label: string }) {
 }
 
 function EntriesTable({ entries, label }: { entries: Entry[]; label: string }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const cols = {
+    kind: t('runnerCache.colKind'),
+    repo: t('runnerCache.colRepo'),
+    platform: t('runnerCache.colPlatform'),
+    domain: t('runnerCache.colDomain'),
+    name: t('runnerCache.colName'),
+    size: t('runnerCache.colSize'),
+    lastUsed: t('runnerCache.colLastUsed'),
+    expires: t('runnerCache.colExpires'),
+  }
   return (
     <div className={css.scroll}>
       <table className={css.table} aria-label={label}>
         <thead>
           <tr>
-            <th scope="col">类别</th>
-            <th scope="col">仓库</th>
-            <th scope="col">平台</th>
-            <th scope="col">执行身份</th>
-            <th scope="col">名称</th>
+            <th scope="col">{cols.kind}</th>
+            <th scope="col">{cols.repo}</th>
+            <th scope="col">{cols.platform}</th>
+            <th scope="col">{cols.domain}</th>
+            <th scope="col">{cols.name}</th>
             <th scope="col" className={css.right}>
-              大小
+              {cols.size}
             </th>
-            <th scope="col">最后使用</th>
-            <th scope="col">到期</th>
+            <th scope="col">{cols.lastUsed}</th>
+            <th scope="col">{cols.expires}</th>
           </tr>
         </thead>
         <tbody>
           {entries.map((e) => (
             <tr key={`${e.Kind}:${e.Path}:${e.Name}`}>
-              <td data-label="类别">{e.KindLabel}</td>
-              <td data-label="仓库">{e.Repo || <span className={css.muted}>共享</span>}</td>
-              <td data-label="平台" className="mono">
+              <td data-label={cols.kind}>{cacheKindText(e.Kind, t)}</td>
+              <td data-label={cols.repo}>{e.Repo || <span className={css.muted}>{t('runnerCache.shared')}</span>}</td>
+              <td data-label={cols.platform} className="mono">
                 {e.Platform || '—'}
               </td>
-              <td data-label="执行身份">{e.Domain || '—'}</td>
-              <td data-label="名称" className={css.name} title={e.Path}>
+              <td data-label={cols.domain}>{e.Domain || '—'}</td>
+              <td data-label={cols.name} className={css.name} title={e.Path}>
                 {e.Name || e.Path}
               </td>
-              <td data-label="大小" className={`num ${css.right ?? ''}`}>
+              <td data-label={cols.size} className={`num ${css.right ?? ''}`}>
                 {size(e.Size)}
               </td>
-              <td data-label="最后使用" className={css.nowrap}>
+              <td data-label={cols.lastUsed} className={css.nowrap}>
                 <Ago t={e.LastUsed} fallback="—" />
               </td>
-              <td data-label="到期" className={css.nowrap}>
-                {e.Expires ? <time dateTime={e.Expires}>{clock(e.Expires)}</time> : '—'}
+              <td data-label={cols.expires} className={css.nowrap}>
+                {e.Expires ? <time dateTime={e.Expires}>{clock(e.Expires, locale)}</time> : '—'}
               </td>
             </tr>
           ))}
@@ -168,90 +186,107 @@ function EntriesTable({ entries, label }: { entries: Entry[]; label: string }) {
 }
 
 function Summary({ data }: { data: Data }) {
+  const t = useT()
   return (
     <dl className={css.summary}>
       <div>
-        <dt>清单</dt>
+        <dt>{t('runnerCache.inventory')}</dt>
         <dd>
-          <Ago t={data.Generated} fallback="未上报" />
-          {data.Generated && '生成'}
+          {data.Generated ? (
+            <Trans id="runnerCache.generated" tags={{ ago: () => <Ago t={data.Generated} /> }} />
+          ) : (
+            t('runnerCache.notReported')
+          )}
         </dd>
       </div>
       <div>
-        <dt>缓存总大小</dt>
-        <dd>
-          {size(data.TotalBytes)}，共 {data.Entries.length} 项
-        </dd>
+        <dt>{t('runnerCache.total')}</dt>
+        <dd>{t('runnerCache.totalValue', { size: size(data.TotalBytes), count: data.Entries.length })}</dd>
       </div>
       {data.DiskTotal > 0 && (
         <div>
-          <dt>数据目录所在磁盘</dt>
-          <dd>
-            可用 {size(data.DiskFree)} / 共 {size(data.DiskTotal)}
-          </dd>
+          <dt>{t('runnerCache.disk')}</dt>
+          <dd>{t('runnerCache.diskValue', { free: size(data.DiskFree), total: size(data.DiskTotal) })}</dd>
         </div>
       )}
     </dl>
   )
 }
 
+/** Removed 是一次清理的结果：删除了几项、多大，有删除失败时标红。 */
+function Removed({ removed, bytes, failures }: { removed: number; bytes: number; failures: number }) {
+  const t = useT()
+  return (
+    <>
+      {t('runnerCache.removed', { count: removed, size: size(bytes) })}
+      {failures > 0 && <span className={css.err}>{t('runnerCache.removeFailed', { count: failures })}</span>}
+    </>
+  )
+}
+
 function GC({ data }: { data: Data }) {
+  const t = useT()
   const gc = data.GC
   return (
     <Box as="section" aria-labelledby="gc-title">
-      <BoxHeader title="上一次自动清理" id="gc-title" />
+      <BoxHeader title={t('runnerCache.gcTitle')} id="gc-title" />
       <BoxRow className={css.block}>
         {gc ? (
           <>
             <p className={css.line}>
-              <Ago t={gc.At} />：删除 {gc.Removed} 项（{size(gc.RemovedBytes)}）
-              {gc.Failures.length > 0 && <span className={css.err}>，{gc.Failures.length} 项删除失败</span>}
+              <Trans id="runnerCache.gcAt" tags={{ ago: () => <Ago t={gc.At} /> }} />
+              <Removed removed={gc.Removed} bytes={gc.RemovedBytes} failures={gc.Failures.length} />
             </p>
-            <Failures list={gc.Failures} label="自动清理失败的对象" />
+            <Failures list={gc.Failures} label={t('runnerCache.gcFailures')} />
           </>
         ) : (
-          <p className={css.muted}>还没有记录。Runner 定期删除超过 12 小时没有使用的缓存（装好的 runtime 是 30 天），并在上报清单时带上结果。</p>
+          <p className={css.muted}>{t('runnerCache.gcEmpty')}</p>
         )}
       </BoxRow>
     </Box>
   )
 }
 
-function PurgeRow({ data, p }: { data: Data; p: Purge }) {
+function PurgeRow({ p }: { p: Purge }) {
+  const t = useT()
   return (
     <BoxRow as="li" className={css.block}>
       <div className={css.purgeHead}>
         <b>#{p.ID}</b>
-        <span>{scopeText(data, p.Repo, p.Kinds, p.Domain)}</span>
-        {p.State === 'done' ? <Label variant="success">已完成</Label> : <Label variant="attention">等待 Runner 空闲后执行</Label>}
+        <span>{scopeText(p.Repo, p.Kinds, p.Domain, t)}</span>
+        {p.State === 'done' ? (
+          <Label variant="success">{t('runnerCache.purgeDone')}</Label>
+        ) : (
+          <Label variant="attention">{t('runnerCache.purgePending')}</Label>
+        )}
       </div>
       <p className={css.meta}>
-        {p.Actor || '—'} 于 <Ago t={p.Created} /> 发起
+        <Trans id="runnerCache.purgeBy" params={{ actor: p.Actor || '—' }} tags={{ ago: () => <Ago t={p.Created} /> }} />
         {p.State === 'done' && (
           <>
-            ；<Ago t={p.Done} />
-            执行，删除 {p.Removed} 项（{size(p.RemovedBytes)}）
-            {p.Failures.length > 0 && <span className={css.err}>，{p.Failures.length} 项删除失败</span>}
+            <Trans id="runnerCache.purgeRan" tags={{ ago: () => <Ago t={p.Done} /> }} />
+            <Removed removed={p.Removed} bytes={p.RemovedBytes} failures={p.Failures.length} />
           </>
         )}
       </p>
-      <Failures list={p.Failures} label={`清理请求 #${p.ID} 失败的对象`} />
+      <Failures list={p.Failures} label={t('runnerCache.purgeFailures', { id: p.ID })} />
     </BoxRow>
   )
 }
 
 function Purges({ data }: { data: Data }) {
+  const t = useT()
   return (
     <Box as="section" aria-labelledby="purges-title">
-      <BoxHeader title="清理请求" id="purges-title" />
+      <BoxHeader title={t('runnerCache.purgesTitle')} id="purges-title" />
       {data.Purges.length > 0 ? (
-        <ul className={css.rows} aria-label="清理请求">
+        <ul className={css.rows} aria-label={t('runnerCache.purgesTitle')}>
           {data.Purges.map((p) => (
-            <PurgeRow key={p.ID} data={data} p={p} />
+            <PurgeRow key={p.ID} p={p} />
           ))}
         </ul>
       ) : (
-        <BoxRow className={css.muted}>还没有清理请求。</BoxRow>
+        <BoxRow className={css.muted}>{t('runnerCache.purgesEmpty')}</BoxRow>
       )}
     </Box>
   )
@@ -259,52 +294,53 @@ function Purges({ data }: { data: Data }) {
 
 /** PurgeForm 是清理范围的表单：预览（GET，带 preview=1）在本页显示将删除的内容。 */
 function PurgeForm({ data }: { data: Data }) {
+  const t = useT()
   // 换了取值后重建表单，使默认值与页面数据一致
   const key = [data.Repo, data.KindsPicked.join(','), data.Domain].join('|')
   return (
     <Box as="section" aria-labelledby="purge-title">
-      <BoxHeader title="清理缓存" id="purge-title" />
+      <BoxHeader title={t('runnerCache.purgeTitle')} id="purge-title" />
       <BoxRow className={css.block}>
-        <Form key={key} action={data.Self} method="get" className={css.form} aria-label="清理范围">
+        <Form key={key} action={data.Self} method="get" className={css.form} aria-label={t('runnerCache.formLabel')}>
           <input type="hidden" name="preview" value="1" />
           <FormControl>
-            <FormControl.Label>仓库</FormControl.Label>
+            <FormControl.Label>{t('runnerCache.colRepo')}</FormControl.Label>
             <Select name="repo" defaultValue={data.Repo}>
-              <Select.Option value="">全部仓库</Select.Option>
+              <Select.Option value="">{t('runnerCache.optAllRepos')}</Select.Option>
               {data.Repos.map((r) => (
                 <Select.Option key={r} value={r}>
                   {r}
                 </Select.Option>
               ))}
             </Select>
-            <FormControl.Caption>选择仓库时只清理这个仓库的 toolcache、git 镜像和工作区。</FormControl.Caption>
+            <FormControl.Caption>{t('runnerCache.repoCaption')}</FormControl.Caption>
           </FormControl>
           <CheckboxGroup>
-            <CheckboxGroup.Label>类别</CheckboxGroup.Label>
-            <CheckboxGroup.Caption>都不选表示全部类别。</CheckboxGroup.Caption>
+            <CheckboxGroup.Label>{t('runnerCache.colKind')}</CheckboxGroup.Label>
+            <CheckboxGroup.Caption>{t('runnerCache.kindCaption')}</CheckboxGroup.Caption>
             <div className={css.kinds}>
               {data.Kinds.map((k) => (
-                <FormControl key={k.Value}>
-                  <Checkbox name="kind" value={k.Value} defaultChecked={data.KindsPicked.includes(k.Value)} />
-                  <FormControl.Label>{k.Label}</FormControl.Label>
+                <FormControl key={k}>
+                  <Checkbox name="kind" value={k} defaultChecked={data.KindsPicked.includes(k)} />
+                  <FormControl.Label>{cacheKindText(k, t)}</FormControl.Label>
                 </FormControl>
               ))}
             </div>
           </CheckboxGroup>
           <FormControl>
-            <FormControl.Label>执行身份</FormControl.Label>
+            <FormControl.Label>{t('runnerCache.colDomain')}</FormControl.Label>
             <Select name="domain" defaultValue={data.Domain}>
-              <Select.Option value="">全部执行身份</Select.Option>
+              <Select.Option value="">{t('runnerCache.optAllDomains')}</Select.Option>
               {data.Domains.map((d) => (
                 <Select.Option key={d} value={d}>
                   {d}
                 </Select.Option>
               ))}
             </Select>
-            <FormControl.Caption>toolcache 按执行身份分开存放：host 是 Runner 用户，oci-root 是容器中的 root。</FormControl.Caption>
+            <FormControl.Caption>{t('runnerCache.domainCaption')}</FormControl.Caption>
           </FormControl>
           <div>
-            <SubmitButton leadingVisual={SearchIcon}>预览</SubmitButton>
+            <SubmitButton leadingVisual={SearchIcon}>{t('runnerCache.preview')}</SubmitButton>
           </div>
         </Form>
       </BoxRow>
@@ -313,54 +349,56 @@ function PurgeForm({ data }: { data: Data }) {
 }
 
 function Preview({ data }: { data: Data }) {
+  const t = useT()
   const p = data.Preview
   if (!p) return null
   const name = data.Runner.Name
-  const scope = scopeText(data, data.Repo, data.KindsPicked, data.Domain)
-  if (p.Error) {
+  const scope = scopeText(data.Repo, data.KindsPicked, data.Domain, t)
+  if (!isEmpty(p.Error)) {
     return (
-      <Callout tone="critical" title="无法预览">
-        {p.Error}
+      <Callout tone="critical" title={t('runnerCache.previewFailed')}>
+        <Msg text={p.Error} />
       </Callout>
     )
   }
+  const strong: Tags = { b: (c) => <b>{c}</b> }
   return (
     <Box as="section" aria-labelledby="preview-title">
-      <BoxHeader title="预览" id="preview-title">
+      <BoxHeader title={t('runnerCache.preview')} id="preview-title">
         <ConfirmForm
           action={`/runners/cache/${encodeURIComponent(name)}/purge`}
           fields={{ repo: data.Repo, kind: data.KindsPicked.join(','), domain: data.Domain }}
-          button="清理…"
+          button={t('runnerCache.purge')}
           buttonProps={{ size: 'small' }}
-          title={`清理 ${name} 的本地缓存？`}
-          confirmLabel="确认清理"
+          title={t('runnerCache.purgeConfirmTitle', { name })}
+          confirmLabel={t('runnerCache.purgeConfirm')}
         >
           <ul className={css.confirmList}>
-            <li>范围：{scope}。</li>
-            <li>
-              按上报的清单，会删除 {p.Matched.length} 项（{size(p.MatchedBytes)}）；实际以 Runner 上的内容为准。
-            </li>
-            <li>{name} 在没有正在执行的 job 时执行清理，期间不领取新任务；之后用到这些缓存的 job 会重新下载或构建。</li>
+            <li>{t('runnerCache.confirmScope', { scope })}</li>
+            <li>{t('runnerCache.confirmMatched', { count: p.Matched.length, size: size(p.MatchedBytes) })}</li>
+            <li>{t('runnerCache.confirmWhen', { name })}</li>
           </ul>
         </ConfirmForm>
       </BoxHeader>
       <BoxRow className={css.block}>
         <p className={css.line}>
-          {scope}：将删除 <b>{p.Matched.length}</b> 项，共 <b>{size(p.MatchedBytes)}</b>。
+          <Trans id="runnerCache.previewLine" params={{ scope, count: p.Matched.length, size: size(p.MatchedBytes) }} tags={strong} />
         </p>
         {p.Notes.length > 0 && (
-          <ul className={css.notes} aria-label="预览说明">
-            {p.Notes.map((n) => (
-              <li key={n}>{n}</li>
+          <ul className={css.notes} aria-label={t('runnerCache.notesLabel')}>
+            {p.Notes.map((n, i) => (
+              <li key={i}>
+                <Msg text={n} />
+              </li>
             ))}
           </ul>
         )}
       </BoxRow>
-      {p.Matched.length > 0 && <EntriesTable entries={p.Matched} label="将删除的缓存" />}
+      {p.Matched.length > 0 && <EntriesTable entries={p.Matched} label={t('runnerCache.matchedLabel')} />}
       {p.Shared.length > 0 && (
         <>
-          <BoxRow className={css.subhead}>继续保留的共享缓存（{p.Shared.length} 项）</BoxRow>
-          <EntriesTable entries={p.Shared} label="继续保留的共享缓存" />
+          <BoxRow className={css.subhead}>{t('runnerCache.sharedTitle', { count: p.Shared.length })}</BoxRow>
+          <EntriesTable entries={p.Shared} label={t('runnerCache.sharedLabel')} />
         </>
       )}
     </Box>
@@ -368,6 +406,7 @@ function Preview({ data }: { data: Data }) {
 }
 
 function RunnerCache({ data, env }: PageProps<Data>) {
+  const t = useT()
   const admin = env.Session?.Admin ?? false
   const r = data.Runner
   // 清理请求还没执行（等待 Runner 空闲）时自动刷新
@@ -375,30 +414,30 @@ function RunnerCache({ data, env }: PageProps<Data>) {
   return (
     <div className={css.page}>
       <PageHeader
-        title={`${r.Name} 的本地缓存`}
-        description="Runner 最近一次上报的缓存清单：toolcache、runtime、git 镜像、CAS、镜像等。超过 12 小时没有使用的缓存由 Runner 自动删除；装好的 runtime 是工具，30 天没有使用才删除。"
+        title={t('runnerCache.title', { name: r.Name })}
+        description={t('runnerCache.description')}
         actions={
           <LinkButton href="/runners" leadingVisual={ArrowLeftIcon}>
-            Runner 列表
+            {t('runner.backToList')}
           </LinkButton>
         }
       />
 
       {r.Revoked && (
-        <Callout tone="warning" title="已吊销">
-          {r.Name} 已吊销，不会再上报清单，也不能清理。
+        <Callout tone="warning" title={t('runnerConn.revoked')}>
+          {t('runnerCache.revoked', { name: r.Name })}
         </Callout>
       )}
 
       <Summary data={data} />
 
       <Box as="section" aria-labelledby="entries-title">
-        <BoxHeader title="缓存清单" id="entries-title" />
+        <BoxHeader title={t('runnerCache.entriesTitle')} id="entries-title" />
         {data.Entries.length > 0 ? (
-          <EntriesTable entries={data.Entries} label="缓存清单" />
+          <EntriesTable entries={data.Entries} label={t('runnerCache.entriesTitle')} />
         ) : (
-          <EmptyState icon={DatabaseIcon} title={data.Generated ? '没有缓存' : '还没有上报缓存清单'}>
-            {data.Generated ? '清单为空。' : '旧版 kiln-runner 不上报缓存清单；新版在空闲时定期上报，清理后也会上报。'}
+          <EmptyState icon={DatabaseIcon} title={t(data.Generated ? 'runnerCache.emptyTitle' : 'runnerCache.noReportTitle')}>
+            {t(data.Generated ? 'runnerCache.emptyText' : 'runnerCache.noReportText')}
           </EmptyState>
         )}
       </Box>
@@ -412,7 +451,7 @@ function RunnerCache({ data, env }: PageProps<Data>) {
           <Preview data={data} />
         </>
       )}
-      {!admin && <p className={css.muted}>清理缓存需要管理员。</p>}
+      {!admin && <p className={css.muted}>{t('runnerCache.needAdmin')}</p>}
     </div>
   )
 }

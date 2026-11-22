@@ -1,6 +1,11 @@
 {
   "Page": "ai_runner",
-  "Title": "AI 执行节点 · ai-node-01",
+  "Title": {
+    "id": "aiRunner.pageTitle",
+    "params": {
+      "name": "ai-node-01"
+    }
+  },
   "Nav": "ai_runners",
   "Status": 200,
   "Session": {
@@ -18,7 +23,6 @@
       "ID": 7,
       "Name": "ai-node-01",
       "Role": "review",
-      "RoleLabel": "AI 审计节点",
       "Version": "0.3.0",
       "Platform": "darwin/arm64",
       "Protocol": 2,
@@ -82,10 +86,9 @@
         }
       ],
       "Accepting": true,
-      "ConnLabel": "在线",
       "ConnClass": "ok"
     },
-    "OfflineAfter": "2 分钟",
-    "LongPoll": "30 秒"
+    "OfflineAfter": 120,
+    "LongPoll": 30
   }
 }
