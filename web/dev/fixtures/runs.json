@@ -1,6 +1,8 @@
 {
   "Page": "runs",
-  "Title": "Runs",
+  "Title": {
+    "id": "nav.runs"
+  },
   "Nav": "runs",
   "Status": 200,
   "Session": {
@@ -496,27 +498,39 @@
     "States": [
       {
         "Value": "queued",
-        "Label": "排队中"
+        "Label": {
+          "id": "runState.queued"
+        }
       },
       {
         "Value": "active",
-        "Label": "运行中"
+        "Label": {
+          "id": "runState.active"
+        }
       },
       {
         "Value": "succeeded",
-        "Label": "成功"
+        "Label": {
+          "id": "runState.succeeded"
+        }
       },
       {
         "Value": "failed",
-        "Label": "失败"
+        "Label": {
+          "id": "runState.failed"
+        }
       },
       {
         "Value": "cancelled",
-        "Label": "已取消"
+        "Label": {
+          "id": "runState.cancelled"
+        }
       },
       {
         "Value": "skipped",
-        "Label": "已跳过"
+        "Label": {
+          "id": "runState.skipped"
+        }
       }
     ],
     "Workflows": [

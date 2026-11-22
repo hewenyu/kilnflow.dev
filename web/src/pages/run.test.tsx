@@ -7,7 +7,7 @@ import failedFixture from '../../dev/fixtures/run.failed.json'
 import historyFixture from '../../dev/fixtures/run.history.json'
 import invalidFixture from '../../dev/fixtures/run.invalid.json'
 import purgedFixture from '../../dev/fixtures/run.purged.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, withData } from '../test/render'
 import { runPageURL } from './run'
 import { json, stubFetch } from '../test/fetch'
 import { modeHints } from './run/RerunDialog'
@@ -242,5 +242,41 @@ describe('run 详情页', () => {
   it('runPageURL 带上 rerun 和返回的列表地址', () => {
     expect(runPageURL(7, null, '')).toBe('/runs/7')
     expect(runPageURL(7, 0, '/runs?state=failed')).toBe('/runs/7?rerun=0&back=%2Fruns%3Fstate%3Dfailed')
+  })
+})
+
+describe('run 详情页的语言', () => {
+  it('英文：标题（服务端的消息）、阶段、活动（服务端的消息）和提示', () => {
+    renderPage(envelope(failedFixture), '/runs/128', { locale: 'en' })
+    expect(document.title).toBe('Run #128 · Kiln')
+    expect(screen.getAllByRole('list', { name: /^Stage \d$/ }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: 'Activity' })).toBeInTheDocument()
+    expect(screen.getByText(/re-ran this run \(only jobs that didn't succeed\), starting re-run 1/)).toBeInTheDocument()
+    expect(screen.getByText(/cancelled this run/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Re-run' })).toBeInTheDocument()
+  })
+
+  it('重跑对话框打开时切换语言：对话框不关闭，选中的方式和勾选保留，说明立即切换', async () => {
+    renderPage(envelope(failedFixture), '/runs/128')
+    await userEvent.click(screen.getByRole('button', { name: '重跑' }))
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: '全部重跑（不用缓存）' }))
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: '失败时保留工作区' }))
+    await switchLocale('English')
+    expect(screen.getByRole('dialog')).toBe(dialog)
+    expect(within(dialog).getByRole('heading', { name: 'Re-run this run' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('radio', { name: 'All jobs (without cache)' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'Keep the workspace on failure' })).toBeChecked()
+    expect(within(dialog).getByText(/^4 jobs that didn't succeed \(failed, cancelled, skipped\) are replanned/)).toBeInTheDocument()
+    expect(document.title).toBe('Run #128 · Kiln')
+  })
+
+  it('modeHints 按语言说明三种重跑方式', () => {
+    const h = modeHints({ ...failedForm, Publish: 1, Effects: 1 }, 'en')
+    expect(h.failed).toBe(
+      "4 jobs that didn't succeed (failed, cancelled, skipped) are replanned; jobs with unchanged inputs still hit the cache; 2 successful jobs reuse the previous result and don't run again, and successful publishes don't run again.",
+    )
+    expect(h.all).toMatch(/^All 6 jobs are replanned;.* 1 publish job and 1 job with side effects \(effects\) don't use the cache and run again \(publishing is idempotent per tag/)
+    expect(h.noCache).toMatch(/^All 6 jobs are forced to run again.* Publish jobs run again\.$/)
   })
 })

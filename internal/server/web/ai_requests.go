@@ -545,17 +545,18 @@ func (d *Dashboard) getAITaskLog(w http.ResponseWriter, r *http.Request, _ *sess
 	q := r.URL.Query()
 	attempt, err := parseOptionalInt(q.Get("attempt"))
 	if err != nil || attempt < 0 {
-		http.Error(w, "attempt 无效", http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, message(msgLogBadAttempt))
 		return
 	}
 	offset, err := parseOptionalInt(q.Get("offset"))
 	if err != nil || offset < 0 {
-		http.Error(w, "offset 无效", http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, message(msgLogBadOffset))
 		return
 	}
-	l, err := d.admin.AITaskLog(r.Context(), pathID(r), attempt, offset)
+	id := pathID(r)
+	l, err := d.admin.AITaskLog(r.Context(), id, attempt, offset)
 	if err != nil {
-		d.adminError(w, r, err)
+		d.logError(w, r, logOfAITask, id, attempt, err)
 		return
 	}
 	writeLogChunk(w, r, d, l)

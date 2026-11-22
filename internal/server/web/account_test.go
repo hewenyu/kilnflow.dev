@@ -295,7 +295,7 @@ func TestRunActivity(t *testing.T) {
 	id := strings.TrimPrefix(runURL(run), "/runs/")
 	wantRedirect(t, "取消", e.post(e.bob, "/runs/"+id+"/cancel", nil), "/runs/"+id)
 	p := pageData[runData](t, e.get(e.alice, "/runs/"+id).Body.String())
-	if len(p.Activity) != 1 || p.Activity[0].Actor != "bob" || p.Activity[0].RunText != "取消了这个 run" {
+	if len(p.Activity) != 1 || p.Activity[0].Actor != "bob" || textZH(t, p.Activity[0].RunText) != "取消了这个 run" {
 		t.Errorf("run 的活动：%+v", p.Activity)
 	}
 }

@@ -411,9 +411,10 @@ func TestErrorPages(t *testing.T) {
 			t.Errorf("%s %s：跳转到 %q，应为 %q", c.q.method, c.q.target, got, c.want)
 		}
 	}
-	// 页面脚本调用的接口仍返回 401 纯文本
-	if w := serve(mux, testReq{target: "/jobs/1/log", cookie: expired}); w.Code != http.StatusUnauthorized || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
-		t.Errorf("日志接口：HTTP %d %q", w.Code, w.Header().Get("Content-Type"))
+	// 页面脚本调用的接口返回 401，正文是消息的 JSON（前端按当前语言显示）
+	if w := serve(mux, testReq{target: "/jobs/1/log", cookie: expired}); w.Code != http.StatusUnauthorized ||
+		!strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") || strings.TrimSpace(w.Body.String()) != `{"id":"api.unauthorized"}` {
+		t.Errorf("日志接口：HTTP %d %q %s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
 	}
 
 	// 内部错误：500，只显示错误编号，可以重试（GET）；日志中有同一个编号和错误内容

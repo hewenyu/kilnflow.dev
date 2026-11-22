@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCheckDispatchInputs(t *testing.T) {
+func TestDispatchInputProblems(t *testing.T) {
 	decl := []DispatchInput{
 		{Name: "version", Type: InputString, Required: true},
 		{Name: "mode", Type: InputChoice, Default: "fast", Options: []string{"fast", "full"}},
@@ -29,9 +29,34 @@ func TestCheckDispatchInputs(t *testing.T) {
 		{"no declarations", nil, map[string]string{"a": "1"}, []string{"workflow 没有声明 a"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if got := CheckDispatchInputs(c.decl, c.inputs); !slices.Equal(got, c.expected) {
-				t.Errorf("CheckDispatchInputs = %q，应为 %q", got, c.expected)
+			var got []string
+			for _, p := range DispatchInputProblems(c.decl, c.inputs) {
+				got = append(got, p.String())
+			}
+			if !slices.Equal(got, c.expected) {
+				t.Errorf("DispatchInputProblems = %q，应为 %q", got, c.expected)
 			}
 		})
+	}
+}
+
+// TestDispatchInputProblemCodes：问题带稳定的原因码和原始参数（Dashboard 据此按语言显示，不解析中文说明）。
+func TestDispatchInputProblemCodes(t *testing.T) {
+	decl := []DispatchInput{
+		{Name: "version", Type: InputString, Required: true},
+		{Name: "mode", Type: InputChoice, Options: []string{"fast", "full"}},
+		{Name: "dry_run", Type: InputBoolean},
+	}
+	got := DispatchInputProblems(decl, map[string]string{"mode": "slow", "dry_run": "yes", "extra": "1"})
+	want := []InputProblem{
+		{Code: InputMissing, Name: "version"},
+		{Code: InputNotChoice, Name: "mode", Options: []string{"fast", "full"}},
+		{Code: InputNotBoolean, Name: "dry_run"},
+		{Code: InputUndeclared, Name: "extra"},
+	}
+	if !slices.EqualFunc(got, want, func(a, b InputProblem) bool {
+		return a.Code == b.Code && a.Name == b.Name && slices.Equal(a.Options, b.Options)
+	}) {
+		t.Errorf("DispatchInputProblems = %+v，应为 %+v", got, want)
 	}
 }

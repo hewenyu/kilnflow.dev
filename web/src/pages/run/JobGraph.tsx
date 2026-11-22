@@ -1,4 +1,6 @@
 import { Fragment } from 'react'
+import { Trans, useLocale, useT } from '../../i18n/locale'
+import { defaultLocale, msg, translate, type Locale, type MsgKey, type Params } from '../../i18n/messages'
 import { dur, jobState } from '../../lib/format'
 import { progressSummary } from '../../lib/progress'
 import type { JobView } from '../../lib/schemas'
@@ -16,20 +18,24 @@ export interface Stage {
 const nodeHeight = 56
 const nodeGap = 16
 
+type T = (id: MsgKey, params?: Params) => string
+
 /** jobDetail 返回 job 节点的完整说明（悬停提示）：状态、当前阶段、耗时、Runner、平台、尝试次数、缓存、等待的上游和原因。 */
-export function jobDetail(j: JobView, now: number): string {
-  const parts = [jobState(j.State)]
-  if (j.State === 'running' && j.Progress) parts.push(progressSummary(j.Progress))
-  if (j.Started) parts.push(`耗时 ${dur(j.Started, j.Finished, now)}`)
-  if (j.Runner) parts.push(`Runner ${j.Runner}`)
+export function jobDetail(j: JobView, now: number, locale: Locale = defaultLocale): string {
+  const t: T = (id, params) => translate(locale, msg(id, params))
+  const names = (list: readonly string[]) => list.join(t('list.enum'))
+  const parts = [jobState(j.State, locale)]
+  if (j.State === 'running' && j.Progress) parts.push(progressSummary(j.Progress, locale))
+  if (j.Started) parts.push(t('graph.duration', { d: dur(j.Started, j.Finished, now, locale) }))
+  if (j.Runner) parts.push(t('graph.runner', { name: j.Runner }))
   if (j.Platform) parts.push(j.Platform)
-  if (j.AttemptCount > 1) parts.push(`第 ${j.AttemptCount} 次尝试`)
-  if (j.ReusedFrom !== null) parts.push(`沿用 #${j.ReusedFrom} 的结果`)
-  else if (j.CachedFrom !== null) parts.push(`命中缓存 #${j.CachedFrom}`)
-  if (j.Needs.length > 0) parts.push(`依赖 ${j.Needs.join('、')}`)
-  if (j.State === 'waiting' && j.WaitingOn.length > 0) parts.push(`等待 ${j.WaitingOn.join('、')} 完成`)
+  if (j.AttemptCount > 1) parts.push(t('graph.attemptN', { n: j.AttemptCount }))
+  if (j.ReusedFrom !== null) parts.push(t('graph.reused', { id: j.ReusedFrom }))
+  else if (j.CachedFrom !== null) parts.push(t('graph.cached', { id: j.CachedFrom }))
+  if (j.Needs.length > 0) parts.push(t('graph.needs', { names: names(j.Needs) }))
+  if (j.State === 'waiting' && j.WaitingOn.length > 0) parts.push(t('graph.waitingFor', { names: names(j.WaitingOn) }))
   if (j.Reason) parts.push(j.Reason)
-  if (j.State === 'pending' && j.WaitReason) parts.push(`等待：${j.WaitReason}`)
+  if (j.State === 'pending' && j.WaitReason) parts.push(t('graph.waitReason', { reason: j.WaitReason }))
   return parts.join(' · ')
 }
 
@@ -38,43 +44,51 @@ export function jobDetail(j: JobView, now: number): string {
  * 最后是耗时（或状态）和 Runner。
  */
 function JobMeta({ job: j, now }: { job: JobView; now: number }) {
+  const t = useT()
+  const { locale } = useLocale()
   if (j.State === 'running' && j.Progress) {
-    return <span className={`${css.meta ?? ''} num`}>{[dur(j.Started, j.Finished, now), progressSummary(j.Progress)].filter(Boolean).join(' · ')}</span>
+    return (
+      <span className={`${css.meta ?? ''} num`}>
+        {[dur(j.Started, j.Finished, now, locale), progressSummary(j.Progress, locale)].filter(Boolean).join(' · ')}
+      </span>
+    )
   }
   if (j.Reason) return <span className={`${css.meta ?? ''} ${css.reason ?? ''}`}>{j.Reason}</span>
-  if (j.State === 'pending' && j.WaitReason) return <span className={css.meta}>等待：{j.WaitReason}</span>
-  if (j.State === 'waiting' && j.WaitingOn.length > 0) return <span className={css.meta}>等待 {j.WaitingOn.join('、')}</span>
-  if (j.ReusedFrom !== null) {
+  if (j.State === 'pending' && j.WaitReason) return <span className={css.meta}>{t('graph.waitReason', { reason: j.WaitReason })}</span>
+  if (j.State === 'waiting' && j.WaitingOn.length > 0) {
+    return <span className={css.meta}>{t('graph.waiting', { names: j.WaitingOn.join(t('list.enum')) })}</span>
+  }
+  const from = j.ReusedFrom ?? j.CachedFrom
+  if (from !== null) {
     return (
       <span className={css.meta}>
-        沿用 <a href={`/jobs/${j.ReusedFrom}`}>#{j.ReusedFrom}</a> 的结果
+        <Trans
+          id={j.ReusedFrom !== null ? 'graph.reusedLink' : 'graph.cachedLink'}
+          params={{ id: from }}
+          tags={{ link: (c) => <a href={`/jobs/${from}`}>{c}</a> }}
+        />
       </span>
     )
   }
-  if (j.CachedFrom !== null) {
-    return (
-      <span className={css.meta}>
-        命中缓存 <a href={`/jobs/${j.CachedFrom}`}>#{j.CachedFrom}</a>
-      </span>
-    )
-  }
-  const parts = [j.Started ? dur(j.Started, j.Finished, now) : jobState(j.State)]
+  const parts = [j.Started ? dur(j.Started, j.Finished, now, locale) : jobState(j.State, locale)]
   if (j.Runner) parts.push(j.Runner)
-  if (j.AttemptCount > 1) parts.push(`第 ${j.AttemptCount} 次尝试`)
+  if (j.AttemptCount > 1) parts.push(t('graph.attemptN', { n: j.AttemptCount }))
   return <span className={`${css.meta ?? ''} num`}>{parts.join(' · ')}</span>
 }
 
 function JobNode({ job: j, into, out, now }: { job: JobView; into: boolean; out: boolean; now: number }) {
+  const t = useT()
+  const { locale } = useLocale()
   const cls = [css.node, into && css.in, out && css.out].filter(Boolean).join(' ')
   return (
-    <li className={cls} title={jobDetail(j, now)}>
+    <li className={cls} title={jobDetail(j, now, locale)}>
       <span className={css.icon}>
         <StatusIcon state={j.State} />
       </span>
       <span className={css.text}>
         <a className={css.name} href={`/jobs/${j.ID}`}>
           {j.DisplayName}
-          <span className="visually-hidden">，{jobState(j.State)}</span>
+          <span className="visually-hidden">{t('graph.stateSuffix', { state: jobState(j.State, locale) })}</span>
         </a>
         <JobMeta job={j} now={now} />
       </span>
@@ -86,8 +100,9 @@ function JobNode({ job: j, into, out, now }: { job: JobView; into: boolean; out:
 export function JobGraph({ stages }: { stages: readonly Stage[] }) {
   const running = stages.some((s) => s.Jobs.some((j) => j.Started !== 0 && j.Finished === 0))
   const now = useNow(secondMs, running)
+  const t = useT()
   return (
-    <div className={css.scroll} tabIndex={0} role="group" aria-label="job 依赖图（可横向滚动）">
+    <div className={css.scroll} tabIndex={0} role="group" aria-label={t('graph.label')}>
       <div className={css.graph}>
         {stages.map((s, i) => {
           const prev = stages[i - 1]
@@ -99,7 +114,7 @@ export function JobGraph({ stages }: { stages: readonly Stage[] }) {
                   <span className={css.line} style={{ height: span }} />
                 </div>
               )}
-              <ol className={css.stage} aria-label={`阶段 ${s.N}`}>
+              <ol className={css.stage} aria-label={t('graph.stage', { n: s.N })}>
                 {s.Jobs.map((j) => (
                   <JobNode key={j.ID} job={j} into={i > 0} out={i < stages.length - 1} now={now} />
                 ))}

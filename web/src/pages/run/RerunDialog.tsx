@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { useRefreshLock } from '../../app/live'
 import { Callout } from '../../components/Callout'
 import { Form, SubmitButton } from '../../components/Form'
+import { useLocale, useT } from '../../i18n/locale'
+import { defaultLocale, msg, translate, type Locale, type MsgKey, type Params } from '../../i18n/messages'
 import { rerunLabel, runState } from '../../lib/format'
 import css from './RerunDialog.module.css'
 
@@ -24,23 +26,26 @@ export const rerunFormSchema = z.object({
 })
 export type RerunForm = z.infer<typeof rerunFormSchema>
 
-/** modeHints 返回三种重跑方式各自的说明（与服务端的重跑规划规则一致）。 */
-export function modeHints(f: RerunForm): { failed: string; all: string; noCache: string } {
+/** modeHints 返回三种重跑方式各自的说明（与服务端的重跑规划规则一致）；locale 不传时为 zh-CN。 */
+export function modeHints(f: RerunForm, locale: Locale = defaultLocale): { failed: string; all: string; noCache: string } {
+  const t = (id: MsgKey, params?: Params) => translate(locale, msg(id, params))
   let failed: string
   if (f.Retry > 0) {
-    failed = `${f.Retry} 个未成功（失败、取消、跳过）的 job 重新规划，输入没变的仍会命中缓存；`
-    failed += f.Kept > 0 ? `${f.Kept} 个${f.Purged ? '已成功的发布' : '成功的'} job 沿用上一次的结果，不重新执行` : '没有沿用结果的 job'
-    if (f.Publish > 0 && !f.Purged) failed += '，已成功的发布不会再次执行'
-    failed += '。'
+    failed = t('rerun.hintRetry', { count: f.Retry })
+    failed += f.Kept > 0 ? t(f.Purged ? 'rerun.hintKeptPublish' : 'rerun.hintKept', { count: f.Kept }) : t('rerun.hintNoKept')
+    if (f.Publish > 0 && !f.Purged) failed += t('rerun.hintPublishSkip')
+    failed += t('rerun.hintEnd')
   } else {
-    failed = '最新一次运行中所有 job 都成功了，没有需要重跑的 job。'
+    failed = t('rerun.hintAllSucceeded')
   }
-  let all = `全部 ${f.Total} 个 job 重新规划；输入没变的普通 job 直接命中缓存，不真正执行。`
+  let all = t('rerun.hintAll', { count: f.Total })
   if (f.Publish > 0 || f.Effects > 0) {
-    const who = [f.Publish > 0 ? `${f.Publish} 个发布 job` : '', f.Effects > 0 ? `${f.Effects} 个有副作用（effects）的 job` : ''].filter(Boolean).join(' 和 ')
-    all += `${who} 不使用缓存，会再次执行${f.Publish > 0 ? '（发布按 tag 幂等：已存在且内容一致的 asset 会跳过）' : ''}。`
+    const who = [f.Publish > 0 ? t('rerun.whoPublish', { count: f.Publish }) : '', f.Effects > 0 ? t('rerun.whoEffects', { count: f.Effects }) : '']
+      .filter(Boolean)
+      .join(t('rerun.and'))
+    all += t(f.Publish > 0 ? 'rerun.hintWhoPublish' : 'rerun.hintWho', { who })
   }
-  const noCache = `全部 ${f.Total} 个 job 强制重新执行，不读取缓存，用于怀疑缓存结果有问题时；耗时最长。${f.Publish > 0 ? '发布 job 会再次执行。' : ''}`
+  const noCache = t('rerun.hintNoCache', { count: f.Total }) + (f.Publish > 0 ? t('rerun.hintNoCachePublish') : '')
   return { failed, all, noCache }
 }
 
@@ -51,56 +56,63 @@ export function modeHints(f: RerunForm): { failed: string; all: string; noCache:
 export function RerunButton({ runID, form, current, state }: { runID: number; form: RerunForm; current: number; state: string }) {
   const [open, setOpen] = useState(false)
   useRefreshLock(open)
-  const hints = modeHints(form)
+  const t = useT()
+  const { locale } = useLocale()
+  const hints = modeHints(form, locale)
   return (
     <>
       <Button leadingVisual={SyncIcon} onClick={() => setOpen(true)}>
-        重跑
+        {t('rerun.button')}
       </Button>
       {open && (
-        <Dialog title="重跑这个 run" onClose={() => setOpen(false)} width="large">
-          <Form action={`/runs/${runID}/rerun`} className={css.form} aria-label="重跑">
-            <p className={css.intro}>
-              在同一个 commit 上新建一次运行，基于最新一次（{rerunLabel(current)}，{runState(state)}）的结果。workflow 文件取自这个 commit，变量、secret 和
-              environment 用当前的配置。已有的运行记录保留，可以在页面右上角切换查看。
-            </p>
+        <Dialog title={t('rerun.title')} onClose={() => setOpen(false)} width="large">
+          <Form action={`/runs/${runID}/rerun`} className={css.form} aria-label={t('rerun.button')}>
+            <p className={css.intro}>{t('rerun.intro', { rerun: rerunLabel(current, locale), state: runState(state, locale) })}</p>
             {form.Purged && (
-              <Callout title="产物已清理" hideTitle>
-                最新一次运行的产物已经按保留策略清理，成功的 job 无法沿用结果，也会重新规划（输入没变时仍可能命中缓存）；只有已成功的发布 job 沿用，不会再次发布。
+              <Callout title={t('rerun.purgedTitle')} hideTitle>
+                {t('rerun.purged')}
               </Callout>
             )}
             <RadioGroup name="mode">
-              <RadioGroup.Label>重跑哪些 job</RadioGroup.Label>
+              <RadioGroup.Label>{t('rerun.which')}</RadioGroup.Label>
               <FormControl disabled={form.Retry === 0}>
                 <Radio value="failed" defaultChecked={form.Default === 'failed'} />
-                <FormControl.Label>只重跑未成功的 job</FormControl.Label>
+                <FormControl.Label>{t('rerun.modeFailed')}</FormControl.Label>
                 <FormControl.Caption>{hints.failed}</FormControl.Caption>
               </FormControl>
               <FormControl>
                 <Radio value="all" defaultChecked={form.Default === 'all'} />
-                <FormControl.Label>全部重跑（可命中缓存）</FormControl.Label>
+                <FormControl.Label>{t('rerun.modeAll')}</FormControl.Label>
                 <FormControl.Caption>{hints.all}</FormControl.Caption>
               </FormControl>
               <FormControl>
                 <Radio value="all_no_cache" />
-                <FormControl.Label>全部重跑（不用缓存）</FormControl.Label>
+                <FormControl.Label>{t('rerun.modeNoCache')}</FormControl.Label>
                 <FormControl.Caption>{hints.noCache}</FormControl.Caption>
               </FormControl>
             </RadioGroup>
-            <FormControl>
-              <Checkbox name="keep" />
-              <FormControl.Label>失败时保留工作区</FormControl.Label>
-              <FormControl.Caption>job 失败后在 Runner 上保留现场，便于登录排查。</FormControl.Caption>
-            </FormControl>
+            <KeepWorkspace />
             <div className={css.actions}>
-              <Button onClick={() => setOpen(false)}>取消</Button>
+              <Button onClick={() => setOpen(false)}>{t('form.cancel')}</Button>
               <SubmitButton variant="primary" leadingVisual={SyncIcon}>
-                重跑
+                {t('rerun.button')}
               </SubmitButton>
             </div>
           </Form>
         </Dialog>
       )}
     </>
+  )
+}
+
+/** KeepWorkspace 是重跑对话框中的"失败时保留工作区"（run 和 job 的重跑共用）。 */
+export function KeepWorkspace() {
+  const t = useT()
+  return (
+    <FormControl>
+      <Checkbox name="keep" />
+      <FormControl.Label>{t('rerun.keep')}</FormControl.Label>
+      <FormControl.Caption>{t('rerun.keepHint')}</FormControl.Caption>
+    </FormControl>
   )
 }

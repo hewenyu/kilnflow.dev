@@ -1,6 +1,6 @@
 import { BaseStyles } from '@primer/react'
 import { ThemeProvider } from '@primer/react/next'
-import { render, type RenderResult } from '@testing-library/react'
+import { fireEvent, render, screen, type RenderResult } from '@testing-library/react'
 import type { z } from 'zod'
 import { App } from '../app/App'
 import { storageKey } from '../i18n/locale'
@@ -42,4 +42,13 @@ export function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } 
     resolve = r
   })
   return { promise, resolve }
+}
+
+/**
+ * switchLocale 在已登录页面的身份菜单中切换语言（与用户的操作相同，不重新渲染页面）。
+ * 对话框打开时页面的其他部分对读屏软件隐藏，所以按 hidden 查找并直接触发点击（不经过对话框外的点击关闭逻辑）。
+ */
+export async function switchLocale(name: 'English' | '简体中文'): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: /的菜单$|^Menu for /, hidden: true }))
+  fireEvent.click(await screen.findByRole('menuitemradio', { name, hidden: true }))
 }

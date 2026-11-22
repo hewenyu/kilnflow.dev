@@ -46,10 +46,12 @@ func testTarget() *planner.DispatchTarget {
 func testRunNew() *runNewPage {
 	f := newForm()
 	maps.Copy(f.Values, map[string]string{"repo": "tester/demo", "ref": "main", "workflow": "ci.yml", "inputs": "version=1.2.3\nbroken"})
-	f.fail("inputs", "第 2 行缺少 =，应写成 key=value：broken")
+	_, problems := parseInputs(f.Values["inputs"])
+	problems = append(problems, message(msgInputNotChoice, strArg(argName, "mode"), strArg(argOptions, "fast, full")))
+	f.failText("inputs", message(msgRunNewInputs, intArg(argCount, int64(len(problems)))))
 	return &runNewPage{
 		Repo: "tester/demo", FromFilter: true, DefaultBranch: "main", Target: testTarget(), Dispatchable: 1,
-		Form: f, Attempted: true, RequestID: newRequestID(), ListURL: "/runs?repo=tester%2Fdemo",
+		Form: f, Attempted: true, RequestID: newRequestID(), ListURL: "/runs?repo=tester%2Fdemo", InputProblems: problems,
 	}
 }
 
@@ -85,16 +87,29 @@ func mustHave(t *testing.T, what, body string, wants ...string) {
 type runNewData struct {
 	runNewPage
 	Form struct {
-		Values, Errors map[string]string
-		Failed         bool
+		Values map[string]string
+		Errors map[string]uiText
+		Failed bool
 	}
+}
+
+// runNewTextZH 返回启动构建页上的错误（中文）：各字段的错误和 inputs 的各个问题，按字段名排序、每行一条。
+func runNewTextZH(t *testing.T, body string) string {
+	t.Helper()
+	p := pageData[runNewData](t, body)
+	var out []string
+	for _, k := range slices.Sorted(maps.Keys(p.Form.Errors)) {
+		out = append(out, textZH(t, p.Form.Errors[k]))
+	}
+	out = append(out, textsZH(t, p.InputProblems)...)
+	return strings.Join(out, "\n")
 }
 
 func TestRunNewRender(t *testing.T) {
 	// 校验失败：页面数据保留输入、带着字段的错误（Form.Failed）、各 workflow 能否手动触发和声明的 inputs
 	p := pageData[runNewData](t, renderData(t, "run_new", testRunNew()))
 	want := map[string]string{"repo": "tester/demo", "ref": "main", "workflow": "ci.yml", "inputs": "version=1.2.3\nbroken"}
-	expect(t, "校验失败的表单", p.Form, maps.Equal(p.Form.Values, want), p.Form.Failed, strings.Contains(p.Form.Errors["inputs"], "第 2 行缺少 ="))
+	expect(t, "校验失败的表单", p.Form, maps.Equal(p.Form.Values, want), p.Form.Failed, textZH(t, p.Form.Errors["inputs"]) == "inputs 有 2 处问题：", strings.Contains(strings.Join(textsZH(t, p.InputProblems), "\n"), "第 2 行缺少 ="))
 	expect(t, "校验失败的启动构建页", p.runNewPage, p.Attempted, p.FromFilter, p.Dispatchable == 1, p.RequestID != "", p.ListURL == "/runs?repo=tester%2Fdemo", p.Picker == nil)
 	if wf := p.Target.Workflows; expect(t, "workflow 列表", p.Target, len(wf) == 2 && len(wf[0].Inputs) == 3) {
 		expect(t, "workflow 列表", wf, wf[0].Dispatchable, wf[0].ConfigError == "bad", !wf[1].Dispatchable, wf[0].Inputs[0].Required,
@@ -103,9 +118,9 @@ func TestRunNewRender(t *testing.T) {
 
 	// 没有选定仓库：只有仓库选择器（Picker），没有 Target
 	f := newForm()
-	f.fail("repo", "请先选择要构建的仓库")
+	f.failText("repo", message(msgRunNewPickRepo))
 	p = pageData[runNewData](t, renderData(t, "run_new", &runNewPage{Picker: testRepoSearch(), Form: f, Attempted: true, ListURL: "/runs"}))
-	if expect(t, "仓库选择器", p, p.Picker != nil, p.Target == nil, p.Form.Errors["repo"] == "请先选择要构建的仓库") {
+	if expect(t, "仓库选择器", p, p.Picker != nil, p.Target == nil, textZH(t, p.Form.Errors["repo"]) == "请先选择要构建的仓库") {
 		s := p.Picker
 		expect(t, "仓库选择器", s, s.Page == 2, s.Pages == 3, len(s.Repos) == 2 && s.Repos[0].FullName == "tester/demo")
 	}
@@ -113,9 +128,9 @@ func TestRunNewRender(t *testing.T) {
 	// ref 找不到：没有 Target（退回手填文件名），保留 workflow
 	f = newForm()
 	maps.Copy(f.Values, map[string]string{"repo": "tester/demo", "ref": "nope", "workflow": "ci.yml"})
-	f.fail("ref", "找不到 ref nope")
+	f.failText("ref", message(msgRunNewRefNotFound, strArg(argGitRef, "nope")))
 	p = pageData[runNewData](t, renderData(t, "run_new", &runNewPage{Repo: "tester/demo", DefaultBranch: "main", Form: f, RequestID: "x", ListURL: "/runs"}))
-	if p.Target != nil || p.Form.Errors["ref"] != "找不到 ref nope" || p.Form.Values["workflow"] != "ci.yml" || p.DefaultBranch != "main" {
+	if p.Target != nil || textZH(t, p.Form.Errors["ref"]) != "找不到 ref nope：确认分支或 tag 存在，或者换一个 ref。" || p.Form.Values["workflow"] != "ci.yml" || p.DefaultBranch != "main" {
 		t.Errorf("ref 错误：%+v", p)
 	}
 
@@ -149,19 +164,19 @@ type runsData struct {
 
 func TestRunsRender(t *testing.T) {
 	// 区分"还没有构建"和"筛选后没有结果"：Filter.Active
-	p := pageData[runsData](t, renderData(t, "runs", &runsPage{States: runStateOptions, LatestURL: "/runs", Self: "/runs", NewURL: "/runs/new"}))
+	p := pageData[runsData](t, renderData(t, "runs", &runsPage{States: runStateOptions(), LatestURL: "/runs", Self: "/runs", NewURL: "/runs/new"}))
 	if p.Filter.Active || len(p.Runs) != 0 || p.NewURL != "/runs/new" {
 		t.Errorf("没有构建：%+v", p)
 	}
-	p = pageData[runsData](t, renderData(t, "runs", &runsPage{Filter: runFilter{State: "failed"}, States: runStateOptions, LatestURL: "/runs?state=failed", Self: "/runs?state=failed", NewURL: "/runs/new"}))
-	if !p.Filter.Active || p.Filter.State != "failed" || len(p.Runs) != 0 || !slices.Contains(p.States, option{Value: "failed", Label: "失败"}) {
+	p = pageData[runsData](t, renderData(t, "runs", &runsPage{Filter: runFilter{State: "failed"}, States: runStateOptions(), LatestURL: "/runs?state=failed", Self: "/runs?state=failed", NewURL: "/runs/new"}))
+	if !p.Filter.Active || p.Filter.State != "failed" || len(p.Runs) != 0 || !slices.ContainsFunc(p.States, func(o textOption) bool { return o.Value == "failed" && textZH(t, o.Label) == "失败" }) {
 		t.Errorf("筛选无结果：%+v", p)
 	}
 
 	now := time.Now()
 	run := &cistore.Run{ID: 9, Workflow: "ci.yml", Event: "pull_request", Ref: "refs/heads/feat", SHA: "abcdef0123456789", State: store.RunFailed, PRNumber: new(3), CreatedAt: now}
 	p = pageData[runsData](t, renderData(t, "runs", &runsPage{
-		Filter: runFilter{Repo: "demo"}, States: runStateOptions, Runs: []runView{{Run: run, Repo: "tester/demo", URL: "/runs/9?back=%2Fruns%3Frepo%3Ddemo", GitHub: "https://github.com"}},
+		Filter: runFilter{Repo: "demo"}, States: runStateOptions(), Runs: []runView{{Run: run, Repo: "tester/demo", URL: "/runs/9?back=%2Fruns%3Frepo%3Ddemo", GitHub: "https://github.com"}},
 		LatestURL: "/runs?repo=demo", Self: "/runs?repo=demo", NewURL: "/runs/new", GitHub: "https://github.com",
 	}))
 	if len(p.Runs) != 1 {
@@ -188,8 +203,8 @@ func TestParseInputs(t *testing.T) {
 		"第 6 行的名称 9x 不合法：只能包含字母、数字、_ 和 -，且不能以数字或 - 开头",
 		"第 7 行的 a 与第 1 行重复",
 	}
-	if !slices.Equal(problems, want) {
-		t.Errorf("问题 = %q\n应为 %q", problems, want)
+	if got := textsZH(t, problems); !slices.Equal(got, want) {
+		t.Errorf("问题 = %q\n应为 %q", got, want)
 	}
 	if got, problems := parseInputs(" \n"); len(got) != 0 || len(problems) != 0 {
 		t.Errorf("空白 inputs：%v %v", got, problems)
@@ -200,8 +215,8 @@ func TestCheckWorkflow(t *testing.T) {
 	tg := testTarget()
 	f := newForm()
 	got := checkWorkflow(tg, "ci", map[string]string{"mode": "slow", "dry_run": "yes", "extra": "1"}, f)
-	want := []string{"缺少必填的 version", "mode 只能是 fast、full 之一", "dry_run 只能是 true 或 false", "workflow 没有声明 extra"}
-	if !slices.Equal(got, want) || f.Failed() || f.Val("workflow") != "ci.yml" {
+	want := []string{"缺少必填的 version", "mode 只能是 fast, full 之一", "dry_run 只能是 true 或 false", "workflow 没有声明 extra"}
+	if got := textsZH(t, got); !slices.Equal(got, want) || f.Failed() || f.Val("workflow") != "ci.yml" {
 		t.Errorf("问题 = %q（应为 %q），表单 %v", got, want, f.Errors)
 	}
 	if got := checkWorkflow(tg, "ci.yml", map[string]string{"version": "1", "dry_run": "TRUE"}, newForm()); len(got) != 0 {
@@ -209,12 +224,12 @@ func TestCheckWorkflow(t *testing.T) {
 	}
 	f = newForm()
 	checkWorkflow(tg, "push.yml", nil, f)
-	if !strings.Contains(f.Err("workflow"), "没有声明 on.workflow_dispatch") {
+	if !strings.Contains(textZH(t, f.Errors["workflow"]), "没有声明 on.workflow_dispatch") {
 		t.Errorf("不能手动触发的 workflow：%v", f.Errors)
 	}
 	f = newForm()
 	checkWorkflow(tg, "nope.yml", nil, f)
-	if !strings.Contains(f.Err("workflow"), "refs/heads/main 中没有 .kiln/workflows/nope.yml") {
+	if !strings.Contains(textZH(t, f.Errors["workflow"]), "refs/heads/main 中没有 .kiln/workflows/nope.yml") {
 		t.Errorf("不存在的 workflow：%v", f.Errors)
 	}
 }
@@ -402,7 +417,7 @@ func TestPageRunNew(t *testing.T) {
 	// 仓库不存在：404，退回仓库选择器并说明
 	w = e.get(e.bob, "/runs/new?repo=tester%2Fnope")
 	wantStatus(t, "仓库不存在", w, http.StatusNotFound)
-	mustHave(t, "仓库不存在", w.Body.String(), "Kiln 中没有启用的仓库 tester/nope")
+	mustHave(t, "仓库不存在", runNewTextZH(t, w.Body.String()), "Kiln 中没有启用的仓库 tester/nope")
 
 	// 选定仓库：列出 workflow，只有声明了 workflow_dispatch 的可以选择
 	w = e.get(e.bob, "/runs/new?repo=tester%2Fdemo&from=filter")
@@ -424,7 +439,7 @@ func TestPageRunNew(t *testing.T) {
 	// ref 找不到：在 ref 字段旁说明
 	w = e.get(e.bob, "/runs/new?repo=tester%2Fdemo&ref=nope")
 	wantStatus(t, "ref 找不到", w, http.StatusOK)
-	if p := pageData[runNewData](t, w.Body.String()); !strings.Contains(p.Form.Errors["ref"], "找不到 ref nope") {
+	if p := pageData[runNewData](t, w.Body.String()); !strings.Contains(textZH(t, p.Form.Errors["ref"]), "找不到 ref nope") {
 		t.Errorf("ref 找不到：%+v", p.Form)
 	}
 
@@ -437,7 +452,7 @@ func TestPageRunNew(t *testing.T) {
 	}
 	w = e.post(e.bob, "/runs/new", url.Values{"ref": {"main"}})
 	wantStatus(t, "重新读取时没有仓库", w, http.StatusUnprocessableEntity)
-	mustHave(t, "重新读取时没有仓库", w.Body.String(), "请先选择要构建的仓库")
+	mustHave(t, "重新读取时没有仓库", runNewTextZH(t, w.Body.String()), "请先选择要构建的仓库")
 	if n := e.count(`SELECT count(*) FROM runs`); n != 0 {
 		t.Errorf("读取 workflow 不应创建 run")
 	}
@@ -469,13 +484,13 @@ func TestPostDispatch(t *testing.T) {
 		{"workflow 不存在", form("workflow", "nope.yml"), []string{".kiln/workflows/nope.yml"}, "workflow", "nope.yml"},
 		{"workflow 不能手动触发", form("workflow", "push.yml"), []string{"push.yml 没有声明 on.workflow_dispatch"}, "workflow", "push.yml"},
 		{"inputs 缺少 =", form("inputs", "channel=beta\nbroken"), []string{"第 2 行缺少 ="}, "inputs", "channel=beta\nbroken"},
-		{"inputs 取值不对", form("inputs", "channel=nightly"), []string{"channel 只能是 stable、beta 之一"}, "inputs", "channel=nightly"},
+		{"inputs 取值不对", form("inputs", "channel=nightly"), []string{"channel 只能是 stable, beta 之一"}, "inputs", "channel=nightly"},
 		{"ref 找不到", form("ref", "nope"), []string{"找不到 ref nope"}, "ref", "nope"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w := e.post(e.bob, "/dispatch", c.form)
 			wantStatus(t, c.name, w, http.StatusUnprocessableEntity)
-			mustHave(t, c.name, w.Body.String(), c.wants...)
+			mustHave(t, c.name, runNewTextZH(t, w.Body.String()), c.wants...)
 			// Attempted：错误摘要说明没有启动构建
 			p := pageData[runNewData](t, w.Body.String())
 			if !p.Form.Failed || !p.Attempted {
@@ -496,7 +511,7 @@ func TestPostDispatch(t *testing.T) {
 	if err := e.db.QueryRow(e.ctx, `SELECT id FROM runs`).Scan(&id); err != nil {
 		t.Fatalf("应创建 run：%v", err)
 	}
-	if flash := wantRedirect(t, "启动构建", w, runURL(id)); flash != "已启动构建" {
+	if flash := flashZH(t, wantRedirect(t, "启动构建", w, runURL(id))); flash != "已启动构建" {
 		t.Errorf("提示 = %q", flash)
 	}
 	run, err := cistore.GetRun(e.ctx, e.db, id, false)

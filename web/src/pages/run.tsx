@@ -23,7 +23,8 @@ import { RunHeader } from '../components/RunHeader'
 import { RunSidebar } from '../components/RunSidebar'
 import { StatusIcon } from '../components/StatusIcon'
 import { Ago, Duration } from '../components/Time'
-import { list } from '../lib/envelope'
+import { Msg, Trans, useLocale, useT } from '../i18n/locale'
+import { list, textSchema } from '../lib/envelope'
 import { clock, eventLabel, jobStatesSummary, refKind, refName, rerunLabel, runState, short } from '../lib/format'
 import { jobViewSchema, mergeQueueEntrySchema, runSchema, type Run } from '../lib/schemas'
 import { JobGraph } from './run/JobGraph'
@@ -45,8 +46,8 @@ const activitySchema = z.object({
   Action: z.string(),
   Detail: z.record(z.string(), z.unknown()).nullable(),
   At: z.string(),
-  /** 这条活动在 run 详情页上的说明（不含操作者）。 */
-  RunText: z.string(),
+  /** 这条活动在 run 详情页上的说明（不含操作者）：服务端给的消息。 */
+  RunText: textSchema,
 })
 type Activity = z.infer<typeof activitySchema>
 
@@ -102,28 +103,36 @@ export function runPageURL(id: number, rerun: number | null, back: string): stri
   return `/runs/${id}${s ? '?' + s : ''}`
 }
 
-const stateText = (s: string) => (s ? runState(s) : '状态未知')
+/** useStateText 返回 run 状态的说明；没有记录时为"状态未知"。 */
+function useStateText(): (s: string) => string {
+  const t = useT()
+  const { locale } = useLocale()
+  return (s: string) => (s ? runState(s, locale) : t('run.stateUnknown'))
+}
 
 /** RerunPicker 切换查看这个 run 的每一次运行（GitHub 的 "Latest #2" 菜单）。 */
 function RerunPicker({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const stateText = useStateText()
   const r = data.Run
   const viewed = data.Viewed
   return (
     <ActionMenu>
-      <ActionMenu.Button aria-label={`正在查看${viewed ? rerunLabel(viewed.N) : '的运行无效'}，切换查看其他运行`}>
-        {viewed ? rerunLabel(viewed.N) : `rerun=${data.Invalid}`}
-        {viewed?.N === r.CurrentRerun && <span className={css.latest}>最新</span>}
+      <ActionMenu.Button aria-label={viewed ? t('run.pickerViewing', { rerun: rerunLabel(viewed.N, locale) }) : t('run.pickerInvalid')}>
+        {viewed ? rerunLabel(viewed.N, locale) : `rerun=${data.Invalid}`}
+        {viewed?.N === r.CurrentRerun && <span className={css.latest}>{t('run.latest')}</span>}
       </ActionMenu.Button>
       <ActionMenu.Overlay width="medium">
-        <ActionList aria-label="这个 run 的每一次运行">
+        <ActionList aria-label={t('run.reruns')}>
           {data.Reruns.toReversed().map((v) => (
             <ActionList.LinkItem key={v.N} href={runPageURL(r.ID, v.N === r.CurrentRerun ? null : v.N, data.Back)} active={viewed?.N === v.N} aria-current={viewed?.N === v.N ? 'page' : undefined}>
               <ActionList.LeadingVisual>
                 <StatusIcon state={v.State} label={stateText(v.State)} />
               </ActionList.LeadingVisual>
-              {rerunLabel(v.N)}
+              {rerunLabel(v.N, locale)}
               <ActionList.TrailingVisual>
-                {v.N === r.CurrentRerun ? '最新' : viewed?.N === v.N ? <CheckIcon /> : null}
+                {v.N === r.CurrentRerun ? t('run.latest') : viewed?.N === v.N ? <CheckIcon /> : null}
               </ActionList.TrailingVisual>
             </ActionList.LinkItem>
           ))}
@@ -133,28 +142,32 @@ function RerunPicker({ data }: { data: Data }) {
   )
 }
 
-/** MergeQueueNotice 是 PR 在合并队列中的状态；没有记录时不显示。 */
+/** MergeQueueNotice 是 PR 在合并队列中的状态；没有记录时不显示。队列给出的状态和原因（Status、Reason）原样显示。 */
 function MergeQueueNotice({ mq }: { mq: MergeQueue }) {
+  const t = useT()
   const e = mq.Entry
   if (!e) return null
-  const link = <Link href={mq.URL}>查看合并队列</Link>
+  const link = <Link href={mq.URL}>{t('run.mqLink')}</Link>
   if (e.State === 'queued') {
+    const detail = [e.BaseRef ? t('run.mqTarget', { branch: e.BaseRef }) : '', t('run.mqPos', { pos: mq.Pos }), e.Status].filter(Boolean).join(' · ')
     return (
-      <Callout title={`合并队列：${e.BaseRef ? `目标 ${e.BaseRef} · ` : ''}第 ${mq.Pos} 个${e.Status ? ` · ${e.Status}` : ''}`}>
-        PR #{mq.PR} 在合并队列中，验证通过且不落后于目标分支时自动合并。{link}
+      <Callout title={t('run.mqQueued', { detail })}>
+        {t('run.mqQueuedText', { pr: mq.PR })}
+        {link}
       </Callout>
     )
   }
   if (e.State === 'merged') {
     return (
-      <Callout tone="success" title={e.Reason || `已由合并队列合并${e.MergeSHA ? `（${short(e.MergeSHA)}）` : ''}`}>
+      <Callout tone="success" title={e.Reason || (e.MergeSHA ? t('run.mqMergedSHA', { sha: short(e.MergeSHA) }) : t('run.mqMerged'))}>
         {link}
       </Callout>
     )
   }
   return (
-    <Callout tone="warning" title={`已移出合并队列${e.Reason ? `：${e.Reason}` : ''}`}>
-      重新加上 label 或在合并队列页加入即可再试。{link}
+    <Callout tone="warning" title={e.Reason ? t('run.mqRemovedReason', { reason: e.Reason }) : t('run.mqRemoved')}>
+      {t('run.mqRemovedText')}
+      {link}
     </Callout>
   )
 }
@@ -166,36 +179,48 @@ function canEnqueue(mq: MergeQueue | null): mq is MergeQueue {
 
 /** Notices 是标题下方的提示：合并队列状态、无效的 rerun、正在查看历史、配置错误和警告、已清理。 */
 function Notices({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
   const r = data.Run
   const latestURL = runPageURL(r.ID, null, data.Back)
+  const latestLink = { link: (c: string) => <Link href={latestURL}>{c}</Link> }
   const items: ReactNode[] = []
   if (data.MergeQueue?.Entry) {
     items.push(<MergeQueueNotice key="mq" mq={data.MergeQueue} />)
   }
   if (data.Invalid) {
+    const first = rerunLabel(0, locale)
     items.push(
-      <Callout key="invalid" tone="critical" title={`没有这一次运行（rerun=${data.Invalid}）。`}>
-        这个 run 共运行了 {data.Reruns.length} 次：{rerunLabel(0)}
-        {r.CurrentRerun > 0 && `到${rerunLabel(r.CurrentRerun)}`}。<Link href={latestURL}>查看最新一次</Link>
+      <Callout key="invalid" tone="critical" title={t('run.invalidTitle', { value: data.Invalid })}>
+        <Trans
+          id={r.CurrentRerun > 0 ? 'run.invalidRange' : 'run.invalidOne'}
+          params={{ count: data.Reruns.length, first, last: rerunLabel(r.CurrentRerun, locale) }}
+          tags={latestLink}
+        />
       </Callout>,
     )
   } else if (data.History && data.Viewed) {
+    const viewed = rerunLabel(data.Viewed.N, locale)
     items.push(
-      <Callout key="history" tone="warning" title={`正在查看历史：${rerunLabel(data.Viewed.N)}${data.Viewed.State ? `（${runState(data.Viewed.State)}）` : ''}`}>
-        这个 run 最新的是{rerunLabel(r.CurrentRerun)}，{runState(r.State)}。<Link href={latestURL}>查看最新一次</Link>。右上角的取消和重跑都作用于最新一次运行。
+      <Callout
+        key="history"
+        tone="warning"
+        title={data.Viewed.State ? t('run.historyTitleState', { rerun: viewed, state: runState(data.Viewed.State, locale) }) : t('run.historyTitle', { rerun: viewed })}
+      >
+        <Trans id="run.historyText" params={{ rerun: rerunLabel(r.CurrentRerun, locale), state: runState(r.State, locale) }} tags={latestLink} />
       </Callout>,
     )
   } else {
     if (r.ConfigError !== null) {
       items.push(
-        <Callout key="cfg" tone="critical" title="配置错误">
+        <Callout key="cfg" tone="critical" title={t('run.configError')}>
           <pre className={css.pre}>{r.ConfigError}</pre>
         </Callout>,
       )
     }
     if (r.Warnings !== null) {
       items.push(
-        <Callout key="warn" tone="warning" title="警告">
+        <Callout key="warn" tone="warning" title={t('run.warnings')}>
           <pre className={css.pre}>{r.Warnings}</pre>
         </Callout>,
       )
@@ -203,8 +228,8 @@ function Notices({ data }: { data: Data }) {
   }
   if (!data.Invalid && data.Purged !== null) {
     items.push(
-      <Callout key="purged" title="日志和产物已清理。">
-        这次运行结束超过保留期，已在 {clock(data.Purged)} 按保留策略清理了日志和产物，只保留结果（状态、耗时、原因）。
+      <Callout key="purged" title={t('run.purgedTitle')}>
+        {t('run.purgedText', { time: clock(data.Purged, locale) })}
       </Callout>,
     )
   }
@@ -217,6 +242,9 @@ function gh(base: string, path: string): string {
 
 /** Summary 是触发信息的摘要（GitHub 运行页顶部的卡片）：触发方式、状态、耗时、workflow 文件。 */
 function Summary({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const stateText = useStateText()
   const r = data.Run
   const kind = refKind(r.Ref)
   const commitURL = gh(data.GitHub, `${data.Repo}/commit/${r.SHA}`)
@@ -226,8 +254,10 @@ function Summary({ data }: { data: Data }) {
     <Box className={css.summary}>
       <div className={css.cell}>
         <span className={css.label}>
-          通过{eventLabel(r.Event)}
-          {r.PRNumber !== null && ` #${r.PRNumber}`}触发 · <Ago t={r.CreatedAt} />
+          {r.PRNumber !== null
+            ? t('run.triggeredByPR', { event: eventLabel(r.Event, locale), pr: r.PRNumber })
+            : t('run.triggeredBy', { event: eventLabel(r.Event, locale) })}{' '}
+          · <Ago t={r.CreatedAt} />
         </span>
         <span className={css.trigger}>
           {r.SenderLogin ? (
@@ -252,17 +282,17 @@ function Summary({ data }: { data: Data }) {
         </span>
       </div>
       <div className={css.cell}>
-        <span className={css.label}>状态</span>
+        <span className={css.label}>{t('run.state')}</span>
         <span className={css.value}>{data.Viewed ? stateText(state) : '—'}</span>
       </div>
       <div className={css.cell}>
-        <span className={css.label}>总耗时</span>
+        <span className={css.label}>{t('run.totalDuration')}</span>
         <span className={css.value}>
           <Duration start={data.Start} end={data.End} />
         </span>
       </div>
       <div className={css.cell}>
-        <span className={css.label}>仓库 · workflow 文件</span>
+        <span className={css.label}>{t('run.repoWorkflow')}</span>
         <span className={css.plain}>
           {repoURL ? (
             <a href={repoURL} rel="noreferrer">
@@ -294,11 +324,13 @@ function ActivityIcon({ activity: a }: { activity: Activity }) {
 
 /** RunActivity 是这个 run 的活动：谁触发、取消和重跑了它，以及运行结束。 */
 function RunActivity({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
   const r = data.Run
   return (
     <section aria-labelledby="run-activity-h">
       <h2 className={css.sectionTitle} id="run-activity-h">
-        活动
+        {t('run.activity')}
       </h2>
       <Timeline clipSidebar>
         <Timeline.Item condensed>
@@ -311,7 +343,7 @@ function RunActivity({ data }: { data: Data }) {
                 <Avatar login={r.SenderLogin} size={20} /> <strong>{r.SenderLogin}</strong>{' '}
               </>
             )}
-            {r.Event === 'workflow_dispatch' ? '手动启动了这个 run' : `触发了这个 run（${eventLabel(r.Event)}）`}
+            {r.Event === 'workflow_dispatch' ? t('run.activityDispatch') : t('run.triggered', { event: eventLabel(r.Event, locale) })}
             <span className={css.muted}>
               {' · '}
               <Ago t={r.CreatedAt} />
@@ -325,7 +357,7 @@ function RunActivity({ data }: { data: Data }) {
                 <ActivityIcon activity={a} />
               </Timeline.Badge>
               <Timeline.Body className={css.event}>
-                <Avatar login={a.Actor} size={20} /> <strong>{a.Actor}</strong> {a.RunText}
+                <Avatar login={a.Actor} size={20} /> <strong>{a.Actor}</strong> <Msg text={a.RunText} />
                 <span className={css.muted}>
                   {' · '}
                   <Ago t={a.At} />
@@ -340,7 +372,7 @@ function RunActivity({ data }: { data: Data }) {
               <StatusIcon state={r.State} />
             </Timeline.Badge>
             <Timeline.Body className={css.event}>
-              运行结束：{runState(r.State)}
+              {t('run.finished', { state: runState(r.State, locale) })}
               <span className={css.muted}>
                 {' · '}
                 <Ago t={r.FinishedAt} />
@@ -354,6 +386,8 @@ function RunActivity({ data }: { data: Data }) {
 }
 
 function Jobs({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
   const r = data.Run
   const stages = data.Stages.length
   return (
@@ -365,20 +399,20 @@ function Jobs({ data }: { data: Data }) {
             <code className={css.wf}>{r.Workflow}</code>
             <span className={css.on}>
               on: {r.Event}
-              {data.History && data.Viewed && ` · ${rerunLabel(data.Viewed.N)}`}
+              {data.History && data.Viewed && ` · ${rerunLabel(data.Viewed.N, locale)}`}
             </span>
           </>
         }
       >
         <span className={css.hint}>
-          {data.Jobs.length > 0 ? jobStatesSummary(data.States) : '没有 job'}
-          {stages > 1 && `；按依赖分成 ${stages} 个阶段，从左到右执行`}
+          {data.Jobs.length > 0 ? jobStatesSummary(data.States, locale) : t('run.noJobs')}
+          {stages > 1 && t('run.stages', { count: stages })}
         </span>
       </BoxHeader>
       {data.Jobs.length > 0 ? (
         <JobGraph stages={data.Stages} />
       ) : (
-        <p className={css.empty}>这次运行没有 job{r.ConfigError !== null && '（配置错误）'}。</p>
+        <p className={css.empty}>{t(r.ConfigError !== null ? 'run.emptyJobsConfig' : 'run.emptyJobs')}</p>
       )}
     </Box>
   )
@@ -386,17 +420,18 @@ function Jobs({ data }: { data: Data }) {
 
 /** EnqueueButton 把 PR 加入合并队列（管理员）。 */
 function EnqueueButton({ mq }: { mq: MergeQueue }) {
+  const t = useT()
   return (
     <ConfirmForm
       action="/merge-queue/add"
       fields={{ repo: mq.Repo, pr: String(mq.PR) }}
-      button="加入合并队列"
+      button={t('run.enqueue')}
       buttonProps={{ leadingVisual: GitMergeQueueIcon }}
-      title={`把 PR #${mq.PR} 加入合并队列？`}
-      confirmLabel="加入合并队列"
+      title={t('run.enqueueTitle', { pr: mq.PR })}
+      confirmLabel={t('run.enqueue')}
       danger={false}
     >
-      Kiln 会给 PR 加上 label kiln:merge，按入队顺序验证它的 head：CI 和 AI 审计都通过、且不落后于目标分支时自动合并；落后时先更新 PR 分支，等新的 head 验证通过再合并。
+      {t('run.enqueueText')}
     </ConfirmForm>
   )
 }
@@ -404,6 +439,8 @@ function EnqueueButton({ mq }: { mq: MergeQueue }) {
 function RunPage({ data, env }: PageProps<Data>) {
   useLive(data.Active || data.MergeQueue?.Entry?.State === 'queued')
   const admin = env.Session?.Admin ?? false
+  const t = useT()
+  const { locale } = useLocale()
   const r = data.Run
   const back = data.Back || '/runs'
   const viewedState = data.Viewed?.State ?? ''
@@ -421,13 +458,13 @@ function RunPage({ data, env }: PageProps<Data>) {
             {data.Active ? (
               <ConfirmForm
                 action={`/runs/${r.ID}/cancel`}
-                button="取消运行"
+                button={t('run.cancel')}
                 buttonProps={{ leadingVisual: StopIcon }}
-                title="取消这个 run？"
-                confirmLabel="取消这个 run"
-                cancelLabel="返回"
+                title={t('run.cancelTitle')}
+                confirmLabel={t('run.cancelConfirm')}
+                cancelLabel={t('run.cancelBack')}
               >
-                取消这个 run 的{rerunLabel(r.CurrentRerun)}：正在执行的 job 会被终止，还没有开始的 job 不再执行。已经完成的 job 不受影响，已经发布的 Release 或镜像不会撤回。
+                {t('run.cancelText', { rerun: rerunLabel(r.CurrentRerun, locale) })}
               </ConfirmForm>
             ) : (
               data.Form && <RerunButton runID={r.ID} form={data.Form} current={r.CurrentRerun} state={r.State} />

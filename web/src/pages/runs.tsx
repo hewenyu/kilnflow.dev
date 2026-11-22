@@ -8,7 +8,9 @@ import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { Form } from '../components/Form'
 import { RunRow } from '../components/RunRow'
-import { list } from '../lib/envelope'
+import { useLocale, useT, useText } from '../i18n/locale'
+import { defaultLocale, msg, translate, type Locale, type MsgKey, type Params } from '../i18n/messages'
+import { list, textSchema } from '../lib/envelope'
 import { runState } from '../lib/format'
 import { runViewSchema } from '../lib/schemas'
 import css from './runs.module.css'
@@ -31,7 +33,8 @@ const schema = z.object({
   /** 与筛选中的仓库全名完全相同的仓库；为空表示按子串匹配或没有按仓库筛选。 */
   RepoExact: z.string(),
   Runs: list(runViewSchema),
-  States: list(z.object({ Value: z.string(), Label: z.string() })),
+  /** 状态筛选的选项：Label 是服务端给的消息。 */
+  States: list(z.object({ Value: z.string(), Label: textSchema })),
   Workflows: list(z.string()),
   /** 不是最新一页；NewestID、OldestID 是本页第一个和最后一个 run。 */
   Paged: z.boolean(),
@@ -53,43 +56,46 @@ const schema = z.object({
 })
 type Data = z.infer<typeof schema>
 
-/** filterSummary 返回筛选条件的说明，例如"已筛选：仓库 tester/demo，状态 失败。" */
-export function filterSummary(f: Filter, repoExact: string): string {
+/** filterSummary 返回筛选条件的说明，例如"已筛选：仓库 tester/demo，状态 失败。"（locale 不传时为 zh-CN）。 */
+export function filterSummary(f: Filter, repoExact: string, locale: Locale = defaultLocale): string {
   if (!f.Active) return ''
+  const t = (id: MsgKey, params?: Params) => translate(locale, msg(id, params))
   const parts: string[] = []
-  if (repoExact) parts.push(`仓库 ${repoExact}`)
-  else if (f.Repo) parts.push(`仓库名包含"${f.Repo}"`)
-  if (f.State) parts.push(`状态 ${runState(f.State)}`)
-  if (f.Workflow) parts.push(`workflow ${f.Workflow}`)
-  if (f.Ref) parts.push(`ref ${f.Ref}`)
-  if (f.Actor) parts.push(`发起人 ${f.Actor}`)
-  return `已筛选${parts.length > 0 ? '：' + parts.join('，') : ''}。`
+  if (repoExact) parts.push(t('runs.fRepo', { repo: repoExact }))
+  else if (f.Repo) parts.push(t('runs.fRepoLike', { repo: f.Repo }))
+  if (f.State) parts.push(t('runs.fState', { state: runState(f.State, locale) }))
+  if (f.Workflow) parts.push(t('runs.fWorkflow', { workflow: f.Workflow }))
+  if (f.Ref) parts.push(t('runs.fRef', { ref: f.Ref }))
+  if (f.Actor) parts.push(t('runs.fActor', { actor: f.Actor }))
+  return parts.length > 0 ? t('runs.filteredBy', { parts: parts.join(t('list.separator')) }) : t('runs.filtered')
 }
 
 function FilterForm({ data }: { data: Data }) {
+  const t = useT()
+  const text = useText()
   const f = data.Filter
-  const repoHint = data.RepoExact ? `只看 ${data.RepoExact}` : f.Repo ? `仓库名包含"${f.Repo}"` : '完整名称或其中一部分'
+  const repoHint = data.RepoExact ? t('runs.repoOnly', { repo: data.RepoExact }) : f.Repo ? t('runs.fRepoLike', { repo: f.Repo }) : t('runs.repoHint')
   return (
-    <Form action="/runs" method="get" className={css.filter} aria-label="筛选构建">
+    <Form action="/runs" method="get" className={css.filter} aria-label={t('runs.filterForm')}>
       <FormControl>
-        <FormControl.Label>仓库</FormControl.Label>
-        <TextInput type="search" name="repo" defaultValue={f.Repo} placeholder="owner/name 或其中一部分" spellCheck={false} autoCapitalize="off" size="small" block />
+        <FormControl.Label>{t('runs.repo')}</FormControl.Label>
+        <TextInput type="search" name="repo" defaultValue={f.Repo} placeholder={t('runs.repoPlaceholder')} spellCheck={false} autoCapitalize="off" size="small" block />
         <FormControl.Caption className="visually-hidden">{repoHint}</FormControl.Caption>
       </FormControl>
       <FormControl>
-        <FormControl.Label>状态</FormControl.Label>
+        <FormControl.Label>{t('runs.state')}</FormControl.Label>
         <Select name="state" defaultValue={f.State} size="small" block>
-          <Select.Option value="">全部状态</Select.Option>
+          <Select.Option value="">{t('runs.allStates')}</Select.Option>
           {data.States.map((s) => (
             <Select.Option key={s.Value} value={s.Value}>
-              {s.Label}
+              {text(s.Label)}
             </Select.Option>
           ))}
         </Select>
       </FormControl>
       <FormControl>
-        <FormControl.Label>workflow</FormControl.Label>
-        <TextInput type="search" name="workflow" defaultValue={f.Workflow} list="runs-workflows" placeholder="例如 ci.yml" spellCheck={false} autoCapitalize="off" size="small" block />
+        <FormControl.Label>{t('runs.workflow')}</FormControl.Label>
+        <TextInput type="search" name="workflow" defaultValue={f.Workflow} list="runs-workflows" placeholder={t('runs.workflowPlaceholder')} spellCheck={false} autoCapitalize="off" size="small" block />
         <datalist id="runs-workflows">
           {data.Workflows.map((w) => (
             <option key={w} value={w} />
@@ -97,20 +103,20 @@ function FilterForm({ data }: { data: Data }) {
         </datalist>
       </FormControl>
       <FormControl>
-        <FormControl.Label>ref</FormControl.Label>
-        <TextInput type="search" name="ref" defaultValue={f.Ref} placeholder="main 或 v1.2.0" spellCheck={false} autoCapitalize="off" size="small" block />
+        <FormControl.Label>{t('runs.ref')}</FormControl.Label>
+        <TextInput type="search" name="ref" defaultValue={f.Ref} placeholder={t('runs.refPlaceholder')} spellCheck={false} autoCapitalize="off" size="small" block />
       </FormControl>
       <FormControl>
-        <FormControl.Label>发起人</FormControl.Label>
-        <TextInput type="search" name="actor" defaultValue={f.Actor} placeholder="GitHub 登录名" spellCheck={false} autoCapitalize="off" size="small" block />
+        <FormControl.Label>{t('runs.actor')}</FormControl.Label>
+        <TextInput type="search" name="actor" defaultValue={f.Actor} placeholder={t('runs.actorPlaceholder')} spellCheck={false} autoCapitalize="off" size="small" block />
       </FormControl>
       <div className={css.filterActions}>
         <Button type="submit" size="small" leadingVisual={SearchIcon}>
-          筛选
+          {t('runs.filter')}
         </Button>
         {f.Active && (
           <LinkButton href="/runs" size="small" variant="invisible">
-            清空筛选
+            {t('runs.clearFilter')}
           </LinkButton>
         )}
       </div>
@@ -119,45 +125,51 @@ function FilterForm({ data }: { data: Data }) {
 }
 
 function Empty({ data }: { data: Data }) {
+  const t = useT()
   if (data.Paged) {
-    return (
-      <EmptyState icon={InboxIcon} title="这个方向上没有更多构建了" action={{ label: '回到最新', href: data.LatestURL }} />
-    )
+    return <EmptyState icon={InboxIcon} title={t('runs.emptyPaged')} action={{ label: t('runs.backToLatest'), href: data.LatestURL }} />
   }
   if (data.Filter.Active) {
     return (
       <EmptyState
         icon={SearchIcon}
-        title="没有符合筛选条件的构建"
-        action={data.RepoExact ? { label: `为 ${data.RepoExact} 启动构建`, href: data.NewURL } : undefined}
-        secondary={{ label: '清空筛选', href: '/runs' }}
+        title={t('runs.emptyFiltered')}
+        action={data.RepoExact ? { label: t('runs.startFor', { repo: data.RepoExact }), href: data.NewURL } : undefined}
+        secondary={{ label: t('runs.clearFilter'), href: '/runs' }}
       >
-        筛选会查找全部历史，不只是最近的构建。
+        {t('runs.emptyFilteredText')}
       </EmptyState>
     )
   }
   return (
-    <EmptyState icon={PlayIcon} title="还没有构建">
-      推送代码、开 PR 或推送 tag 后会自动开始，也可以用右上角的“启动构建”手动运行。
+    <EmptyState icon={PlayIcon} title={t('runs.empty')}>
+      {t('runs.emptyText')}
     </EmptyState>
   )
 }
 
 function Runs({ data }: PageProps<Data>) {
   useLive(true)
+  const t = useT()
+  const { locale } = useLocale()
   const f = data.Filter
-  const summary = filterSummary(f, data.RepoExact)
-  const count = data.Runs.length === 0 ? '' : data.Paged ? `显示 #${data.NewestID} 到 #${data.OldestID}` : `最新的 ${data.Runs.length} 个构建`
+  const summary = filterSummary(f, data.RepoExact, locale)
+  const count =
+    data.Runs.length === 0
+      ? ''
+      : data.Paged
+        ? t('runs.showing', { newest: data.NewestID, oldest: data.OldestID })
+        : t('runs.latestCount', { count: data.Runs.length })
   // 按仓库筛选（或只有一个仓库）时不在每行重复仓库名
   const showRepo = data.RepoExact === ''
   return (
     <div className={css.page}>
       <PageHeader
-        title="运行"
-        description="每次推送、PR、tag 和手动触发都会生成一个 run；筛选条件保存在地址中，可以直接分享。"
+        title={t('nav.runs')}
+        description={t('runs.description')}
         actions={
           <LinkButton href={data.NewURL} variant="primary" leadingVisual={PlayIcon}>
-            启动构建
+            {t('runNew.pageTitle')}
           </LinkButton>
         }
       />
@@ -169,26 +181,26 @@ function Runs({ data }: PageProps<Data>) {
         <BoxHeader
           title={
             data.Me ? (
-              <nav className={css.scope} aria-label="谁发起的">
+              <nav className={css.scope} aria-label={t('runs.scope')}>
                 <a href={data.AllURL} aria-current={f.Actor === '' ? 'page' : undefined}>
-                  全部
+                  {t('runs.scopeAll')}
                 </a>
                 <a href={data.MineURL} aria-current={data.Mine ? 'page' : undefined}>
-                  我发起的
+                  {t('runs.scopeMine')}
                 </a>
               </nav>
             ) : (
-              '构建'
+              t('runs.builds')
             )
           }
         >
           <span className={css.count}>
             {summary}
-            {count && `${count}，每 ${liveSeconds} 秒自动更新。`}
+            {count && t('runs.live', { what: count, seconds: liveSeconds })}
           </span>
         </BoxHeader>
         {data.Runs.length > 0 ? (
-          <div role="list" aria-label="构建">
+          <div role="list" aria-label={t('runs.builds')}>
             {data.Runs.map((r) => (
               <RunRow key={r.ID} run={r} showRepo={showRepo} />
             ))}
@@ -199,20 +211,20 @@ function Runs({ data }: PageProps<Data>) {
       </Box>
 
       {(data.NewerURL || data.OlderURL || data.Paged) && (
-        <nav className={css.pager} aria-label="分页">
+        <nav className={css.pager} aria-label={t('pager.label')}>
           {data.NewerURL && (
             <LinkButton href={data.NewerURL} rel="prev" size="small">
-              较新
+              {t('runs.newer')}
             </LinkButton>
           )}
           {data.Paged && (
             <LinkButton href={data.LatestURL} size="small" variant="invisible">
-              最新
+              {t('runs.latest')}
             </LinkButton>
           )}
           {data.OlderURL && (
             <LinkButton href={data.OlderURL} rel="next" size="small">
-              较早
+              {t('runs.older')}
             </LinkButton>
           )}
         </nav>

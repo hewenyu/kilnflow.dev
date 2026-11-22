@@ -85,6 +85,95 @@ const (
 
 	msgAccountBound   msgID = "account.bound"
 	msgAccountUnbound msgID = "account.unbound"
+
+	// 操作失败时的通用说明（内部错误只给错误编号，见 failureText）。
+	msgActionInternal msgID = "action.internalError"
+	// 页面脚本调用的接口：未登录。
+	msgAPIUnauthorized msgID = "api.unauthorized"
+)
+
+// 总览与 CI 运行（总览、运行列表、启动构建、run 和 job 详情、日志）的消息。
+const (
+	msgNavOverview msgID = "nav.overview"
+	msgNavRuns     msgID = "nav.runs"
+
+	msgSetupReposTitle    msgID = "overview.setupReposTitle"
+	msgSetupReposText     msgID = "overview.setupReposText"
+	msgSetupReposAction   msgID = "overview.setupReposAction"
+	msgSetupRunnerTitle   msgID = "overview.setupRunnerTitle"
+	msgSetupRunnerText    msgID = "overview.setupRunnerText"
+	msgSetupRunnerAction  msgID = "overview.setupRunnerAction"
+	msgSetupBindTitle     msgID = "overview.setupBindTitle"
+	msgSetupBindText      msgID = "overview.setupBindText"
+	msgSetupBindAction    msgID = "overview.setupBindAction"
+	msgSetupTokenTitle    msgID = "overview.setupTokenTitle"
+	msgSetupTokenText     msgID = "overview.setupTokenText"
+	msgSetupTokenAction   msgID = "overview.setupTokenAction"
+	msgRunStateQueued     msgID = "runState.queued"
+	msgRunStateActive     msgID = "runState.active"
+	msgRunStateSucceeded  msgID = "runState.succeeded"
+	msgRunStateFailed     msgID = "runState.failed"
+	msgRunStateCancelled  msgID = "runState.cancelled"
+	msgRunStateSkipped    msgID = "runState.skipped"
+	msgRunNewTitle        msgID = "runNew.pageTitle"
+	msgRunNewPickRepo     msgID = "runNew.errPickRepo"
+	msgRunNewRepoMissing  msgID = "runNew.errRepoMissing"
+	msgRunNewPickWorkflow msgID = "runNew.errPickWorkflow"
+	msgRunNewWfMissing    msgID = "runNew.errWorkflowMissing"
+	msgRunNewWfNoDispatch msgID = "runNew.errNotDispatchable"
+	msgRunNewRefNotFound  msgID = "runNew.errRefNotFound"
+	msgRunNewInputs       msgID = "runNew.errInputs"
+	msgRunNewDispatched   msgID = "runNew.dispatched"
+
+	msgInputNoEquals      msgID = "runNew.inputNoEquals"
+	msgInputNoName        msgID = "runNew.inputNoName"
+	msgInputBadName       msgID = "runNew.inputBadName"
+	msgInputDuplicate     msgID = "runNew.inputDuplicate"
+	msgInputMissing       msgID = "runNew.inputMissing"
+	msgInputNotBool       msgID = "runNew.inputNotBoolean"
+	msgInputNotChoice     msgID = "runNew.inputNotChoice"
+	msgInputUndeclared    msgID = "runNew.inputUndeclared"
+	msgRunTitle           msgID = "run.pageTitle"
+	msgRunTitleFirst      msgID = "run.pageTitleFirst"
+	msgRunTitleRerun      msgID = "run.pageTitleRerun"
+	msgRunNotFound        msgID = "run.notFound"
+	msgRunActDispatch     msgID = "run.activityDispatch"
+	msgRunActCancel       msgID = "run.activityCancel"
+	msgRunActRerun        msgID = "run.activityRerun"
+	msgRunActRerunFailed  msgID = "run.activityRerunFailed"
+	msgRunActRerunAll     msgID = "run.activityRerunAll"
+	msgRunActRerunNoCache msgID = "run.activityRerunNoCache"
+	msgRunActRerunJob     msgID = "run.activityRerunJob"
+	msgRunCancelled       msgID = "run.cancelRequested"
+	msgRunCancelFailed    msgID = "run.cancelFailed"
+	msgRunCancelFailedRef msgID = "run.cancelFailedRef"
+	msgRunRerunCreated    msgID = "run.rerunCreated"
+	msgRunRerunFailed     msgID = "run.rerunFailed"
+	msgRunRerunFailedRef  msgID = "run.rerunFailedRef"
+
+	msgJobNotFound          msgID = "job.notFound"
+	msgJobRerunNotFound     msgID = "job.rerunNotFound"
+	msgJobAttemptPublish    msgID = "job.attemptPublish"
+	msgJobAttemptInvalid    msgID = "job.attemptInvalid"
+	msgJobAttemptMissing    msgID = "job.attemptMissing"
+	msgJobOutputGone        msgID = "job.outputGone"
+	msgJobLogPurged         msgID = "job.logPurged"
+	msgJobLogNoOutput       msgID = "job.logNoOutput"
+	msgJobLogPublishPending msgID = "job.logPublishPending"
+	msgJobLogReused         msgID = "job.logReused"
+	msgJobLogCached         msgID = "job.logCached"
+	msgJobLogSkipped        msgID = "job.logSkipped"
+	msgJobLogQueued         msgID = "job.logQueued"
+	msgJobLogNotRun         msgID = "job.logNotRun"
+	msgJobLogNone           msgID = "job.logNone"
+
+	msgLogBadAttempt          msgID = "log.errBadAttempt"
+	msgLogBadOffset           msgID = "log.errBadOffset"
+	msgLogJobNotFound         msgID = "log.errJobNotFound"
+	msgLogJobAttemptNotFound  msgID = "log.errJobAttemptNotFound"
+	msgLogTaskNotFound        msgID = "log.errTaskNotFound"
+	msgLogTaskAttemptNotFound msgID = "log.errTaskAttemptNotFound"
+	msgLogServer              msgID = "log.errServer"
 )
 
 // 消息的参数名（同一个参数名在各条消息中的含义相同）。
@@ -92,6 +181,28 @@ const (
 	argLogin = "login"
 	// argCount 是数量：复数形式按它选择。
 	argCount = "count"
+	// argRef 是错误编号（与服务器日志对应），argReason 是原样显示的失败原因（例如 admin.Service 给出的说明）。
+	argRef    = "ref"
+	argReason = "reason"
+	// argID 是 run、job 的编号；argN 是第几次重跑；argAttempt 是 attempt 的编号。
+	argID      = "id"
+	argN       = "n"
+	argJob     = "job"
+	argAttempt = "attempt"
+	// argValue 是地址或表单中原样的输入值。
+	argValue = "value"
+	argRepo  = "repo"
+	// argGitRef 是分支、tag 或完整的 ref；argFile 是 workflow 文件名。
+	argGitRef = "gitRef"
+	argFile   = "file"
+	// argLine、argFirst 是 inputs 的行号；argName 是 input 的名称；argText 是原样的一行；argOptions 是可选值（已按语言连接）。
+	argLine    = "line"
+	argFirst   = "first"
+	argName    = "name"
+	argText    = "text"
+	argOptions = "options"
+	argOutput  = "output"
+	argPath    = "path"
 )
 
 // messages 是服务端给出的全部消息（只读）。
@@ -113,6 +224,73 @@ var messages = map[msgID]msgSpec{
 
 	msgAccountBound:   {params: map[string]paramKind{argLogin: paramString}, flash: true},
 	msgAccountUnbound: {flash: true},
+
+	msgActionInternal:  {params: map[string]paramKind{argRef: paramString}},
+	msgAPIUnauthorized: {},
+
+	msgNavOverview: {}, msgNavRuns: {},
+	msgSetupReposTitle: {}, msgSetupReposText: {}, msgSetupReposAction: {},
+	msgSetupRunnerTitle: {}, msgSetupRunnerText: {}, msgSetupRunnerAction: {},
+	msgSetupBindTitle: {}, msgSetupBindText: {}, msgSetupBindAction: {},
+	msgSetupTokenTitle: {}, msgSetupTokenText: {}, msgSetupTokenAction: {},
+	msgRunStateQueued: {}, msgRunStateActive: {}, msgRunStateSucceeded: {}, msgRunStateFailed: {}, msgRunStateCancelled: {}, msgRunStateSkipped: {},
+
+	msgRunNewTitle: {}, msgRunNewPickRepo: {}, msgRunNewPickWorkflow: {},
+	msgRunNewRepoMissing:  {params: map[string]paramKind{argRepo: paramString}},
+	msgRunNewWfMissing:    {params: map[string]paramKind{argGitRef: paramString, argFile: paramString}},
+	msgRunNewWfNoDispatch: {params: map[string]paramKind{argFile: paramString}},
+	msgRunNewRefNotFound:  {params: map[string]paramKind{argGitRef: paramString}},
+	msgRunNewInputs:       {params: map[string]paramKind{argCount: paramInt}},
+	msgRunNewDispatched:   {flash: true},
+	msgInputNoEquals:      {params: map[string]paramKind{argLine: paramInt, argText: paramString}},
+	msgInputNoName:        {params: map[string]paramKind{argLine: paramInt}},
+	msgInputBadName:       {params: map[string]paramKind{argLine: paramInt, argName: paramString}},
+	msgInputDuplicate:     {params: map[string]paramKind{argLine: paramInt, argName: paramString, argFirst: paramInt}},
+	msgInputMissing:       {params: map[string]paramKind{argName: paramString}},
+	msgInputNotBool:       {params: map[string]paramKind{argName: paramString}},
+	msgInputNotChoice:     {params: map[string]paramKind{argName: paramString, argOptions: paramString}},
+	msgInputUndeclared:    {params: map[string]paramKind{argName: paramString}},
+
+	msgRunTitle:           {params: map[string]paramKind{argID: paramInt}},
+	msgRunTitleFirst:      {params: map[string]paramKind{argID: paramInt}},
+	msgRunTitleRerun:      {params: map[string]paramKind{argID: paramInt, argN: paramInt}},
+	msgRunNotFound:        {params: map[string]paramKind{argValue: paramString}},
+	msgRunActDispatch:     {},
+	msgRunActCancel:       {},
+	msgRunActRerun:        {params: map[string]paramKind{argN: paramInt}},
+	msgRunActRerunFailed:  {params: map[string]paramKind{argN: paramInt}},
+	msgRunActRerunAll:     {params: map[string]paramKind{argN: paramInt}},
+	msgRunActRerunNoCache: {params: map[string]paramKind{argN: paramInt}},
+	msgRunActRerunJob:     {params: map[string]paramKind{argJob: paramInt, argN: paramInt}},
+	msgRunCancelled:       {flash: true},
+	msgRunCancelFailed:    {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgRunCancelFailedRef: {params: map[string]paramKind{argRef: paramString}, flash: true},
+	msgRunRerunCreated:    {params: map[string]paramKind{argN: paramInt}, flash: true},
+	msgRunRerunFailed:     {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgRunRerunFailedRef:  {params: map[string]paramKind{argRef: paramString}, flash: true},
+
+	msgJobNotFound:          {params: map[string]paramKind{argValue: paramString}},
+	msgJobRerunNotFound:     {params: map[string]paramKind{argID: paramInt}},
+	msgJobAttemptPublish:    {},
+	msgJobAttemptInvalid:    {params: map[string]paramKind{argValue: paramString}},
+	msgJobAttemptMissing:    {params: map[string]paramKind{argAttempt: paramInt}},
+	msgJobOutputGone:        {params: map[string]paramKind{argOutput: paramString, argPath: paramString}, flash: true},
+	msgJobLogPurged:         {},
+	msgJobLogNoOutput:       {},
+	msgJobLogPublishPending: {},
+	msgJobLogReused:         {params: map[string]paramKind{argJob: paramInt}},
+	msgJobLogCached:         {params: map[string]paramKind{argJob: paramInt}},
+	msgJobLogSkipped:        {},
+	msgJobLogQueued:         {},
+	msgJobLogNotRun:         {},
+	msgJobLogNone:           {},
+
+	msgLogBadAttempt: {}, msgLogBadOffset: {},
+	msgLogJobNotFound:         {params: map[string]paramKind{argID: paramInt}},
+	msgLogJobAttemptNotFound:  {params: map[string]paramKind{argID: paramInt, argAttempt: paramInt}},
+	msgLogTaskNotFound:        {params: map[string]paramKind{argID: paramInt}},
+	msgLogTaskAttemptNotFound: {params: map[string]paramKind{argID: paramInt, argAttempt: paramInt}},
+	msgLogServer:              {params: map[string]paramKind{argRef: paramString}},
 }
 
 // uiText 是页面数据中的一段文字：消息（id 加参数，前端按当前语言显示），或原样显示的文字（raw）。零值是空串。
@@ -279,6 +457,22 @@ func flashArg(kind paramKind, v any) (any, bool) {
 		}
 	}
 	return nil, false
+}
+
+// flashArgText 把原样的文字（对象名、路径、失败原因）整理为能放进 flash 的参数：控制字符换成空格，
+// 超过 maxFlashArgRunes 个字符时截断并以省略号结尾，避免整条提示因为参数不合格而不显示。
+func flashArgText(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if isControl(r) {
+			return ' '
+		}
+		return r
+	}, strings.ToValidUTF8(s, shorten.Ellipsis))
+	if utf8.RuneCountInString(s) <= maxFlashArgRunes {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:maxFlashArgRunes-1]) + shorten.Ellipsis
 }
 
 // isControl 表示控制字符（换行、制表符等，不应出现在提示的参数中）。

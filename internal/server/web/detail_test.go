@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -41,7 +42,7 @@ func testJobPage(run *cistore.Run, jv jobView) *jobPage {
 			Target: "tester/demo-dist", Tag: "v1.2.0", State: "done", Stage: "assets",
 			Progress: map[string]any{"html_url": "https://example.com/r"}, Error: "x",
 		},
-		LogEmpty: "发布还没有开始",
+		LogEmpty: message(msgJobLogPublishPending),
 	}
 }
 
@@ -127,7 +128,7 @@ func TestSelectAttempt(t *testing.T) {
 	}
 	p := newPage()
 	p.selectAttempt("")
-	if p.Attempt != 12 || p.Explicit || p.Viewing != nil || p.AttemptErr != "" || p.AttemptKey() != "current" {
+	if p.Attempt != 12 || p.Explicit || p.Viewing != nil || !p.AttemptErr.IsZero() || p.AttemptKey() != "current" {
 		t.Errorf("没有指定 attempt：%+v", p)
 	}
 	p = newPage()
@@ -143,15 +144,15 @@ func TestSelectAttempt(t *testing.T) {
 	for _, in := range []string{"999999999", "11", "0", "-3", "abc"} {
 		p = newPage()
 		p.selectAttempt(in)
-		if p.AttemptErr == "" || p.Attempt != 12 || p.Explicit {
+		if p.AttemptErr.IsZero() || p.Attempt != 12 || p.Explicit {
 			t.Errorf("attempt=%s 应无效：%+v", in, p)
 		}
 	}
 	p = newPage()
 	p.Job.Kind = workflow.JobKindPublish
 	p.selectAttempt("12")
-	if !strings.Contains(p.AttemptErr, "发布 job") {
-		t.Errorf("发布 job 没有尝试：%q", p.AttemptErr)
+	if got := textZH(t, p.AttemptErr); !strings.Contains(got, "发布 job") {
+		t.Errorf("发布 job 没有尝试：%q", got)
 	}
 }
 
@@ -176,7 +177,7 @@ func TestLogEmptyText(t *testing.T) {
 		{&cistore.Job{State: store.JobSucceeded, CachedFrom: &prev}, false, true, "命中缓存"},
 	}
 	for _, c := range cases {
-		if got := logEmptyText(c.j, c.has, c.purged); !strings.Contains(got, c.want) {
+		if got := textZH(t, logEmptyText(c.j, c.has, c.purged)); !strings.Contains(got, c.want) {
 			t.Errorf("logEmptyText(%s) = %q，应包含 %q", c.j.State, got, c.want)
 		}
 	}
@@ -190,7 +191,8 @@ type runData struct {
 		Kept int
 	}
 	Activity []struct {
-		Actor, Action, Text, Link, RunText string
+		Actor, Action, Text, Link string
+		RunText                   uiText
 	}
 	Start, End int64
 	Ref        string
@@ -212,7 +214,7 @@ func TestRunDetailRender(t *testing.T) {
 	expect(t, "job 列表", d.Jobs, len(d.Jobs) == 1 && d.Jobs[0].CachedFrom != nil && *d.Jobs[0].CachedFrom == 3, len(d.Stages) == 1)
 	if expect(t, "活动", d.Activity, len(d.Activity) == 1) {
 		a := d.Activity[0]
-		expect(t, "活动", a, a.Actor == "bob", a.Link == "/runs/7", a.RunText == "重跑了这个 run（只重跑未成功的 job），开始第 1 次重跑", a.Text == "重跑了 run #7（第 1 次重跑）")
+		expect(t, "活动", a, a.Actor == "bob", a.Link == "/runs/7", textZH(t, a.RunText) == "重跑了这个 run（只重跑未成功的 job），开始第 1 次重跑", a.Text == "重跑了 run #7（第 1 次重跑）")
 	}
 	// job 列表不带 spec（只在 job 详情页）
 	if strings.Contains(body, `"Spec"`) {
@@ -294,7 +296,7 @@ func testJobDetail(now time.Time) *jobPage {
 	}
 	return &jobPage{
 		Job: jobView{Job: j}, Run: run, Repo: "tester/demo", Attempts: attempts, Attempt: 31, Spec: "{}", Terminal: true,
-		Outputs: testOutputs(), Declared: []string{"bin"}, Producer: &attempts[1], LogEmpty: "这次尝试没有输出日志。",
+		Outputs: testOutputs(), Declared: []string{"bin"}, Producer: &attempts[1], LogEmpty: message(msgJobLogNoOutput),
 		Rerun: newJobRerun(j, []*cistore.Job{j, {ID: 22, DisplayName: "test", Needs: []int64{21}}}, false),
 	}
 }
@@ -310,7 +312,7 @@ func TestJobDetailRender(t *testing.T) {
 	}
 	// 尝试、日志读取的位置、重跑的说明
 	expect(t, "尝试", p, len(p.Attempts) == 2 && p.Attempts[0].ErrorClass == "infra.lost" && p.Attempts[0].Outcome == "infra_error" && p.Attempts[1].Current,
-		p.Attempt == 31, !p.Explicit, p.Viewing == nil, p.AttemptKey == "current", !p.NoLog, !p.Publish, p.LogEmpty == "这次尝试没有输出日志。")
+		p.Attempt == 31, !p.Explicit, p.Viewing == nil, p.AttemptKey == "current", !p.NoLog, !p.Publish, textZH(t, p.LogEmpty) == "这次尝试没有输出日志。")
 	if r := p.Rerun; expect(t, "重跑", r, r != nil) {
 		expect(t, "重跑", r, r.Latest, r.Force, slices.Equal(r.Downstream, []string{"test"}), r.Kept == 0)
 	}
@@ -326,7 +328,7 @@ func TestJobDetailRender(t *testing.T) {
 	jp = testJobDetail(time.Now())
 	jp.selectAttempt("999999999")
 	p = pageData[jobData](t, renderData(t, "job", jp))
-	expect(t, "无效的 attempt", p, strings.Contains(p.AttemptErr, "这个 job 没有尝试 #999999999"), !p.Explicit, p.AttemptKey == "current")
+	expect(t, "无效的 attempt", p, textZH(t, p.AttemptErr) == "这个 job 没有尝试 #999999999（可能属于别的 job，或编号写错了）。", !p.Explicit, p.AttemptKey == "current")
 
 	// 不是最新一次运行中的 job：不能直接重跑，指向最新一次
 	jp = testJobDetail(time.Now())
@@ -349,7 +351,7 @@ func TestJobDetailRender_NoLog(t *testing.T) {
 	jp.Job.Job = &cistore.Job{ID: 21, RunID: 7, Rerun: 1, DisplayName: "build", State: store.JobSucceeded, CachedFrom: new(int64(5))}
 	jp.Producer, jp.Attempts, jp.LogEmpty = nil, nil, logEmptyText(jp.Job.Job, false, false)
 	p := pageData[jobData](t, renderData(t, "job", jp))
-	expect(t, "命中缓存", p, p.NoLog, p.Producer == nil, p.Job.CachedFrom != nil && *p.Job.CachedFrom == 5, strings.Contains(p.LogEmpty, "命中缓存"))
+	expect(t, "命中缓存", p, p.NoLog, p.Producer == nil, p.Job.CachedFrom != nil && *p.Job.CachedFrom == 5, textZH(t, p.LogEmpty) == "这个 job 命中缓存，没有执行；日志见 job #5。")
 	jp.Outputs = &admin.JobOutputs{Manifest: "sha256:x", Missing: true}
 	p = pageData[jobData](t, renderData(t, "job", jp))
 	expect(t, "清单丢失", p.Outputs, p.Outputs != nil && p.Outputs.Missing)
@@ -363,7 +365,7 @@ func TestJobDetailRender_NoLog(t *testing.T) {
 	body := renderData(t, "job", jp)
 	p = pageData[jobData](t, body)
 	mustHave(t, "已清理", body, `"Purged":"`+jsonTime(purgedAt)+`"`)
-	expect(t, "已清理", p, strings.Contains(p.LogEmpty, "日志已按保留策略清理"), p.Rerun != nil && p.Rerun.Replan == 2)
+	expect(t, "已清理", p, strings.Contains(textZH(t, p.LogEmpty), "日志已按保留策略清理"), p.Rerun != nil && p.Rerun.Replan == 2)
 }
 
 // ---- 连接数据库的功能测试 ----
@@ -487,8 +489,8 @@ func TestPageJob(t *testing.T) {
 		w := e.get(e.bob, "/jobs/"+jb+"?attempt="+c.q)
 		wantStatus(t, c.name, w, http.StatusNotFound)
 		// AttemptErr 非空：前端提示，不加载日志
-		if p := pageData[jobData](t, w.Body.String()); !strings.Contains(p.AttemptErr, c.want) || p.Explicit {
-			t.Errorf("%s：AttemptErr %q", c.name, p.AttemptErr)
+		if p := pageData[jobData](t, w.Body.String()); !strings.Contains(textZH(t, p.AttemptErr), c.want) || p.Explicit {
+			t.Errorf("%s：AttemptErr %+v", c.name, p.AttemptErr)
 		}
 	}
 
@@ -512,7 +514,7 @@ func TestPageJob(t *testing.T) {
 	}
 	w = e.get(e.bob, fmt.Sprintf("/jobs/%d?attempt=%d", publish, first))
 	wantStatus(t, "发布 job 的 attempt", w, http.StatusNotFound)
-	mustHave(t, "发布 job 的 attempt", w.Body.String(), "发布 job 由 Server 执行，没有尝试记录")
+	mustHave(t, "发布 job 的 attempt", textZH(t, pageData[jobData](t, w.Body.String()).AttemptErr), "发布 job 由 Server 执行，没有尝试记录")
 
 	// job 不存在；不属于任何 run 的内部 job 也不显示
 	wantErrorPage(t, "job 不存在", e.get(e.bob, "/jobs/99999"), http.StatusNotFound, []string{"没有编号为 99999 的 job"}, []string{"/runs"})
@@ -572,23 +574,26 @@ func TestGetLog(t *testing.T) {
 		t.Errorf("结束后的头部 = %v", w.Header())
 	}
 
-	// 错误：纯文本，不是错误页
+	// 错误：不是错误页，正文是消息的 JSON（前端按当前语言显示；按请求的参数说明找不到的是什么，不回显内部错误）
 	for _, c := range []struct {
 		name   string
 		c      *client
 		target string
 		status int
+		want   string
 	}{
-		{"未登录", nil, "/jobs/" + jid + "/log", http.StatusUnauthorized},
-		{"job 不存在", e.bob, "/jobs/99999/log", http.StatusNotFound},
-		{"尝试属于别的 job", e.bob, fmt.Sprintf("/jobs/%s/log?attempt=%d", jid, other), http.StatusNotFound},
-		{"offset 无效", e.bob, "/jobs/" + jid + "/log?offset=x", http.StatusBadRequest},
-		{"offset 为负", e.bob, "/jobs/" + jid + "/log?offset=-1", http.StatusBadRequest},
-		{"attempt 无效", e.bob, "/jobs/" + jid + "/log?attempt=-2", http.StatusBadRequest},
+		{"未登录", nil, "/jobs/" + jid + "/log", http.StatusUnauthorized, "登录已过期，请重新登录。"},
+		{"job 不存在", e.bob, "/jobs/99999/log", http.StatusNotFound, "没有 job #99999"},
+		{"尝试属于别的 job", e.bob, fmt.Sprintf("/jobs/%s/log?attempt=%d", jid, other), http.StatusNotFound, fmt.Sprintf("job #%s 没有尝试 #%d", jid, other)},
+		{"offset 无效", e.bob, "/jobs/" + jid + "/log?offset=x", http.StatusBadRequest, "offset 参数无效"},
+		{"offset 为负", e.bob, "/jobs/" + jid + "/log?offset=-1", http.StatusBadRequest, "offset 参数无效"},
+		{"attempt 无效", e.bob, "/jobs/" + jid + "/log?attempt=-2", http.StatusBadRequest, "attempt 参数无效"},
 	} {
 		w := e.get(c.c, c.target)
-		if w.Code != c.status || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
-			t.Errorf("%s：HTTP %d（应为 %d 纯文本）：%s", c.name, w.Code, c.status, w.Body.String())
+		var msg uiText
+		if w.Code != c.status || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") || json.Unmarshal(w.Body.Bytes(), &msg) != nil ||
+			msg.id == "" || textZH(t, msg) != c.want {
+			t.Errorf("%s：HTTP %d（应为 %d 的消息 %q）：%s", c.name, w.Code, c.status, c.want, w.Body.String())
 		}
 	}
 }
@@ -627,7 +632,8 @@ func TestGetLogDownload(t *testing.T) {
 		t.Errorf("未登录应跳转到登录页：%q", w.Header().Get("Location"))
 	}
 	wantErrorPage(t, "job 不存在", e.get(e.bob, "/jobs/99999/log/download"), http.StatusNotFound, []string{"没有 job #99999"}, []string{"/runs"})
-	wantErrorPage(t, "尝试不属于 job", e.get(e.bob, fmt.Sprintf("/jobs/%d/log/download?attempt=%d", skipped, first)), http.StatusNotFound, nil, []string{"/runs"})
+	wantErrorPage(t, "尝试不属于 job", e.get(e.bob, fmt.Sprintf("/jobs/%d/log/download?attempt=%d", skipped, first)), http.StatusNotFound,
+		[]string{fmt.Sprintf("job #%d 没有尝试 #%d", skipped, first)}, []string{"/runs"})
 }
 
 // putBlob 把 data 写入 CAS，返回 digest。
@@ -695,7 +701,7 @@ func TestGetOutput(t *testing.T) {
 	}
 	// 文件内容已不在存储中：回到 job 页面并说明
 	w = e.browse(e.bob, fmt.Sprintf("/jobs/%d/download?output=bin&path=lost.txt", job))
-	if flash := wantRedirect(t, "产物已丢失", w, jobURL(job)); !strings.Contains(flash, "没有下载：产物 bin/lost.txt 已不在存储中") {
+	if flash := flashZH(t, wantRedirect(t, "产物已丢失", w, jobURL(job))); !strings.Contains(flash, "没有下载：产物 bin/lost.txt 已不在存储中") {
 		t.Errorf("提示 = %q", flash)
 	}
 }

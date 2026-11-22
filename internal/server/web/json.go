@@ -144,7 +144,8 @@ func (e activityEntry) MarshalJSON() ([]byte, error) {
 	type plain activityEntry
 	return json.Marshal(struct {
 		plain
-		Text, Link, RunText string
+		Text, Link string
+		RunText    uiText
 	}{plain(e), e.Text(), e.Link(), e.RunText()})
 }
 

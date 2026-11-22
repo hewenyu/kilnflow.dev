@@ -20,20 +20,20 @@ func (d *Dashboard) postCancelRun(w http.ResponseWriter, r *http.Request, se *se
 	id := pathID(r)
 	back := runURL(id)
 	if err := d.admin.CancelRun(r.Context(), id, se.Login); err != nil {
-		d.flashBack(w, r, back, "取消失败："+d.failure(r, err))
+		d.flashMsg(w, r, back, d.failureFlash(r, err, msgRunCancelFailed, msgRunCancelFailedRef))
 		return
 	}
-	d.flashBack(w, r, back, "已请求取消")
+	d.flashMsg(w, r, back, message(msgRunCancelled))
 }
 
 func (d *Dashboard) postRerun(w http.ResponseWriter, r *http.Request, se *session) {
 	id := pathID(r)
 	n, err := d.admin.RerunRun(r.Context(), id, store.RerunMode(r.PostFormValue("mode")), se.Login, r.PostFormValue("keep") == "on")
 	if err != nil {
-		d.flashBack(w, r, runURL(id), "重跑失败："+d.failure(r, err))
+		d.flashMsg(w, r, runURL(id), d.failureFlash(r, err, msgRunRerunFailed, msgRunRerunFailedRef))
 		return
 	}
-	d.flashBack(w, r, fmt.Sprintf("%s?rerun=%d", runURL(id), n), fmt.Sprintf("已创建 rerun %d", n))
+	d.flashMsg(w, r, fmt.Sprintf("%s?rerun=%d", runURL(id), n), message(msgRunRerunCreated, intArg(argN, int64(n))))
 }
 
 func (d *Dashboard) postRerunJob(w http.ResponseWriter, r *http.Request, se *session) {
@@ -41,17 +41,17 @@ func (d *Dashboard) postRerunJob(w http.ResponseWriter, r *http.Request, se *ses
 	runID, n, err := d.admin.RerunJob(r.Context(), id, se.Login, r.PostFormValue("keep") == "on")
 	switch {
 	case runID == 0 && connect.CodeOf(err) == connect.CodeNotFound:
-		d.notFound(w, r, fmt.Sprintf("没有编号为 %d 的 job，没有执行任何操作。", id))
+		d.notFoundText(w, r, message(msgJobRerunNotFound, intArg(argID, id)))
 		return
 	case runID == 0 && err != nil:
 		// 还没有找到 job 所属的 run 就出错了（例如数据库错误）
 		d.adminPageError(w, r, err)
 		return
 	case err != nil:
-		d.flashBack(w, r, jobURL(id), "重跑失败："+d.failure(r, err))
+		d.flashMsg(w, r, jobURL(id), d.failureFlash(r, err, msgRunRerunFailed, msgRunRerunFailedRef))
 		return
 	}
-	d.flashBack(w, r, fmt.Sprintf("%s?rerun=%d", runURL(runID), n), fmt.Sprintf("已创建 rerun %d", n))
+	d.flashMsg(w, r, fmt.Sprintf("%s?rerun=%d", runURL(runID), n), message(msgRunRerunCreated, intArg(argN, int64(n))))
 }
 
 // formKindAIDev 是注册表单中"AI 开发节点"的取值（AI 执行节点，角色为开发）。

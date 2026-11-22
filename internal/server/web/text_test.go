@@ -90,8 +90,22 @@ func textZH(t *testing.T, x uiText) string {
 			t.Errorf("%q 缺少参数 %q", x.id, name)
 			return "…"
 		}
+		if f, ok := v.(float64); ok {
+			// 从页面数据解码的数字是 float64：按整数显示，与前端相同
+			return strconv.FormatFloat(f, 'f', -1, 64)
+		}
 		return fmt.Sprint(v)
 	})
+}
+
+// textsZH 按中文词典显示一组 uiText。
+func textsZH(t *testing.T, xs []uiText) []string {
+	t.Helper()
+	out := make([]string, 0, len(xs))
+	for _, x := range xs {
+		out = append(out, textZH(t, x))
+	}
+	return out
 }
 
 // flashZH 按中文词典显示地址中的提示（经 parseFlash 校验，与页面上显示的相同）。

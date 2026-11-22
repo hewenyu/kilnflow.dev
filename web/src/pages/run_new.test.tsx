@@ -5,7 +5,7 @@ import pickerFixture from '../../dev/fixtures/run_new.json'
 import formFixture from '../../dev/fixtures/run_new.form.json'
 import manualFixture from '../../dev/fixtures/run_new.manual.json'
 import noneFixture from '../../dev/fixtures/run_new.none.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, withData } from '../test/render'
 import { json, stubFetch } from '../test/fetch'
 
 afterEach(() => {
@@ -67,10 +67,10 @@ describe('启动构建', () => {
 
   it('读取不到 workflow 列表时可以直接填写文件名', () => {
     renderPage(envelope(manualFixture), '/runs/new?repo=acme%2Fkiln')
-    expect(screen.getByText(/GitHub 暂时不可用（502 Bad Gateway），稍后重试。可以直接填写 workflow 文件名。/)).toBeInTheDocument()
+    expect(screen.getByText(/GitHub 暂时不可用（502 Bad Gateway），稍后重试 可以直接填写 workflow 文件名。/)).toBeInTheDocument()
     expect(screen.getByLabelText('workflow 文件名')).toBeInTheDocument()
     expect(screen.getByLabelText('分支或 tag')).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('找不到 ref nope')).toBeInTheDocument()
+    expect(screen.getByText('找不到 ref nope：确认分支或 tag 存在，或者换一个 ref。')).toBeInTheDocument()
     expect(screen.getByText(/修正 ref 后点"读取 workflow"可以从列表中选择。/)).toBeInTheDocument()
   })
 
@@ -111,5 +111,39 @@ describe('启动构建', () => {
     expect(calls[0]?.body.get('ref')).toBe('v0.3.2')
     expect(calls[0]?.body.get('repo')).toBe('acme/kiln')
     expect(await screen.findByText('这个 ref 下没有可以手动触发的 workflow。')).toBeInTheDocument()
+  })
+})
+
+describe('启动构建的语言', () => {
+  it('英文：步骤、inputs 说明和服务端给的表单错误（汇总和每个问题）按英文显示，workflow 中写的描述原样', () => {
+    renderPage(envelope(formFixture), '/runs/new?repo=acme%2Fkiln&from=filter', { locale: 'en' })
+    expect(document.title).toBe('Start a build · Kiln')
+    expect(screen.getByText("The build wasn't started.")).toBeInTheDocument()
+    expect(screen.getByText(/version \(string, required\) 要发布的版本/)).toBeInTheDocument()
+    expect(screen.getByText(/mode \(choice, default fast, one of fast, full\)/)).toBeInTheDocument()
+    const inputs = screen.getByLabelText('Inputs (optional)')
+    expect(inputs).toHaveAttribute('aria-invalid', 'true')
+    // 每个问题一行（white-space: pre-line）
+    expect(screen.getByText(/inputs has 2 problems:/).textContent).toBe(
+      'inputs has 2 problems:\nLine 2 has no =; write it as key=value: broken\nmode must be one of: fast, full',
+    )
+  })
+
+  it('表单填写到一半时切换语言：已填的 ref 和 inputs 保留，错误提示立即切换', async () => {
+    renderPage(envelope(formFixture), '/runs/new?repo=acme%2Fkiln&from=filter')
+    const inputs = screen.getByLabelText('inputs（可选）')
+    await userEvent.clear(inputs)
+    await userEvent.type(inputs, 'version=2.0.0')
+    const ref = screen.getByLabelText('分支或 tag')
+    await userEvent.clear(ref)
+    await userEvent.type(ref, 'v2')
+    expect(screen.getByText(/第 2 行缺少 =/)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByLabelText('Inputs (optional)')).toBe(inputs)
+    expect(inputs).toHaveValue('version=2.0.0')
+    expect(screen.getByLabelText('Branch or tag')).toHaveValue('v2')
+    expect(screen.getByRole('radio', { name: /Release/ })).toBeChecked()
+    expect(screen.getByText(/Line 2 has no =/)).toBeInTheDocument()
+    expect(screen.queryByText(/第 2 行缺少 =/)).not.toBeInTheDocument()
   })
 })

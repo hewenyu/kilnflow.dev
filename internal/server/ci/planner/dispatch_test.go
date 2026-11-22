@@ -109,7 +109,8 @@ func TestDispatchIdempotent(t *testing.T) {
 	}
 }
 
-// TestDispatchErrors：ref 找不到、workflow 不存在或不能手动触发时返回 *DispatchError（Field 指出是哪个字段），不建 run。
+// TestDispatchErrors：ref 找不到、workflow 不存在或不能手动触发时返回 *DispatchError（Field 指出是哪个字段，
+// Code 和 Subject 是稳定的原因码和原始参数，Dashboard 据此按语言显示），不建 run。
 func TestDispatchErrors(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
@@ -121,13 +122,15 @@ func TestDispatchErrors(t *testing.T) {
 		ref       string
 		wantField string // 空表示不是 DispatchError
 		inErr     string
+		code      DispatchErrorCode
+		subject   string
 	}{
-		{"分支不存在", "tester/demo", "manual", "refs/heads/nope", "ref", "找不到 ref refs/heads/nope"},
-		{"tag 不存在", "tester/demo", "manual", "refs/tags/nope", "ref", "找不到 ref refs/tags/nope"},
-		{"短 ref 不存在", "tester/demo", "manual", "nope", "ref", "找不到 ref nope"},
-		{"workflow 文件不存在", "tester/demo", "missing", "", "workflow", ".kiln/workflows/missing.yml"},
-		{"没有声明 workflow_dispatch", "tester/demo", "ev", "", "workflow", "没有声明 on.workflow_dispatch"},
-		{"仓库不在 Kiln 中", "tester/none", "manual", "", "", "仓库不在 Kiln 中"},
+		{"分支不存在", "tester/demo", "manual", "refs/heads/nope", "ref", "找不到 ref refs/heads/nope", DispatchRefNotFound, "refs/heads/nope"},
+		{"tag 不存在", "tester/demo", "manual", "refs/tags/nope", "ref", "找不到 ref refs/tags/nope", DispatchRefNotFound, "refs/tags/nope"},
+		{"短 ref 不存在", "tester/demo", "manual", "nope", "ref", "找不到 ref nope", DispatchRefNotFound, "nope"},
+		{"workflow 文件不存在", "tester/demo", "missing", "", "workflow", ".kiln/workflows/missing.yml", DispatchWorkflowMissing, "missing.yml"},
+		{"没有声明 workflow_dispatch", "tester/demo", "ev", "", "workflow", "没有声明 on.workflow_dispatch", DispatchNotDispatchable, "ev.yml"},
+		{"仓库不在 Kiln 中", "tester/none", "manual", "", "", "仓库不在 Kiln 中", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -146,8 +149,11 @@ func TestDispatchErrors(t *testing.T) {
 				}
 				return
 			}
-			if !isDE || de.Field != tt.wantField {
-				t.Fatalf("应返回 Field=%s 的 DispatchError：%#v", tt.wantField, err)
+			if !isDE || de.Field != tt.wantField || de.Code != tt.code || de.Subject != tt.subject {
+				t.Fatalf("应返回 Field=%s、Code=%s、Subject=%s 的 DispatchError：%#v", tt.wantField, tt.code, tt.subject, err)
+			}
+			if de.Code == DispatchWorkflowMissing && len(de.SHA) != 40 {
+				t.Errorf("workflow 不存在时应带着读取的 commit：%q", de.SHA)
 			}
 			if errors.Unwrap(de) == nil {
 				t.Error("DispatchError 应能取出原始错误")

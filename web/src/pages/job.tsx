@@ -1,5 +1,7 @@
 import { definePage, type PageProps } from '../app/definePage'
 import { useLive } from '../app/live'
+import { Msg, useT } from '../i18n/locale'
+import { isEmpty } from '../i18n/messages'
 import { RunHeader } from '../components/RunHeader'
 import { RunSidebar } from '../components/RunSidebar'
 import { LogViewer } from './job/LogViewer'
@@ -10,14 +12,15 @@ import css from './job.module.css'
 // job 详情页（GitHub Actions 的 job 页）：顶部是与 run 详情页相同的标题区，左侧是同一次运行中的 job，右侧是 job 的信息、实时日志，
 // 下方是产物或发布结果、每次尝试和 job spec。job 未结束（或 run 还在进行）时每 5 秒刷新页面数据，日志自己轮询。
 
-function logNote(p: JobPage): string | undefined {
-  if (p.Publish) return '发布'
-  if (p.Viewing) return `第 ${p.Viewing.N} 次尝试`
+function logNote(p: JobPage, t: ReturnType<typeof useT>): string | undefined {
+  if (p.Publish) return t('job.logNotePublish')
+  if (p.Viewing) return t('graph.attemptN', { n: p.Viewing.N })
   return undefined
 }
 
 function Job({ data: p }: PageProps<JobPage>) {
   useLive(!p.Terminal || p.RunActive)
+  const t = useT()
   const j = p.Job
   return (
     <div className={css.page}>
@@ -37,14 +40,16 @@ function Job({ data: p }: PageProps<JobPage>) {
         <div className={css.content}>
           <JobHeader p={p} />
           <JobNotices p={p} />
-          {p.AttemptErr ? (
-            <p className={css.logBlocked}>选择一次有效的尝试后显示日志。</p>
+          {!isEmpty(p.AttemptErr) ? (
+            <p className={css.logBlocked}>{t('job.logBlocked')}</p>
           ) : p.NoLog ? (
             <section className={css.noLog} aria-labelledby="log-h">
               <h2 id="log-h" className={css.noLogTitle}>
-                日志
+                {t('logView.title')}
               </h2>
-              <p>{p.LogEmpty}</p>
+              <p>
+                <Msg text={p.LogEmpty} />
+              </p>
             </section>
           ) : (
             <LogViewer
@@ -54,7 +59,7 @@ function Job({ data: p }: PageProps<JobPage>) {
               attemptKey={p.AttemptKey}
               state={j.State}
               emptyText={p.LogEmpty}
-              note={logNote(p)}
+              note={logNote(p, t)}
             />
           )}
           {p.Publish ? (

@@ -255,7 +255,10 @@ func (p *Planner) planWorkflows(ctx context.Context, inst *gh.Inst, ev *Request,
 	}
 	slices.Sort(names)
 	if ev.Workflow != "" && len(names) == 0 {
-		return nil, &DispatchError{Field: "workflow", Err: fmt.Errorf("%s 中没有 %s/%s", shorten.Hash(ev.SHA), workflow.Dir, ev.Workflow)}
+		return nil, &DispatchError{
+			Field: "workflow", Code: DispatchWorkflowMissing, Subject: ev.Workflow, SHA: ev.SHA,
+			Err: fmt.Errorf("%s 中没有 %s/%s", shorten.Hash(ev.SHA), workflow.Dir, ev.Workflow),
+		}
 	}
 	if len(names) > 0 {
 		// 记录来自 installation 事件、还缺 clone 地址时先补齐（Runner 检出源码需要）
@@ -304,7 +307,9 @@ func (p *Planner) planWorkflow(ctx context.Context, inst *gh.Inst, ev *Request, 
 		switch m {
 		case workflow.NoMatch:
 			if ev.Event == workflow.EventWorkflowDispatch {
-				return 0, &DispatchError{Field: "workflow", Err: fmt.Errorf("%s 没有声明 on.workflow_dispatch", file)}
+				return 0, &DispatchError{
+					Field: "workflow", Code: DispatchNotDispatchable, Subject: file, Err: fmt.Errorf("%s 没有声明 on.workflow_dispatch", file),
+				}
 			}
 			return 0, nil
 		case workflow.PathsExcluded:

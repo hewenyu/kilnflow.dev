@@ -1,6 +1,8 @@
 {
  "Page": "overview",
- "Title": "总览",
+ "Title": {
+  "id": "nav.overview"
+ },
  "Nav": "overview",
  "Status": 200,
  "Session": {
@@ -530,31 +532,59 @@
   "MoreRunners": 0,
   "Setup": [
    {
-    "Title": "同步仓库",
-    "Text": "安装 GitHub App 后同步一次，Kiln 才知道要构建哪些仓库。",
+    "Key": "repos",
+    "Title": {
+     "id": "overview.setupReposTitle"
+    },
+    "Text": {
+     "id": "overview.setupReposText"
+    },
     "URL": "/settings/repos",
-    "Action": "查看仓库",
+    "Action": {
+     "id": "overview.setupReposAction"
+    },
     "Done": true
    },
    {
-    "Title": "注册 Runner",
-    "Text": "Runner 运行在你自己的机器上，只向 Server 发出连接。至少需要一台才能开始构建。",
+    "Key": "runner",
+    "Title": {
+     "id": "overview.setupRunnerTitle"
+    },
+    "Text": {
+     "id": "overview.setupRunnerText"
+    },
     "URL": "/runners/new",
-    "Action": "注册 Runner",
+    "Action": {
+     "id": "overview.setupRunnerAction"
+    },
     "Done": true
    },
    {
-    "Title": "绑定你的 GitHub 账号",
-    "Text": "绑定后用 GitHub 登录即为管理员，操作记录也记在这个账号名下。",
+    "Key": "bind",
+    "Title": {
+     "id": "overview.setupBindTitle"
+    },
+    "Text": {
+     "id": "overview.setupBindText"
+    },
     "URL": "/settings/account",
-    "Action": "去绑定",
+    "Action": {
+     "id": "overview.setupBindAction"
+    },
     "Done": false
    },
    {
-    "Title": "关闭 admin token 登录",
-    "Text": "确认 GitHub 登录可用后关闭，Dashboard 只接受 GitHub 登录。",
+    "Key": "token",
+    "Title": {
+     "id": "overview.setupTokenTitle"
+    },
+    "Text": {
+     "id": "overview.setupTokenText"
+    },
     "URL": "/settings/account",
-    "Action": "去关闭",
+    "Action": {
+     "id": "overview.setupTokenAction"
+    },
     "Done": false
    }
   ],

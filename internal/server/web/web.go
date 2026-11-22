@@ -168,13 +168,12 @@ func (d *Dashboard) web(adminOnly bool, h func(w http.ResponseWriter, r *http.Re
 	}
 }
 
-// webAPI 包装页面脚本调用的只读接口：未登录时返回 401（而不是跳转到登录页），脚本据此提示重新登录。
+// webAPI 包装页面脚本调用的只读接口：未登录时返回 401（而不是跳转到登录页，正文是消息的 JSON），脚本据此提示重新登录。
 func (d *Dashboard) webAPI(h func(w http.ResponseWriter, r *http.Request, se *session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		se := d.getSession(r)
 		if se == nil {
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "登录已过期，请重新登录", http.StatusUnauthorized)
+			apiError(w, http.StatusUnauthorized, message(msgAPIUnauthorized))
 			return
 		}
 		h(w, r, se)
