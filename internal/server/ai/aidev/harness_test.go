@@ -26,6 +26,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/forge"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
 	"github.com/hewenyu/kilnflow.dev/internal/gitref"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/mergecfg"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/rpcerr"
@@ -40,7 +41,7 @@ import (
 // fakegithub（本地 git 仓库，分支和 PR 真实移动），规划、取消和结束任务用真实的 AI 核心（ai.Core）。Runner 的领取、
 // 推送由测试直接模拟（Runner 端由 internal/runner 的测试覆盖）；PR head 上 CI 的结果由 fakeCI 提供（组装层实现）。
 
-func TestMain(m *testing.M) { pgtest.Main(m) }
+func TestMain(m *testing.M) { pgtest.MainWith(m, gittest.Cleanup) }
 
 var testKey = sync.OnceValue(func() *rsa.PrivateKey {
 	k, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -106,13 +107,12 @@ func newHarness(t *testing.T, config string) *harness {
 		t.Skip("没有 git")
 	}
 	h := &harness{t: t, ctx: t.Context(), db: store.New(pgtest.Pool(t)), dir: t.TempDir(), host: "host-dev"}
-	h.git("init", "-q", "-b", "main")
 	files := map[string]string{"README.md": "demo\n"}
 	if config != "" {
 		files[".kiln/agent/config.yml"] = config
 		files[".kiln/agent/development.md"] = "开发说明\n"
 	}
-	h.commitOn("main", files, "init")
+	gittest.Init(t, h.dir, "main", files)
 	h.fake = fakegithub.New(testAccount)
 	t.Cleanup(h.fake.Close)
 	h.repo = &fakegithub.Repo{ID: testRepoID, Owner: testAccount, Name: "demo", Dir: h.dir, Private: true}

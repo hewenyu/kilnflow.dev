@@ -57,29 +57,35 @@ func (s *Server) getTree(w http.ResponseWriter, r *http.Request) {
 	if rp == nil {
 		return
 	}
-	out, err := git(r.Context(), rp.Dir, []string{"ls-tree", "-r", "-t", "-l", "-z"}, r.PathValue("sha"))
-	if err != nil {
-		notFound(w)
+	v, ok := s.cachedObject(r, rp, objectTree, func() (map[string]any, bool) {
+		out, err := git(r.Context(), rp.Dir, []string{"ls-tree", "-r", "-t", "-l", "-z"}, r.PathValue("sha"))
+		if err != nil {
+			notFound(w)
+			return nil, false
+		}
+		var entries []map[string]any
+		for rec := range strings.SplitSeq(out, "\x00") {
+			meta, path, ok := strings.Cut(rec, "\t")
+			if !ok {
+				continue
+			}
+			// mode type sha size
+			f := strings.Fields(meta)
+			if len(f) < 4 {
+				continue
+			}
+			e := map[string]any{"path": path, "mode": f[0], "type": f[1], "sha": f[2]}
+			if n, err := strconv.ParseInt(f[3], 10, 64); err == nil {
+				e["size"] = n
+			}
+			entries = append(entries, e)
+		}
+		return map[string]any{"sha": r.PathValue("sha"), "tree": entries, "truncated": false}, true
+	})
+	if !ok {
 		return
 	}
-	var entries []map[string]any
-	for rec := range strings.SplitSeq(out, "\x00") {
-		meta, path, ok := strings.Cut(rec, "\t")
-		if !ok {
-			continue
-		}
-		// mode type sha size
-		f := strings.Fields(meta)
-		if len(f) < 4 {
-			continue
-		}
-		e := map[string]any{"path": path, "mode": f[0], "type": f[1], "sha": f[2]}
-		if n, err := strconv.ParseInt(f[3], 10, 64); err == nil {
-			e["size"] = n
-		}
-		entries = append(entries, e)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"sha": r.PathValue("sha"), "tree": entries, "truncated": false})
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (s *Server) getBlob(w http.ResponseWriter, r *http.Request) {
@@ -87,12 +93,18 @@ func (s *Server) getBlob(w http.ResponseWriter, r *http.Request) {
 	if rp == nil {
 		return
 	}
-	out, err := git(r.Context(), rp.Dir, []string{"cat-file", "blob"}, r.PathValue("sha"))
-	if err != nil {
-		notFound(w)
+	v, ok := s.cachedObject(r, rp, objectBlob, func() (map[string]any, bool) {
+		out, err := git(r.Context(), rp.Dir, []string{"cat-file", "blob"}, r.PathValue("sha"))
+		if err != nil {
+			notFound(w)
+			return nil, false
+		}
+		return map[string]any{"sha": r.PathValue("sha"), "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(out))}, true
+	})
+	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sha": r.PathValue("sha"), "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(out))})
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (s *Server) getCommit(w http.ResponseWriter, r *http.Request) {
@@ -100,25 +112,31 @@ func (s *Server) getCommit(w http.ResponseWriter, r *http.Request) {
 	if rp == nil {
 		return
 	}
-	out, err := git(r.Context(), rp.Dir, []string{"show", "-s", "--format=%H%n%cI%n%T%n%P%n%s"}, r.PathValue("sha"))
-	if err != nil {
-		notFound(w)
-		return
-	}
-	// sha、提交时间、tree、父提交、标题
-	l := strings.SplitN(out, "\n", 5)
-	if len(l) < 5 {
-		writeMessage(w, http.StatusInternalServerError, "unexpected git output")
-		return
-	}
-	parents := []any{}
-	for p := range strings.FieldsSeq(l[3]) {
-		parents = append(parents, map[string]any{"sha": p})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"sha": l[0], "message": strings.TrimSpace(l[4]),
-		"committer": map[string]any{"date": l[1]}, "tree": map[string]any{"sha": l[2]}, "parents": parents,
+	v, ok := s.cachedObject(r, rp, objectCommit, func() (map[string]any, bool) {
+		out, err := git(r.Context(), rp.Dir, []string{"show", "-s", "--format=%H%n%cI%n%T%n%P%n%s"}, r.PathValue("sha"))
+		if err != nil {
+			notFound(w)
+			return nil, false
+		}
+		// sha、提交时间、tree、父提交、标题
+		l := strings.SplitN(out, "\n", 5)
+		if len(l) < 5 {
+			writeMessage(w, http.StatusInternalServerError, "unexpected git output")
+			return nil, false
+		}
+		parents := []any{}
+		for p := range strings.FieldsSeq(l[3]) {
+			parents = append(parents, map[string]any{"sha": p})
+		}
+		return map[string]any{
+			"sha": l[0], "message": strings.TrimSpace(l[4]),
+			"committer": map[string]any{"date": l[1]}, "tree": map[string]any{"sha": l[2]}, "parents": parents,
+		}, true
 	})
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (s *Server) getRef(w http.ResponseWriter, r *http.Request) {

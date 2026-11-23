@@ -159,10 +159,16 @@ func (a *adminConn) close() {
 }
 
 // Main 运行测试，结束后删除模板库和槽位库、停止本地启动的 Postgres，然后以测试的结果退出。
-func Main(m *testing.M) {
+func Main(m *testing.M) { MainWith(m) }
+
+// MainWith 同 Main，并在退出前依次调用 extra 的清理（例如 gittest.Cleanup 删除测试用的 git 模板目录）。
+func MainWith(m *testing.M, extra ...func()) {
 	mainActive = true
 	code := m.Run()
 	cleanup()
+	for _, f := range extra {
+		f()
+	}
 	os.Exit(code)
 }
 

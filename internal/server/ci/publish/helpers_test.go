@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +22,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/cas"
 	"github.com/hewenyu/kilnflow.dev/internal/fakegithub"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/secretbox"
 	"github.com/hewenyu/kilnflow.dev/internal/server/ci/engine"
@@ -33,7 +33,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/workflow"
 )
 
-func TestMain(m *testing.M) { pgtest.Main(m) }
+func TestMain(m *testing.M) { pgtest.MainWith(m, gittest.Cleanup) }
 
 // 测试中的源仓库（私有）和跨仓库发布的目标仓库（公开），都属于账号 tester、installation 777。
 const (
@@ -135,18 +135,7 @@ func gitRepo(t *testing.T, files map[string]string) string {
 		t.Skip("没有 git")
 	}
 	dir := t.TempDir()
-	for name, content := range files {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	git(t, dir, "init", "-q", "-b", "main")
-	git(t, dir, "add", "-A")
-	git(t, dir, "commit", "-q", "--allow-empty", "-m", "init")
+	gittest.Init(t, dir, "main", files)
 	return dir
 }
 

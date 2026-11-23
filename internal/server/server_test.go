@@ -25,11 +25,12 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/cas"
 	"github.com/hewenyu/kilnflow.dev/internal/fakegithub"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/server/auth"
 )
 
-func TestMain(m *testing.M) { pgtest.Main(m) }
+func TestMain(m *testing.M) { pgtest.MainWith(m, gittest.Cleanup) }
 
 func TestDownloadDisposition(t *testing.T) {
 	t.Parallel()

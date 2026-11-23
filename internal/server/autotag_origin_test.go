@@ -4,10 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +13,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/fakegithub"
 	"github.com/hewenyu/kilnflow.dev/internal/forge"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/server/autotag"
 	"github.com/hewenyu/kilnflow.dev/internal/server/outbox"
@@ -45,18 +43,6 @@ func (p *assemblyPlanner) requests() []autotag.TagPush {
 }
 
 // asmGit 在 dir 中执行 git（测试自带的提交环境）。
-func asmGit(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.CommandContext(context.WithoutCancel(t.Context()), "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t",
-		"GIT_COMMITTER_EMAIL=t@example.com", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v：%v\n%s", args, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
 
 // TestAutoTagOriginSingleConnectionPool：连接池上限为 1 时，自动打 tag 的执行者用真实的 devTagOrigin（aidev 的
 // ResolveAutoTagOrigin）判定来源也不会死锁：判定、写记录、读配置都在持有仓库锁的那一个连接上完成。
@@ -82,16 +68,7 @@ func TestAutoTagOriginSingleConnectionPool(t *testing.T) {
 
 	// 仓库：本地 git 仓库（合并进来一个带 .kiln/merge.yml 的 main）和模拟的 GitHub
 	dir := t.TempDir()
-	asmGit(t, dir, "init", "-q", "-b", "main")
-	if err := os.MkdirAll(filepath.Join(dir, ".kiln"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, ".kiln", "merge.yml"), []byte("tag: {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	asmGit(t, dir, "add", "-A")
-	asmGit(t, dir, "commit", "-q", "-m", "init")
-	sha := asmGit(t, dir, "rev-parse", "HEAD")
+	sha := gittest.Init(t, dir, "main", map[string]string{".kiln/merge.yml": "tag: {}\n"})
 
 	fake := fakegithub.New("alice")
 	t.Cleanup(fake.Close)
