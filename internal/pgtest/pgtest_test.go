@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -267,6 +268,63 @@ func TestDDLChangeDiscardsSlot(t *testing.T) {
 	})
 }
 
+// leakedConnHangGuard 是等待 releaseSlot 返回的余量：超过 residualConnWait 这么多还没返回，
+// 就说明它在等锁而不是按超时丢弃槽位。
+const leakedConnHangGuard = 10 * time.Second
+
+// 测试泄漏的外部连接持有表锁时，releaseSlot 不能挂死：先等残留连接归零（最多 residualConnWait），
+// 等不到就丢弃槽位，而不是让需要 AccessExclusiveLock 的 TRUNCATE 一直等锁。
+// 下一次 Pool 必须拿到结构完好的新槽位。
+func TestLeakedLockedConnectionDiscardsSlot(t *testing.T) {
+	resetSlots(t)
+
+	var leaked *pgx.Conn
+	var leakedName string
+	t.Cleanup(func() {
+		if leaked != nil {
+			_ = leaked.Close(context.Background())
+		}
+	})
+	t.Run("泄漏连接持有表锁", func(t *testing.T) {
+		s := acquireSlot(t)
+		leakedName = s.name
+		ctx := context.Background()
+		conn, err := pgx.Connect(ctx, withDatabase(adminURL, s.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		leaked = conn
+		if _, err := conn.Exec(ctx, `BEGIN`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conn.Exec(ctx, `LOCK TABLE installations IN ACCESS EXCLUSIVE MODE`); err != nil {
+			t.Fatal(err)
+		}
+		// 旧顺序先执行 TRUNCATE（需要 AccessExclusiveLock），会一直等这个未提交的事务。
+		start := time.Now()
+		done := make(chan struct{})
+		go func() {
+			releaseSlot(context.Background(), s)
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(residualConnWait + leakedConnHangGuard):
+			t.Fatal("releaseSlot 在残留连接持有表锁时没有返回")
+		}
+		if elapsed := time.Since(start); elapsed < residualConnWait {
+			t.Errorf("releaseSlot 只用了 %v 就返回，应等待 residualConnWait（%v）后丢弃", elapsed, residualConnWait)
+		}
+	})
+	t.Run("新槽位完好可用", func(t *testing.T) {
+		p := Pool(t)
+		if got := currentDatabase(t, p); got == leakedName {
+			t.Fatalf("持有表锁的槽位应被丢弃，实际复用了 %s", got)
+		}
+		assertCleanInstallations(t, p)
+	})
+}
+
 // resetSlots 清空并删除空闲池中的槽位：需要独占空闲池的测试（复用、种子、DDL）从干净状态开始。
 func resetSlots(tb testing.TB) {
 	tb.Helper()
@@ -314,16 +372,14 @@ func installSeedProbe(tb testing.TB) {
 	if err != nil {
 		tb.Fatal(err)
 	}
-	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
-	if _, err := conn.Exec(ctx, `CREATE TABLE public.pgtest_seed_probe (id bigint PRIMARY KEY, note text NOT NULL)`); err != nil {
-		tb.Fatal(err)
+	meta, metaErr := addSeedProbe(ctx, conn)
+	// 关闭后等模板库的会话归零，否则下一次 CREATE DATABASE ... TEMPLATE 会因还有会话而失败。
+	closeErr := closeTemplateConn(ctx, conn)
+	if metaErr != nil {
+		tb.Fatal(metaErr)
 	}
-	if _, err := conn.Exec(ctx, `INSERT INTO public.pgtest_seed_probe (id, note) VALUES (1, 'keep')`); err != nil {
-		tb.Fatal(err)
-	}
-	meta, err := buildMetadata(ctx, conn)
-	if err != nil {
-		tb.Fatal(err)
+	if closeErr != nil {
+		tb.Fatalf("pgtest：等待模板库空闲：%v", closeErr)
 	}
 	templateSig, userTables, seedTables, sequences = meta.signature, meta.userTables, meta.seedTables, meta.sequences
 	tb.Cleanup(func() {
@@ -333,17 +389,33 @@ func installSeedProbe(tb testing.TB) {
 			tb.Logf("pgtest：移除种子探针：%v", err)
 			return
 		}
-		defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
 		if _, err := conn.Exec(ctx, `DROP TABLE IF EXISTS public.pgtest_seed_probe`); err != nil {
+			_ = conn.Close(context.WithoutCancel(ctx))
 			tb.Logf("pgtest：移除种子探针：%v", err)
 			return
 		}
 		meta, err := buildMetadata(ctx, conn)
+		closeErr := closeTemplateConn(ctx, conn)
 		if err != nil {
 			tb.Logf("pgtest：重建模板元数据：%v", err)
+			return
+		}
+		if closeErr != nil {
+			tb.Logf("pgtest：等待模板库空闲：%v", closeErr)
 			return
 		}
 		templateSig, userTables, seedTables, sequences = meta.signature, meta.userTables, meta.seedTables, meta.sequences
 		resetSlots(tb)
 	})
+}
+
+// addSeedProbe 在模板库中建立带初始行的探针表，并重新计算模板元数据。
+func addSeedProbe(ctx context.Context, conn *pgx.Conn) (metadata, error) {
+	if _, err := conn.Exec(ctx, `CREATE TABLE public.pgtest_seed_probe (id bigint PRIMARY KEY, note text NOT NULL)`); err != nil {
+		return metadata{}, err
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO public.pgtest_seed_probe (id, note) VALUES (1, 'keep')`); err != nil {
+		return metadata{}, err
+	}
+	return buildMetadata(ctx, conn)
 }

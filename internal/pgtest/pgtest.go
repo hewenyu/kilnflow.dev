@@ -69,6 +69,16 @@ const (
 	// 关闭连接是异步的，立刻检查可能看到正在退出的会话。超过这个时间还有连接才丢弃槽位。
 	residualConnWait = 2 * time.Second
 	residualConnPoll = 20 * time.Millisecond
+
+	// resetTimeout 是归还槽位时清空数据、还原种子的总时间上限：测试泄漏的连接可能持有表锁，
+	// 没有上限时一次疏忽会挂住整个测试进程。
+	resetTimeout = 30 * time.Second
+	// resetLockTimeout 是 resetData 事务等待表锁的上限（SET LOCAL lock_timeout）：先于 resetTimeout 失败，
+	// 让错误指向锁等待而不是笼统的超时。
+	resetLockTimeout = 10 * time.Second
+	// templateIdleWait 是等待模板库会话归零的时间：CREATE DATABASE ... TEMPLATE 要求模板库没有其他连接
+	// （否则报 SQLSTATE 55006）。刚关闭的迁移连接池、元数据连接可能在后台退出，高负载下要等一会儿。
+	templateIdleWait = 5 * time.Second
 )
 
 var (
@@ -100,8 +110,8 @@ var (
 	sequences   []sequenceState
 )
 
-// slot 是一个可复用的数据库槽位。resetConn 是这个槽位专属的常驻连接：归还时直接用它校验结构、清空数据、
-// 还原种子并检查残留连接，不必每次归还都新建 TCP 连接，也不参与全局 admin 锁的争用。
+// slot 是一个可复用的数据库槽位。resetConn 是这个槽位专属的常驻连接：归还时直接用它检查残留连接、
+// 校验结构、清空数据并还原种子，不必每次归还都新建 TCP 连接，也不参与全局 admin 锁的争用。
 // 它只在当前持有该槽位的测试归还时使用，不会被并发访问。
 type slot struct {
 	name      string
@@ -259,16 +269,19 @@ func setup() error {
 	}
 	pool.Close()
 
-	// 单独连一次模板库计算结构签名、保存种子快照；连接必须在建槽位之前关闭，
-	// 否则 CREATE DATABASE ... TEMPLATE 会因模板库还有会话而失败。
+	// 单独连一次模板库计算结构签名、保存种子快照；连接必须在建槽位之前关闭并等会话归零，
+	// 否则 CREATE DATABASE ... TEMPLATE 会因模板库还有会话而失败（SQLSTATE 55006）。
 	conn, err := pgx.Connect(ctx, withDatabase(adminURL, template))
 	if err != nil {
 		return fmt.Errorf("连接模板库：%w", err)
 	}
-	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
-	meta, err := buildMetadata(ctx, conn)
-	if err != nil {
-		return fmt.Errorf("准备模板库：%w", err)
+	meta, metaErr := buildMetadata(ctx, conn)
+	closeErr := closeTemplateConn(ctx, conn)
+	if metaErr != nil {
+		return fmt.Errorf("准备模板库：%w", metaErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("关闭模板库连接：%w", closeErr)
 	}
 	templateSig, userTables, seedTables, sequences = meta.signature, meta.userTables, meta.seedTables, meta.sequences
 	return nil
@@ -320,6 +333,42 @@ func dropDatabase(ctx context.Context, name string) error {
 		_, err := conn.Exec(ctx, sql)
 		return err
 	})
+}
+
+// closeTemplateConn 关闭模板库连接并等待模板库在 pg_stat_activity 上没有其他会话。
+// CREATE DATABASE ... TEMPLATE 要求模板库没有连接（否则报 SQLSTATE 55006），而关闭连接是异步的。
+func closeTemplateConn(ctx context.Context, conn *pgx.Conn) error {
+	if err := conn.Close(context.WithoutCancel(ctx)); err != nil {
+		return err
+	}
+	return waitTemplateIdle(ctx)
+}
+
+// waitTemplateIdle 等待模板库上除本连接外的会话归零（最多 templateIdleWait）。
+// 用维护库连接查询：模板库自己已经没有连接可用。
+func waitTemplateIdle(ctx context.Context) error {
+	deadline := time.Now().Add(templateIdleWait)
+	for {
+		var n int
+		err := admin.run(ctx, func(ctx context.Context, conn *pgx.Conn) error {
+			return conn.QueryRow(ctx,
+				"SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()", template).Scan(&n)
+		})
+		if err != nil {
+			return fmt.Errorf("检查模板库会话：%w", err)
+		}
+		if n == 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("模板库仍有 %d 个会话", n)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(residualConnPoll):
+		}
+	}
 }
 
 // waitReady 等待外部 Postgres 可以连接。
@@ -401,17 +450,26 @@ func discardSlot(ctx context.Context, s *slot) {
 	slotMu.Unlock()
 }
 
-// resetSlot 校验槽位结构、清空数据并还原种子行，最后确认没有残留连接。
+// resetSlot 先确认没有残留连接，再校验结构、清空数据并还原种子行。
+// 顺序不能反：泄漏的连接可能持有表锁，先执行 TRUNCATE 会一直等它，永远走不到残留连接的超时判断。
+// 整个重置有 resetTimeout 上限，任何意外的锁等待都会失败并丢弃槽位，不挂住测试进程。
 func resetSlot(ctx context.Context, s *slot) error {
+	ctx, cancel := context.WithTimeout(ctx, resetTimeout)
+	defer cancel()
 	conn, err := s.conn(ctx)
 	if err != nil {
 		return err
 	}
-	if err := resetData(ctx, conn); err != nil {
+	if err := waitNoResidualConns(ctx, conn); err != nil {
 		return err
 	}
-	// 连接池已经关闭，刚关闭的后端可能还在退出过程中，等一小会儿再看；仍有别的 goroutine 遗留的连接时不能复用。
-	// 用槽位自己的常驻连接查询（pid <> pg_backend_pid() 排除自己），不抢全局 admin 锁。
+	return resetData(ctx, conn)
+}
+
+// waitNoResidualConns 等待槽位库里除本连接外的会话归零（最多 residualConnWait）。
+// 连接池已经关闭，刚关闭的后端可能还在退出过程中，等一小会儿再看；仍有别的 goroutine 遗留的连接时不能复用。
+// 用槽位自己的常驻连接查询（pid <> pg_backend_pid() 排除自己），不抢全局 admin 锁。
+func waitNoResidualConns(ctx context.Context, conn *pgx.Conn) error {
 	deadline := time.Now().Add(residualConnWait)
 	for {
 		var n int
@@ -448,6 +506,10 @@ func resetData(ctx context.Context, conn *pgx.Conn) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	// 残留检查之后仍可能有新连接拿锁：等待表锁的时间设上限，失败时丢弃槽位而不是无限等待。
+	if _, err := tx.Exec(ctx, "SELECT set_config('lock_timeout', $1, true)", resetLockTimeout.String()); err != nil {
+		return fmt.Errorf("设置锁超时：%w", err)
+	}
 	if len(userTables) > 0 {
 		names := make([]string, len(userTables))
 		for i, t := range userTables {

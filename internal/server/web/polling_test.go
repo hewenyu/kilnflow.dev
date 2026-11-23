@@ -64,21 +64,54 @@ func TestOverviewActiveCount(t *testing.T) {
 }
 
 // TestOverviewActiveCountAtLimit：任一列达到上限时不知道上限之外还有多少，照常查询总数。
+// 造出超过上限的数据，使"两列列出数量之和"（overviewActiveLimit + 1）与数据库中的真实总数
+// （overviewActiveLimit + 2）不同：误用列出的数量、或把上限判断改成恒真都会得到错误结果。
 func TestOverviewActiveCountAtLimit(t *testing.T) {
 	t.Parallel()
-	e := newWebEnv(t)
-	for range overviewActiveLimit {
-		e.addRun(runOpts{state: store.RunActive})
-	}
-	e.addRun(runOpts{state: store.RunQueued})
+	const overLimit = overviewActiveLimit + 1
+	const total = overLimit + 1 // 超过上限的一列 + 另一列的 1 个
 
-	body := e.get(e.alice, "/").Body.String()
-	page := parsePage(t, body)
-	p := pageData[overviewPage](t, body)
-	if len(p.Running) != overviewActiveLimit {
-		t.Fatalf("运行中列出 %d 个，应为上限 %d", len(p.Running), overviewActiveLimit)
-	}
-	if want := overviewActiveLimit + 1; page.Active != want {
-		t.Errorf("活跃 run 数 = %d，应为 %d", page.Active, want)
-	}
+	t.Run("运行中超过上限", func(t *testing.T) {
+		t.Parallel()
+		e := newWebEnv(t)
+		for range overLimit {
+			e.addRun(runOpts{state: store.RunActive})
+		}
+		e.addRun(runOpts{state: store.RunQueued})
+
+		body := e.get(e.alice, "/").Body.String()
+		page := parsePage(t, body)
+		p := pageData[overviewPage](t, body)
+		if len(p.Running) != overviewActiveLimit {
+			t.Fatalf("运行中列出 %d 个，应为上限 %d", len(p.Running), overviewActiveLimit)
+		}
+		if len(p.Queued) != 1 {
+			t.Fatalf("排队中列出 %d 个，应为 1", len(p.Queued))
+		}
+		if page.Active != total {
+			t.Errorf("活跃 run 数 = %d，应为 %d（列出的 %d + 1 不等于总数）", page.Active, total, overviewActiveLimit)
+		}
+	})
+
+	t.Run("排队中超过上限", func(t *testing.T) {
+		t.Parallel()
+		e := newWebEnv(t)
+		e.addRun(runOpts{state: store.RunActive})
+		for range overLimit {
+			e.addRun(runOpts{state: store.RunQueued})
+		}
+
+		body := e.get(e.alice, "/").Body.String()
+		page := parsePage(t, body)
+		p := pageData[overviewPage](t, body)
+		if len(p.Running) != 1 {
+			t.Fatalf("运行中列出 %d 个，应为 1", len(p.Running))
+		}
+		if len(p.Queued) != overviewActiveLimit {
+			t.Fatalf("排队中列出 %d 个，应为上限 %d", len(p.Queued), overviewActiveLimit)
+		}
+		if page.Active != total {
+			t.Errorf("活跃 run 数 = %d，应为 %d（1 + 列出的 %d 不等于总数）", page.Active, total, overviewActiveLimit)
+		}
+	})
 }

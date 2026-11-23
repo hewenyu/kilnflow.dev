@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/fs"
+	"math"
 	"net/http"
 	"path"
 	"strconv"
@@ -79,32 +80,44 @@ const (
 
 // acceptsGzip 判断请求是否接受 gzip：Accept-Encoding 中的 gzip（或 *）且质量因子不为 0。
 // 明确写出 gzip 的项比 * 更具体（RFC 9110），优先于它：gzip;q=0, * 不接受 gzip。
+// Accept-Encoding 可以有多行（RFC 9110 §5.3），每一行都要看：只看第一行会把分处两行的 "*" 与 "gzip;q=0"
+// 或 "br" 与 "gzip" 判断错。
 func acceptsGzip(r *http.Request) bool {
 	var gzipQ float64
 	gzipSeen, wildcard := false, false
-	for part := range strings.SplitSeq(r.Header.Get("Accept-Encoding"), ",") {
-		coding, params, _ := strings.Cut(strings.TrimSpace(part), ";")
-		q := 1.0
-		for p := range strings.SplitSeq(params, ";") {
-			k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
-			if !ok || !strings.EqualFold(strings.TrimSpace(k), "q") {
-				continue
+	for _, line := range r.Header.Values("Accept-Encoding") {
+		for part := range strings.SplitSeq(line, ",") {
+			coding, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+			q := 1.0
+			for p := range strings.SplitSeq(params, ";") {
+				k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+				if !ok || !strings.EqualFold(strings.TrimSpace(k), "q") {
+					continue
+				}
+				q = parseQuality(strings.TrimSpace(v))
 			}
-			if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
-				q = f
+			switch strings.ToLower(strings.TrimSpace(coding)) {
+			case "gzip", "x-gzip":
+				gzipSeen, gzipQ = true, q
+			case "*":
+				wildcard = q > 0
 			}
-		}
-		switch strings.ToLower(strings.TrimSpace(coding)) {
-		case "gzip", "x-gzip":
-			gzipSeen, gzipQ = true, q
-		case "*":
-			wildcard = q > 0
 		}
 	}
 	if gzipSeen {
 		return gzipQ > 0
 	}
 	return wildcard
+}
+
+// parseQuality 解析质量因子；非法值（无法解析、NaN、无穷、小于 0 或大于 1）按 0 处理。
+// RFC 9110 的 qvalue 只允许 0 到 1，非法值不能误当成默认的 1，否则会发送客户端明确表达不了的数据。
+func parseQuality(v string) float64 {
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f < 0 || f > 1 {
+		return 0
+	}
+	return f
 }
 
 // newGzipWriter 返回用 BestSpeed 压缩的 gzip.Writer（页面数据是高频轮询，压缩速度优先）。BestSpeed 是合法的级别，

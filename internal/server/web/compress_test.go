@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 )
@@ -151,6 +152,90 @@ func TestServeAssetAcceptEncoding(t *testing.T) {
 				t.Errorf("Accept-Encoding: %s 时是否压缩 = %v，应为 %v", c.header, got, c.gzip)
 			}
 		})
+	}
+}
+
+// TestAcceptsGzipMultiLine：Accept-Encoding 可以有多行（RFC 9110 §5.3），每一行都要参与判断；
+// 只看第一行会在拒绝与通配、或 gzip 落在第二行时判断错。
+func TestAcceptsGzipMultiLine(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name    string
+		headers []string
+		gzip    bool
+	}{
+		{"通配与拒绝分在两行", []string{"*", "gzip;q=0"}, false},
+		{"gzip 在第二行", []string{"br", "gzip"}, true},
+		{"拒绝与通配分在两行", []string{"gzip;q=0", "*"}, false},
+		{"第二行带质量因子", []string{"br", "deflate, gzip;q=0.5"}, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			for _, h := range c.headers {
+				r.Header.Add("Accept-Encoding", h)
+			}
+			if got := acceptsGzip(r); got != c.gzip {
+				t.Errorf("Accept-Encoding=%v 时 acceptsGzip = %v，应为 %v", c.headers, got, c.gzip)
+			}
+		})
+	}
+}
+
+// TestAcceptsGzipInvalidQuality：非法的 q 值（无法解析、负值、超过 1、非有限数）按 0 处理，不压缩。
+func TestAcceptsGzipInvalidQuality(t *testing.T) {
+	t.Parallel()
+	for _, header := range []string{"gzip;q=invalid", "gzip;q=-1", "gzip;q=2", "gzip;q=NaN", "gzip;q=+Inf", "gzip;q="} {
+		t.Run(header, func(t *testing.T) {
+			t.Parallel()
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set("Accept-Encoding", header)
+			if acceptsGzip(r) {
+				t.Errorf("Accept-Encoding=%q 时不应压缩", header)
+			}
+		})
+	}
+}
+
+// TestDashboardConcurrentCompress：同一个 Dashboard 并发处理静态资产（assetsGz 缓存）与页面数据
+// （gzip.Writer 池）时不能有数据竞争；在 -race 下运行。
+func TestDashboardConcurrentCompress(t *testing.T) {
+	t.Parallel()
+	body := assetBody("console.log('kiln');\n")
+	d := assetDashboard(fstest.MapFS{"ui/dist/assets/app-abc123.js": &fstest.MapFile{Data: body}})
+	big := struct{ Body string }{Body: strings.Repeat("kiln", jsonGzipMinSize)}
+
+	const workers = 8
+	const rounds = 5
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			for range rounds {
+				w := httptest.NewRecorder()
+				if i%2 == 0 {
+					r := httptest.NewRequest(http.MethodGet, "/assets/app-abc123.js", nil)
+					r.Header.Set("Accept-Encoding", "gzip")
+					d.serveAsset(w, r)
+				} else {
+					r := httptest.NewRequest(http.MethodGet, "/", nil)
+					r.Header.Set("Accept-Encoding", "gzip")
+					d.writeJSON(w, r, http.StatusOK, big)
+				}
+				if got := w.Result().Header.Get("Content-Encoding"); got != "gzip" {
+					t.Errorf("并发请求的 Content-Encoding = %q，应为 gzip", got)
+					return
+				}
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	if len(d.assetsGz) != 1 {
+		t.Errorf("并发压缩后缓存了 %d 个资产，应为 1", len(d.assetsGz))
 	}
 }
 
