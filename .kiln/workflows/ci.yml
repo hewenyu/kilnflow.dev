@@ -29,7 +29,8 @@ jobs:
       - name: 测试
         run: cd web && pnpm test
       - name: 构建
-        run: cd web && pnpm build
+        # 上一步的 pnpm lint 已做 tsc --noEmit，构建只跑 vite（pnpm build 独立运行时仍会先做类型检查）。
+        run: cd web && pnpm exec vite build
     outputs:
       dist: internal/server/web/ui/dist/
   kiln-orca:
@@ -70,6 +71,10 @@ jobs:
         image: docker.io/library/postgres@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
         env:
           POSTGRES_PASSWORD: kiln
+        # 测试数据不需要持久性：关掉 fsync 等，建库和写入快很多。Runner 把 command 直接接在镜像名之后传给 docker run，
+        # 官方 postgres 镜像的 entrypoint 会 exec 这些参数（等价于 `postgres -c fsync=off …`）。max_connections 给到 500：
+        # 每个包各持常驻 reset 连接，加上并发测试连接池，默认 100 不够。
+        command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off", "-c", "max_connections=500"]
     env:
       GOTOOLCHAIN: local
       GOMAXPROCS: "2"
