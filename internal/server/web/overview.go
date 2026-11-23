@@ -145,6 +145,11 @@ func (d *Dashboard) pageOverview(w http.ResponseWriter, r *http.Request, se *ses
 			return
 		}
 	}
+	// 两列都没有达到上限时，Running+Queued 就是全部活跃 run（QueryRuns 每个状态最多取 overviewActiveLimit 个）；
+	// 交给 renderPage 复用，省掉同一次渲染里再查一次 count。达到上限时不知道上限之外还有多少，照常查询。
+	if len(p.Running) < overviewActiveLimit && len(p.Queued) < overviewActiveLimit {
+		r = r.WithContext(withActiveRuns(r.Context(), len(p.Running)+len(p.Queued)))
+	}
 	d.renderPage(w, r, "overview", message(msgNavOverview), p, http.StatusOK)
 }
 

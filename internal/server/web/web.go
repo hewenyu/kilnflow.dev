@@ -7,11 +7,13 @@ package web
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hewenyu/kilnflow.dev/internal/server/admin"
@@ -96,6 +98,13 @@ type Dashboard struct {
 	githubURL string
 	// reveals 保存刚生成、等待一次性展示的 Runner 注册令牌（见 runners.go）。
 	reveals *enrollReveals
+	// gzipWriters 复用页面数据压缩用的 gzip.Writer（见 ui.go 的 writeJSON）。
+	gzipWriters sync.Pool
+	// assetsMu 保护 assetsGz：内嵌静态资产不可变，按文件名懒压缩一次后复用（见 ui.go 的 serveAsset）。
+	assetsMu sync.Mutex
+	assetsGz map[string][]byte
+	// ui 是前端构建产物的文件系统；nil 时用内嵌的 uiFS（测试替换为内存文件）。
+	ui fs.FS
 }
 
 // New 返回 Dashboard。
@@ -132,10 +141,15 @@ func (d *Dashboard) renderPage(w http.ResponseWriter, r *http.Request, page stri
 	}
 	if se != nil {
 		p.CSRF = d.csrfToken(se)
-		p.Active = d.activeRuns(r.Context())
+		// 页面处理器已经算过活跃 run 数时（总览）直接复用，不再查一次。
+		if n, ok := activeRunsFrom(r.Context()); ok {
+			p.Active = n
+		} else {
+			p.Active = d.activeRuns(r.Context())
+		}
 	}
 	if isUI(r) {
-		d.writeJSON(w, status, p)
+		d.writeJSON(w, r, status, p)
 		return
 	}
 	d.serveIndexWith(w, status, p)
@@ -329,6 +343,20 @@ func deref(s *string) string {
 }
 
 // activeRuns 返回正在进行或排队的 run 数；查询失败（或没有数据库的测试）时返回 0，不影响页面。
+// activeRunsKey 让页面处理器把已经查到的活跃 run 数交给 renderPage，避免同一次渲染再查一次。
+type activeRunsKey struct{}
+
+// withActiveRuns 记录页面处理器已经得到的活跃 run 数。
+func withActiveRuns(ctx context.Context, n int) context.Context {
+	return context.WithValue(ctx, activeRunsKey{}, n)
+}
+
+// activeRunsFrom 返回页面处理器记录的活跃 run 数；没有记录时 ok 为 false。
+func activeRunsFrom(ctx context.Context) (int, bool) {
+	n, ok := ctx.Value(activeRunsKey{}).(int)
+	return n, ok
+}
+
 func (d *Dashboard) activeRuns(ctx context.Context) int {
 	if d.db == nil {
 		return 0

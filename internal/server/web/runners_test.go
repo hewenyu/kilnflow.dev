@@ -85,7 +85,7 @@ func renderAs(t *testing.T, page, role string, data any) string {
 	d := &Dashboard{log: slog.New(slog.DiscardHandler)}
 	w := httptest.NewRecorder()
 	se := &session{Login: "alice", Role: role, Exp: time.Now().Add(time.Hour).Unix()}
-	d.writeJSON(w, http.StatusOK, &uiPage{Page: page, Title: rawText(page), Session: newUISession(se), CSRF: "csrf", Nav: "runners", Status: http.StatusOK, Data: data})
+	d.writeJSON(w, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusOK, &uiPage{Page: page, Title: rawText(page), Session: newUISession(se), CSRF: "csrf", Nav: "runners", Status: http.StatusOK, Data: data})
 	dumpUI("render "+page, w)
 	if w.Code != http.StatusOK {
 		t.Fatalf("编码 %s：HTTP %d：%s", page, w.Code, w.Body.String())

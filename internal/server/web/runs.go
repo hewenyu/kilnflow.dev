@@ -268,6 +268,10 @@ func (d *Dashboard) runViews(ctx context.Context, runs []*cistore.Run, names []s
 
 // currentRerunStarts 返回各 run 最新一次运行的创建时间（没有 run_reruns 记录的不在结果中）。
 func currentRerunStarts(ctx context.Context, q store.Querier, runIDs []int64) (map[int64]time.Time, error) {
+	// 没有 run 时不要往 Postgres 发 ANY('{}')：总览每 5 秒刷新一次，空列表也查询只是白跑一次往返。
+	if len(runIDs) == 0 {
+		return map[int64]time.Time{}, nil
+	}
 	rows, err := q.Query(ctx, `SELECT r.id, rr.created_at FROM runs r JOIN run_reruns rr ON rr.run_id=r.id AND rr.rerun=r.current_rerun
 		WHERE r.id = ANY($1)`, runIDs)
 	if err != nil {
