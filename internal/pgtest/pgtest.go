@@ -33,6 +33,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -507,7 +508,8 @@ func resetData(ctx context.Context, conn *pgx.Conn) error {
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	// 残留检查之后仍可能有新连接拿锁：等待表锁的时间设上限，失败时丢弃槽位而不是无限等待。
-	if _, err := tx.Exec(ctx, "SELECT set_config('lock_timeout', $1, true)", resetLockTimeout.String()); err != nil {
+	// 用毫秒字符串（而不是 Duration.String），避免将来改成复合时长（如 1m5s）不被 Postgres 接受。
+	if _, err := tx.Exec(ctx, "SELECT set_config('lock_timeout', $1, true)", strconv.FormatInt(resetLockTimeout.Milliseconds(), 10)+"ms"); err != nil {
 		return fmt.Errorf("设置锁超时：%w", err)
 	}
 	if len(userTables) > 0 {
