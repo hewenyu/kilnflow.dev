@@ -31,8 +31,15 @@
     "registry": "https://registry.npmjs.org/"
    },
    "Errors": {
-    "scope": "scope \"@Acme\" 无效：不能有大写字母",
-    "token": "为了安全，刚才输入的 token 没有保留，修正上面的错误后请重新输入"
+    "scope": {
+     "id": "settingsErr.scopeUppercase",
+     "params": {
+      "value": "@Acme"
+     }
+    },
+    "token": {
+     "id": "settingsNpm.errTokenNotKept"
+    }
    },
    "Failed": true
   },

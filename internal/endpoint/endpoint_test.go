@@ -48,12 +48,12 @@ func TestCheck(t *testing.T) {
 		{"https://", "缺少主机名", ProblemNoHost},
 		{"https://:443/x", "缺少主机名", ProblemNoHost},
 		{"example.com/x", "缺少主机名", ProblemNoHost},
-		{"https://user:pass@example.com/x", "不能包含用户信息", ProblemUserInfo},
 		{"https://example.com/x?y=1", "不能带查询参数或 fragment", ProblemQuery},
 		{"https://example.com/x#frag", "不能带查询参数或 fragment", ProblemQuery},
 		{"https://example.com/x?", "不能带查询参数或 fragment", ProblemQuery},
 		{"https://example.com/x#", "不能带查询参数或 fragment", ProblemQuery},
 		{"://bad", "无效", ProblemInvalid},
+		{"https://example.com/x@y", "", ""},
 	}
 	for _, c := range cases {
 		err := Check(c.raw, "服务地址")
@@ -73,6 +73,38 @@ func TestCheck(t *testing.T) {
 		}
 		if want := fmt.Sprintf("服务地址 %q ", c.raw); !strings.HasPrefix(err.Error(), want) {
 			t.Errorf("Check(%q) = %q，期望以 %q 开头", c.raw, err, want)
+		}
+	}
+}
+
+// 带（或疑似带）用户信息的地址：无论能否解析、有没有主机名，都归为 ProblemUserInfo，错误中不保留也不回显地址和凭据。
+func TestCheckUserInfoNotEchoed(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{
+		"https://user:s3cret@example.com/x",
+		"https://u:s3cret@:443/",
+		"https://u:s3cret@",
+		"https://u:p%ss@npm.example.com/",
+		"//u:s3cret@npm.example.com/",
+		"u:s3cret@npm.example.com/x",
+	} {
+		err := Check(raw, "服务地址")
+		e, ok := errors.AsType[*Error](err)
+		if !ok || e.Problem != ProblemUserInfo {
+			t.Errorf("Check(%q) = %#v，期望原因码 %q", raw, err, ProblemUserInfo)
+			continue
+		}
+		if e.Raw != "" || e.Err != nil {
+			t.Errorf("Check(%q) 的错误保留了地址：Raw=%q Err=%v", raw, e.Raw, e.Err)
+		}
+		msg := err.Error()
+		if want := "服务地址 不能包含用户信息"; !strings.HasPrefix(msg, want) {
+			t.Errorf("Check(%q) = %q，期望以 %q 开头", raw, msg, want)
+		}
+		for _, secret := range []string{"s3cret", "p%ss", "user"} {
+			if strings.Contains(msg, secret) {
+				t.Errorf("Check(%q) = %q，不能包含 %q", raw, msg, secret)
+			}
 		}
 	}
 }

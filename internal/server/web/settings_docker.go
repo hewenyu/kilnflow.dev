@@ -327,7 +327,7 @@ func (d *Dashboard) postDockerDelete(w http.ResponseWriter, r *http.Request, se 
 		return
 	}
 	if err := d.admin.DeleteDockerConnection(ctx, account, v.Env.Name, se.Login); err != nil {
-		d.flashMsg(w, r, dockerURL(account), d.failureFlash(r, err, msgDockerDeleteFailed, msgDockerDeleteFailedRef, strArg(argAccount, account)))
+		d.flashMsg(w, r, dockerURL(account), d.settingsFailureFlash(r, err, msgDockerDeleteFailed, msgDockerDeleteFailedRef, strArg(argAccount, account)))
 		return
 	}
 	d.flashMsg(w, r, "/settings", message(msgDockerDeleted, strArg(argAccount, account), strArg(argEnv, v.Env.Name)))

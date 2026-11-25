@@ -9,9 +9,40 @@ const fixtures = import.meta.glob<{ default: unknown }>('../../dev/fixtures/sett
 
 const cases = Object.entries(fixtures).map(([path, mod]) => ({ name: path.replace(/^.*\//, ''), json: mod.default }))
 
+/**
+ * formErrorStrings 返回页面数据中表单（Form、EnvForm 等带 Errors 的对象）字段错误里的字符串：字段错误都是服务端给的界面文字，
+ * 应是消息（{id, params}）。rawStrings 把含中文的字符串都当作原样内容从检查中去掉，没迁移的中文错误会因此漏检，所以单独检查。
+ */
+function formErrorStrings(data: unknown): string[] {
+  const out: string[] = []
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) {
+      v.forEach(walk)
+    } else if (typeof v === 'object' && v !== null) {
+      const entries: [string, unknown][] = Object.entries(v)
+      for (const [k, x] of entries) {
+        if (k === 'Errors' && typeof x === 'object' && x !== null) {
+          for (const e of Object.values(x)) if (typeof e === 'string') out.push(e)
+        }
+        walk(x)
+      }
+    }
+  }
+  walk(data)
+  return out
+}
+
 describe('设置页的英文界面', () => {
   it('覆盖全部设置页 fixtures', () => {
     expect(cases.length).toBeGreaterThanOrEqual(38)
+  })
+
+  it('formErrorStrings 找出字段错误中的字符串', () => {
+    expect(formErrorStrings({ Form: { Errors: { a: '中文', b: { id: 'x' } } }, List: [{ EnvForm: { Errors: { c: 'raw' } } }] })).toEqual(['中文', 'raw'])
+  })
+
+  it.each(cases)('$name：表单的字段错误都是消息，不是原样的文字', ({ json }) => {
+    expect(formErrorStrings(envelope(json).Data)).toEqual([])
   })
 
   it.each(cases)('$name：英文界面没有残留的中文', ({ json }) => {

@@ -95,6 +95,8 @@ func settingsErrCases(t *testing.T) []settingsErrCase {
 		{"地址不是 https", registryErr(t, "http://npm.example/"), msgSetErrURLScheme, map[string]any{argValue: "http://npm.example/"}, "必须是 https"},
 		// 带用户信息的地址可能含有凭据：消息中没有地址
 		{"地址带用户信息", registryErr(t, "https://u:s3cret@npm.example/"), msgSetErrURLUserInfo, nil, "不能包含用户信息"},
+		{"地址带用户信息且缺少主机名", registryErr(t, "https://u:s3cret@:443/"), msgSetErrURLUserInfo, nil, "不能包含用户信息"},
+		{"地址带用户信息且无法解析", registryErr(t, "https://u:p%ss@npm.example.com/"), msgSetErrURLUserInfo, nil, "不能包含用户信息"},
 		{
 			"升级 registry 的参数错误（upgradectl 包装）",
 			&upgradectl.InvalidError{Msg: "x", Err: registryErr(t, "http://npm.example/")},
@@ -166,6 +168,18 @@ func TestSettingsFailures(t *testing.T) {
 	if flash.id != msgSetErrAccountNotFound {
 		t.Errorf("已知错误的提示：%+v", flash)
 	}
+	// 删除 Docker Hub 连接时 environment 或账号已被并发删除：显示对应的消息，不是笼统的删除失败
+	for _, c := range []struct {
+		err  error
+		want msgID
+	}{
+		{connect.NewError(connect.CodeInvalidArgument, &store.EnvironmentNotFoundError{Name: "docker-release"}), msgSetErrEnvNotFound},
+		{&store.AccountNotFoundError{Account: "ghost"}, msgSetErrAccountNotFound},
+	} {
+		if got := d.settingsFailureFlash(r, c.err, msgDockerDeleteFailed, msgDockerDeleteFailedRef, strArg(argAccount, "tester")); got.id != c.want {
+			t.Errorf("删除 Docker Hub 连接失败（%v）的提示：%+v", c.err, got)
+		}
+	}
 	flash = d.settingsFailureFlash(r, errors.New("别的原因"), msgNpmDeleteFailed, msgNpmDeleteFailedRef, strArg(argAccount, "tester"))
 	if textZH(t, flash) != "删除 tester 的 npm 配置失败：别的原因" {
 		t.Errorf("其他错误的提示：%q", textZH(t, flash))
@@ -196,14 +210,16 @@ func TestSettingsFailures(t *testing.T) {
 		t.Errorf("限流的提示应能放进地址：%q %v", v, err)
 	}
 
-	// 表单中带用户信息的地址不回填
-	f := newForm()
-	f.Values["registry"] = secretURL
-	dropUserInfo(f, "registry", registryErr(t, secretURL))
-	f.Values["scope"] = "@acme"
-	dropUserInfo(f, "scope", registryErr(t, "http://npm.example/"))
-	if _, ok := f.Values["registry"]; ok || f.Values["scope"] != "@acme" {
-		t.Errorf("只清空带用户信息的地址：%v", f.Values)
+	// 表单中带用户信息的地址不回填（包括缺少主机名、无法解析的）
+	for _, raw := range []string{secretURL, "https://u:s3cret@:443/", "https://u:s3cret@", "https://u:p%ss@npm.example.com/"} {
+		f := newForm()
+		f.Values["registry"] = raw
+		dropUserInfo(f, "registry", registryErr(t, raw))
+		f.Values["scope"] = "@acme"
+		dropUserInfo(f, "scope", registryErr(t, "http://npm.example/"))
+		if _, ok := f.Values["registry"]; ok || f.Values["scope"] != "@acme" {
+			t.Errorf("%s：只清空带用户信息的地址：%v", raw, f.Values)
+		}
 	}
 }
 

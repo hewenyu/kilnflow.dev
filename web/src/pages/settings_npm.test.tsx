@@ -43,10 +43,27 @@ describe('设置 · npm', () => {
     const form = screen.getByRole('form', { name: 'npm 配置' })
     expect(within(form).getByText('没有保存。')).toBeInTheDocument()
     expect(within(form).getByRole('textbox', { name: /scope/ })).toHaveAttribute('aria-invalid', 'true')
-    expect(within(form).getByText('scope "@Acme" 无效：不能有大写字母')).toBeInTheDocument()
+    expect(within(form).getByText('scope @Acme 无效：不能有大写字母')).toBeInTheDocument()
     expect(container.querySelector('input[name="token"]')).toHaveValue('')
     expect(within(form).getByText(/刚才输入的 token 没有保留/)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '删除 npm 配置' })).not.toBeInTheDocument()
+  })
+
+  it('保存失败的字段错误按语言显示：英文界面是英文，中途切换语言随之切换', async () => {
+    const en = tFor('en')
+    const scopeEN = en('settingsErr.scopeUppercase', { value: '@Acme' })
+    const tokenEN = en('settingsNpm.errTokenNotKept')
+    renderPage(envelope(failed), '/settings/npm?account=acme-sandbox', { locale: 'en' })
+    expect(screen.getByText(scopeEN)).toBeInTheDocument()
+    expect(screen.getByText(tokenEN)).toBeInTheDocument()
+    expect(screen.queryByText('scope @Acme 无效：不能有大写字母')).not.toBeInTheDocument()
+    await switchLocale('简体中文')
+    expect(screen.getByText('scope @Acme 无效：不能有大写字母')).toBeInTheDocument()
+    expect(screen.getByText(/刚才输入的 token 没有保留/)).toBeInTheDocument()
+    expect(screen.queryByText(scopeEN)).not.toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText(scopeEN)).toBeInTheDocument()
+    expect(screen.getByText(tokenEN)).toBeInTheDocument()
   })
 
   it('保存时提交账号、scope、registry 和 token', async () => {

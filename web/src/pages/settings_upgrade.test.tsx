@@ -66,8 +66,21 @@ describe('设置 · Runner 升级', () => {
     const input = within(form).getByRole('textbox', { name: /registry 地址/ })
     expect(input).toHaveValue('http://npm.example.com/')
     expect(input).toHaveAttribute('aria-invalid', 'true')
-    expect(within(form).getByText('registry 必须是 https 地址（本机地址除外）')).toBeInTheDocument()
+    expect(within(form).getByText('地址 http://npm.example.com/ 必须是 https（只有本机地址可以用 http）')).toBeInTheDocument()
     expect(screen.getByText(/当前使用/)).toHaveTextContent('当前使用：https://registry.npmjs.org/（官方）')
+  })
+
+  it('字段错误按语言显示：英文界面是英文，中途切换语言随之切换', async () => {
+    const zh = '地址 http://npm.example.com/ 必须是 https（只有本机地址可以用 http）'
+    const en = tFor('en')('settingsErr.urlScheme', { value: 'http://npm.example.com/' })
+    renderPage(envelope(invalid), '/settings/runner-upgrade', { locale: 'en' })
+    expect(screen.getByText(en)).toBeInTheDocument()
+    expect(screen.queryByText(zh)).not.toBeInTheDocument()
+    await switchLocale('简体中文')
+    expect(screen.getByText(zh)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText(en)).toBeInTheDocument()
+    expect(screen.queryByText(zh)).not.toBeInTheDocument()
   })
   it('全部检查更新的结果：等待时长按语言格式化', async () => {
     const flash = { id: 'settingsUpgrade.checkRequested', params: { count: 2, poll: 20 } }

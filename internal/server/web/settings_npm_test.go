@@ -92,6 +92,28 @@ func TestNpmSettingsValidation(t *testing.T) {
 			[]string{"不能包含用户信息", "刚才输入的地址没有保留"},
 			map[string]string{"scope": "@acme", "registry": ""},
 		},
+		// 缺少主机名或无法解析（密码中有不合法的 % 转义）时也按带用户信息处理：错误中不回显地址
+		{
+			"registry 带用户信息且缺少主机名",
+			url.Values{"scope": {"acme"}, "registry": {"https://u:reg-s3cret-pass@:443/"}, "token": {token}},
+			"registry",
+			[]string{"不能包含用户信息", "刚才输入的地址没有保留"},
+			map[string]string{"scope": "@acme", "registry": ""},
+		},
+		{
+			"registry 只有用户信息",
+			url.Values{"scope": {"acme"}, "registry": {"https://u:reg-s3cret-pass@"}, "token": {token}},
+			"registry",
+			[]string{"不能包含用户信息", "刚才输入的地址没有保留"},
+			map[string]string{"scope": "@acme", "registry": ""},
+		},
+		{
+			"registry 带用户信息且无法解析",
+			url.Values{"scope": {"acme"}, "registry": {"https://u:reg-s3cret-p%ss@npm.example.com/"}, "token": {token}},
+			"registry",
+			[]string{"不能包含用户信息", "刚才输入的地址没有保留"},
+			map[string]string{"scope": "@acme", "registry": ""},
+		},
 		{"token 为空", url.Values{"scope": {"@acme"}, "token": {"  "}}, "token", []string{"请填写 npm token"}, map[string]string{"registry": npm.DefaultRegistry}},
 	} {
 		w := e.postNpm(c.form)
@@ -105,10 +127,13 @@ func TestNpmSettingsValidation(t *testing.T) {
 			t.Errorf("%s：应重新渲染 npm 编辑页，实际 %s", c.what, pg.Page)
 		}
 		p := pageData[npmPageData](t, body)
-		noLeak(t, c.what, w, "reg-s3cret-pass")
+		noLeak(t, c.what, w, "reg-s3cret")
 		if p.Form == nil || !p.Form.Failed || p.Form.Errors[c.field].IsZero() || p.Form.Values["token"] != "" {
 			t.Errorf("%s：表单 %+v", c.what, p.Form)
 			continue
+		}
+		if e := p.Form.Errors["registry"]; strings.Contains(textZH(t, e), "s3cret") || strings.Contains(fmt.Sprint(e.params), "s3cret") {
+			t.Errorf("%s：registry 的错误回显了凭据：%+v", c.what, e)
 		}
 		for k, v := range c.values {
 			if p.Form.Values[k] != v {

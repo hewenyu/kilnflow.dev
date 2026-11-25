@@ -61,7 +61,7 @@ func renderData(t *testing.T, page string, data any) string {
 	return renderJSON(t, page, &session{Login: "alice", Role: "user", Exp: time.Now().Add(time.Hour).Unix()}, data)
 }
 
-// renderJSON 以 se 的身份把 data 编码为页面 page 的数据（与 renderStatus 发送给前端的相同），返回 JSON 文本。
+// renderJSON 以 se 的身份把 data 编码为页面 page 的数据（与 renderPage 发送给前端的相同），返回 JSON 文本。
 func renderJSON(t *testing.T, page string, se *session, data any) string {
 	t.Helper()
 	d := &Dashboard{log: slog.New(slog.NewTextHandler(t.Output(), nil))}

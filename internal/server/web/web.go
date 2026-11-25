@@ -24,7 +24,7 @@ import (
 
 // 文件布局：
 //   - web.go：Dashboard、渲染页面数据、中间件和路由；ui.go：前端（index.html、静态文件）和 JSON 模式；json.go：页面数据的 JSON 编码；
-//     funcs.go：少量共用的文字；form.go：表单状态；errors.go：错误页。
+//     text.go：页面数据中的文字（消息与原样文字，各领域的消息在 *_text.go）；form.go：表单状态；errors.go：错误页。
 //   - session.go：登录、会话和登录后的跳转；account.go：登录与身份（绑定 GitHub 账号）、成员、活动；actions.go：run、job、Runner、outbox 和仓库的表单操作。
 //   - runs.go：运行列表和启动构建；run_detail.go、job_detail.go：run 和 job 详情页（日志、产物下载）。
 //   - merge_queue.go：合并队列页、入队和移除，以及 run 详情页上 PR 的队列状态。
