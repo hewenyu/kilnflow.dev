@@ -69,7 +69,7 @@ func RecordAutoTag(ctx context.Context, q recordQuerier, r AutoTagRecord) (bool,
 			pr_number=EXCLUDED.pr_number, labels=EXCLUDED.labels, merged_by=EXCLUDED.merged_by,
 			sender_is_bot=EXCLUDED.sender_is_bot, head_ref=EXCLUDED.head_ref, base_ref=EXCLUDED.base_ref,
 			default_branch_at_merge=EXCLUDED.default_branch_at_merge, work_item_id=NULL, source=EXCLUDED.source,
-			state='pending', tag='', reason='', skip_code='', tries=0, updated_at=now()
+			state='pending', tag='', reason='', reason_code='', reason_params='{}', skip_code='', tries=0, updated_at=now()
 		WHERE auto_tags.state='skipped' AND auto_tags.skip_code=$12 AND auto_tags.base_ref <> EXCLUDED.base_ref`,
 		r.RepoID, r.SHA, r.PR, labels, r.MergedBy, r.SenderIsBot, r.HeadRef, r.BaseRef, r.DefaultBranchAtMerge, r.WorkItemID, r.Source,
 		SkipCodeBranchNotRelease)
@@ -93,7 +93,7 @@ func RecordAutoTag(ctx context.Context, q recordQuerier, r AutoTagRecord) (bool,
 		// 重新激活，绝不丢掉发版分支上的合并。
 		if _, err := q.Exec(ctx, `UPDATE auto_tags SET pr_number=$2, labels=$3, merged_by=$4, sender_is_bot=$5, head_ref=$6,
 			base_ref=$7, default_branch_at_merge=$8, work_item_id=NULL, source=$9, state='pending', tag='', reason='',
-			skip_code='', tries=0, updated_at=now() WHERE id=$1`,
+			reason_code='', reason_params='{}', skip_code='', tries=0, updated_at=now() WHERE id=$1`,
 			id, r.PR, labels, r.MergedBy, r.SenderIsBot, r.HeadRef, r.BaseRef, r.DefaultBranchAtMerge, r.Source); err != nil {
 			return false, err
 		}

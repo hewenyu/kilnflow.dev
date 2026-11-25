@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { list } from './envelope'
+import { list, textSchema } from './envelope'
 
 // 多个页面共用的数据：run、job（服务端 store.Run、store.Job 和 internal/server/web 的 runView、jobView）和合并队列中的一项。
 // 字段名与 Go 一致；Go 的指针编码为 null，时间是 RFC 3339 字符串（零值为 0001-01-01T00:00:00Z）。
@@ -156,10 +156,15 @@ export const mergeQueueEntrySchema = z.object({
   BaseRef: z.string(),
   /** 入队的操作者：github:<login>（在 GitHub 上加 label），或 Dashboard、CLI 的操作者。 */
   EnqueuedBy: z.string(),
-  /** 排队中时当前在等什么。 */
-  Status: z.string(),
+  /** 排队中时当前在等什么；合并后是关闭关联 issue 的进度或失败（服务端的消息，没有原因码的旧记录是原样的中文说明）。 */
+  Status: textSchema,
   /** 出队原因；合并时可能说明是在队列之外合并的。 */
-  Reason: z.string(),
+  Reason: textSchema,
+  /** 状态的语义级别：bad（关闭关联 issue 失败）、warn（结果不明）或空；页面按它显示样式，不看文字。 */
+  StatusTone: z
+    .string()
+    .optional()
+    .transform((v) => v ?? ''),
   /** 自动出队的类别：conflict_dev（与目标分支冲突，已交给 AI 开发返修）、conflict_author（冲突，等待提交者解决）；其他为空。 */
   Removal: z.string(),
   MergeSHA: z.string(),

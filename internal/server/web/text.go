@@ -368,6 +368,108 @@ const (
 	msgNoteSetDigestMismatch  msgID = "docsNote.setDigestMismatch"
 )
 
+// 合并队列与自动打 tag 的消息（页面标题、操作后的提示、队列项的状态和原因、自动打 tag 的原因，见 merge_queue_text.go）。
+const (
+	msgMQTitle        msgID = "mergeQueue.pageTitle"
+	msgMQTitleRepo    msgID = "mergeQueue.pageTitleRepo"
+	msgMQRepoNotFound msgID = "mergeQueue.repoNotFound"
+
+	msgMQAddNoRepo        msgID = "mergeQueue.addNoRepo"
+	msgMQAddBadPR         msgID = "mergeQueue.addBadPR"
+	msgMQAddFailed        msgID = "mergeQueue.addFailed"
+	msgMQAddFailedRef     msgID = "mergeQueue.addFailedRef"
+	msgMQAddNoForge       msgID = "mergeQueue.addNoForge"
+	msgMQAddRepoMissing   msgID = "mergeQueue.addRepoMissing"
+	msgMQAlreadyQueued    msgID = "mergeQueue.alreadyQueued"
+	msgMQAdded            msgID = "mergeQueue.added"
+	msgMQRemoveNoRepo     msgID = "mergeQueue.removeNoRepo"
+	msgMQRemoveBadPR      msgID = "mergeQueue.removeBadPR"
+	msgMQRemoveFailed     msgID = "mergeQueue.removeFailed"
+	msgMQRemoveFailedRef  msgID = "mergeQueue.removeFailedRef"
+	msgMQRemoveNoForge    msgID = "mergeQueue.removeNoForge"
+	msgMQRemoveRepoMiss   msgID = "mergeQueue.removeRepoMissing"
+	msgMQRemoveRequested  msgID = "mergeQueue.removeRequested"
+	msgATRetryMissing     msgID = "autoTag.retryMissing"
+	msgATNotRetryable     msgID = "autoTag.notRetryable"
+	msgATRetryFailed      msgID = "autoTag.retryFailed"
+	msgATRetryFailedRef   msgID = "autoTag.retryFailedRef"
+	msgATRetryRepoMissing msgID = "autoTag.retryRepoMissing"
+	msgATRetried          msgID = "autoTag.retried"
+
+	msgMQStatusWaitPlan         msgID = "mqStatus.waitPlan"
+	msgMQStatusConfigError      msgID = "mqStatus.configError"
+	msgMQStatusUpdating         msgID = "mqStatus.updating"
+	msgMQStatusWaitRuns         msgID = "mqStatus.waitRuns"
+	msgMQStatusPosition         msgID = "mqStatus.position"
+	msgMQStatusPosBranch        msgID = "mqStatus.positionBranch"
+	msgMQStatusRemoving         msgID = "mqStatus.removing"
+	msgMQStatusMerging          msgID = "mqStatus.merging"
+	msgMQStatusUpdateRetry      msgID = "mqStatus.updateRetry"
+	msgMQStatusConflictRead     msgID = "mqStatus.conflictReadFailed"
+	msgMQStatusMergeability     msgID = "mqStatus.mergeability"
+	msgMQStatusBaseRead         msgID = "mqStatus.baseReadFailed"
+	msgMQStatusConflictRec      msgID = "mqStatus.conflictRecording"
+	msgMQStatusClosingIssues    msgID = "mqStatus.closingIssues"
+	msgMQStatusIssuesClosed     msgID = "mqStatus.issuesClosed"
+	msgMQStatusIssuesUnknown    msgID = "mqStatus.issuesUnknown"
+	msgMQStatusIssuesBoth       msgID = "mqStatus.issuesClosedUnknown"
+	msgMQStatusIssuesRetry      msgID = "mqStatus.issuesRetry"
+	msgMQStatusIssuesRetryDeny  msgID = "mqStatus.issuesRetryDenied"
+	msgMQStatusIssuesGaveUp     msgID = "mqStatus.issuesGaveUp"
+	msgMQStatusIssuesGaveUpDeny msgID = "mqStatus.issuesGaveUpDenied"
+	msgMQStatusIssuesInactive   msgID = "mqStatus.issuesInactive"
+
+	msgMQReasonPRClosed          msgID = "mqReason.prClosed"
+	msgMQReasonLabelRemoved      msgID = "mqReason.labelRemoved"
+	msgMQReasonFork              msgID = "mqReason.fork"
+	msgMQReasonDraft             msgID = "mqReason.draft"
+	msgMQReasonNewCommit         msgID = "mqReason.newCommit"
+	msgMQReasonUpdateStalled     msgID = "mqReason.updateStalled"
+	msgMQReasonUpdateUnconfirmed msgID = "mqReason.updateUnconfirmed"
+	msgMQReasonUpdateTimeout     msgID = "mqReason.updateTimeout"
+	msgMQReasonChecksFailed      msgID = "mqReason.checksFailed"
+	msgMQReasonNoChecks          msgID = "mqReason.noChecks"
+	msgMQReasonMissing           msgID = "mqReason.missingRequired"
+	msgMQReasonRequiredFailed    msgID = "mqReason.requiredFailed"
+	msgMQReasonBranch            msgID = "mqReason.branchNotAllowed"
+	msgMQReasonUpdateRejected    msgID = "mqReason.updateRejected"
+	msgMQReasonMergeRejected     msgID = "mqReason.mergeRejected"
+	msgMQReasonConflictAuthor    msgID = "mqReason.conflictAuthor"
+	msgMQReasonConflictDev       msgID = "mqReason.conflictDev"
+	msgMQReasonConflictRetarget  msgID = "mqReason.conflictRetargeted"
+	msgMQReasonConflictEnded     msgID = "mqReason.conflictEnded"
+	msgMQReasonConflictGone      msgID = "mqReason.conflictDevUnavailable"
+	msgMQReasonRepoInactive      msgID = "mqReason.repoInactive"
+	msgMQReasonMergedOutside     msgID = "mqReason.mergedOutside"
+
+	msgATReasonRepoInactive    msgID = "autoTagReason.repoInactive"
+	msgATReasonRetrying        msgID = "autoTagReason.retrying"
+	msgATReasonConfigError     msgID = "autoTagReason.configError"
+	msgATReasonNoTagConfig     msgID = "autoTagReason.noTagConfig"
+	msgATReasonBranchUnknown   msgID = "autoTagReason.branchUnknown"
+	msgATReasonNotTagBranch    msgID = "autoTagReason.notTagBranch"
+	msgATReasonNotDefault      msgID = "autoTagReason.notDefaultBranch"
+	msgATReasonSkipLabel       msgID = "autoTagReason.skipLabel"
+	msgATReasonDesignPR        msgID = "autoTagReason.designPR"
+	msgATReasonOriginChecking  msgID = "autoTagReason.originChecking"
+	msgATReasonOriginUnconfirm msgID = "autoTagReason.originUnconfirmed"
+	msgATReasonOriginPending   msgID = "autoTagReason.originPending"
+	msgATReasonOriginHead      msgID = "autoTagReason.originHeadMismatch"
+	msgATReasonOriginBase      msgID = "autoTagReason.originBaseMismatch"
+	msgATReasonOriginStopped   msgID = "autoTagReason.originStopped"
+	msgATReasonOriginNoChange  msgID = "autoTagReason.originNoChange"
+	msgATReasonOriginNoRecord  msgID = "autoTagReason.originNoRecord"
+	msgATReasonBotSender       msgID = "autoTagReason.botSender"
+	msgATReasonUnknownSender   msgID = "autoTagReason.unknownSender"
+	msgATReasonBotUnauthorized msgID = "autoTagReason.botUnauthorized"
+	msgATReasonAlreadyTagged   msgID = "autoTagReason.alreadyTagged"
+	msgATReasonVersionOrder    msgID = "autoTagReason.versionOrder"
+	msgATReasonVersionOverflow msgID = "autoTagReason.versionOverflow"
+	msgATReasonTagOccupied     msgID = "autoTagReason.tagOccupied"
+	msgATReasonTagRejected     msgID = "autoTagReason.tagRejected"
+	msgATReasonPermission      msgID = "autoTagReason.permission"
+)
+
 // 消息的参数名（同一个参数名在各条消息中的含义相同）。
 const (
 	argLogin = "login"
@@ -421,6 +523,27 @@ const (
 	argLabel      = "label"
 	argChanged    = "changed"
 	argCandidates = "candidates"
+	// 合并队列与自动打 tag：argPR 是 PR 号；argBranch 是 PR 的目标分支，argFromBranch 是 AI 开发工作项开始时的目标分支，
+	// argRelease 是发版分支，argAllowed 是允许合并的分支（已连接）；argPos 是排在第几个；argDone、argTotal 是已结束的和全部的
+	// run 数；argTries 是第几次尝试；argChecks、argRuns 是缺少或没有成功的验证、没有通过的 run（已连接）；argSHA 是短 SHA；
+	// argState 是原样的状态值（PR 的可合并状态、工作项的状态）；argClosed、argUnknown 是已关闭的和结果不明的 issue（已连接）；
+	// argTag 是 tag 名。
+	argPR         = "pr"
+	argBranch     = "branch"
+	argFromBranch = "fromBranch"
+	argRelease    = "release"
+	argAllowed    = "allowed"
+	argPos        = "pos"
+	argDone       = "done"
+	argTotal      = "total"
+	argTries      = "tries"
+	argChecks     = "checks"
+	argRuns       = "runs"
+	argSHA        = "sha"
+	argState      = "state"
+	argClosed     = "closed"
+	argUnknown    = "unknown"
+	argTag        = "tag"
 )
 
 // messages 是服务端给出的全部消息（只读）。
@@ -650,6 +773,103 @@ var messages = map[msgID]msgSpec{
 	msgNoteItemEmptyNoDigest: {}, msgNoteItemEmptyDigest: {}, msgNoteItemRefsMismatch: {}, msgNoteItemRefsNoDigest: {},
 	msgNoteItemDigestMismatch: {}, msgNoteSetEmptyNoDigest: {}, msgNoteSetEmptyDigest: {}, msgNoteSetRefsMismatch: {},
 	msgNoteSetRefsNoDigest: {}, msgNoteSetDigestMismatch: {},
+
+	msgMQTitle:        {},
+	msgMQTitleRepo:    {params: map[string]paramKind{argRepo: paramString}},
+	msgMQRepoNotFound: {params: map[string]paramKind{argRepo: paramString}},
+
+	msgMQAddNoRepo:        {flash: true},
+	msgMQAddBadPR:         {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgMQAddFailed:        {params: map[string]paramKind{argRepo: paramString, argPR: paramInt, argReason: paramString}, flash: true},
+	msgMQAddFailedRef:     {params: map[string]paramKind{argRepo: paramString, argPR: paramInt, argRef: paramString}, flash: true},
+	msgMQAddNoForge:       {params: map[string]paramKind{argRepo: paramString, argPR: paramInt}, flash: true},
+	msgMQAddRepoMissing:   {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgMQAlreadyQueued:    {params: map[string]paramKind{argRepo: paramString, argPR: paramInt}, flash: true},
+	msgMQAdded:            {params: map[string]paramKind{argRepo: paramString, argPR: paramInt, argLabel: paramString}, flash: true},
+	msgMQRemoveNoRepo:     {flash: true},
+	msgMQRemoveBadPR:      {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgMQRemoveFailed:     {params: map[string]paramKind{argRepo: paramString, argPR: paramInt, argReason: paramString}, flash: true},
+	msgMQRemoveFailedRef:  {params: map[string]paramKind{argRepo: paramString, argPR: paramInt, argRef: paramString}, flash: true},
+	msgMQRemoveNoForge:    {params: map[string]paramKind{argRepo: paramString, argPR: paramInt}, flash: true},
+	msgMQRemoveRepoMiss:   {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgMQRemoveRequested:  {params: map[string]paramKind{argRepo: paramString, argPR: paramInt, argLabel: paramString}, flash: true},
+	msgATRetryMissing:     {flash: true},
+	msgATNotRetryable:     {params: map[string]paramKind{argSHA: paramString}, flash: true},
+	msgATRetryFailed:      {params: map[string]paramKind{argSHA: paramString, argReason: paramString}, flash: true},
+	msgATRetryFailedRef:   {params: map[string]paramKind{argSHA: paramString, argRef: paramString}, flash: true},
+	msgATRetryRepoMissing: {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgATRetried:          {params: map[string]paramKind{argSHA: paramString}, flash: true},
+
+	msgMQStatusWaitPlan:         {params: map[string]paramKind{argBranch: paramString}},
+	msgMQStatusConfigError:      {params: map[string]paramKind{argDetail: paramString}},
+	msgMQStatusUpdating:         {},
+	msgMQStatusWaitRuns:         {params: map[string]paramKind{argDone: paramInt, argTotal: paramInt}},
+	msgMQStatusPosition:         {params: map[string]paramKind{argPos: paramInt}},
+	msgMQStatusPosBranch:        {params: map[string]paramKind{argBranch: paramString, argPos: paramInt}},
+	msgMQStatusRemoving:         {},
+	msgMQStatusMerging:          {},
+	msgMQStatusUpdateRetry:      {params: map[string]paramKind{argDetail: paramString}},
+	msgMQStatusConflictRead:     {params: map[string]paramKind{argDetail: paramString}},
+	msgMQStatusMergeability:     {params: map[string]paramKind{argState: paramString}},
+	msgMQStatusBaseRead:         {params: map[string]paramKind{argDetail: paramString}},
+	msgMQStatusConflictRec:      {params: map[string]paramKind{argBranch: paramString, argSHA: paramString, argItem: paramInt}},
+	msgMQStatusClosingIssues:    {},
+	msgMQStatusIssuesClosed:     {params: map[string]paramKind{argClosed: paramString}},
+	msgMQStatusIssuesUnknown:    {params: map[string]paramKind{argUnknown: paramString}},
+	msgMQStatusIssuesBoth:       {params: map[string]paramKind{argClosed: paramString, argUnknown: paramString}},
+	msgMQStatusIssuesRetry:      {params: map[string]paramKind{argTries: paramInt, argDetail: paramString}},
+	msgMQStatusIssuesRetryDeny:  {params: map[string]paramKind{argTries: paramInt, argDetail: paramString}},
+	msgMQStatusIssuesGaveUp:     {params: map[string]paramKind{argCount: paramInt, argDetail: paramString}},
+	msgMQStatusIssuesGaveUpDeny: {params: map[string]paramKind{argCount: paramInt, argDetail: paramString}},
+	msgMQStatusIssuesInactive:   {},
+
+	msgMQReasonPRClosed: {}, msgMQReasonFork: {}, msgMQReasonDraft: {}, msgMQReasonNoChecks: {},
+	msgMQReasonLabelRemoved:      {params: map[string]paramKind{argLabel: paramString}},
+	msgMQReasonNewCommit:         {params: map[string]paramKind{argLabel: paramString}},
+	msgMQReasonUpdateStalled:     {params: map[string]paramKind{argCount: paramInt, argDetail: paramString}},
+	msgMQReasonUpdateUnconfirmed: {params: map[string]paramKind{argCount: paramInt, argState: paramString}},
+	msgMQReasonUpdateTimeout:     {params: map[string]paramKind{argCount: paramInt}},
+	msgMQReasonChecksFailed:      {params: map[string]paramKind{argRuns: paramString}},
+	msgMQReasonMissing:           {params: map[string]paramKind{argChecks: paramString, argPath: paramString}},
+	msgMQReasonRequiredFailed:    {params: map[string]paramKind{argChecks: paramString, argPath: paramString}},
+	msgMQReasonBranch:            {params: map[string]paramKind{argBranch: paramString, argAllowed: paramString}},
+	msgMQReasonUpdateRejected:    {params: map[string]paramKind{argDetail: paramString}},
+	msgMQReasonMergeRejected:     {params: map[string]paramKind{argDetail: paramString}},
+	msgMQReasonConflictAuthor:    {params: map[string]paramKind{argBranch: paramString, argSHA: paramString}},
+	msgMQReasonConflictDev:       {params: map[string]paramKind{argBranch: paramString, argSHA: paramString, argItem: paramInt}},
+	msgMQReasonConflictRetarget: {params: map[string]paramKind{
+		argBranch: paramString, argSHA: paramString, argItem: paramInt, argFromBranch: paramString,
+	}},
+	msgMQReasonConflictEnded: {params: map[string]paramKind{
+		argBranch: paramString, argSHA: paramString, argItem: paramInt, argState: paramString,
+	}},
+	msgMQReasonConflictGone:  {params: map[string]paramKind{argBranch: paramString, argSHA: paramString, argItem: paramInt}},
+	msgMQReasonRepoInactive:  {},
+	msgMQReasonMergedOutside: {},
+
+	msgATReasonRepoInactive: {}, msgATReasonOriginPending: {}, msgATReasonUnknownSender: {}, msgATReasonBotUnauthorized: {},
+	msgATReasonAlreadyTagged:   {},
+	msgATReasonRetrying:        {params: map[string]paramKind{argDetail: paramString}},
+	msgATReasonConfigError:     {params: map[string]paramKind{argDetail: paramString}},
+	msgATReasonNoTagConfig:     {params: map[string]paramKind{argPath: paramString}},
+	msgATReasonBranchUnknown:   {params: map[string]paramKind{argRelease: paramString}},
+	msgATReasonNotTagBranch:    {params: map[string]paramKind{argBranch: paramString, argRelease: paramString}},
+	msgATReasonNotDefault:      {params: map[string]paramKind{argBranch: paramString, argRelease: paramString}},
+	msgATReasonSkipLabel:       {params: map[string]paramKind{argLabel: paramString}},
+	msgATReasonDesignPR:        {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonOriginChecking:  {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonOriginUnconfirm: {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonOriginHead:      {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonOriginBase:      {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonOriginStopped:   {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonOriginNoChange:  {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonOriginNoRecord:  {params: map[string]paramKind{argItem: paramInt}},
+	msgATReasonBotSender:       {params: map[string]paramKind{argLogin: paramString}},
+	msgATReasonVersionOrder:    {params: map[string]paramKind{argTag: paramString}},
+	msgATReasonVersionOverflow: {params: map[string]paramKind{argTag: paramString}},
+	msgATReasonTagOccupied:     {params: map[string]paramKind{argTag: paramString, argSHA: paramString}},
+	msgATReasonTagRejected:     {params: map[string]paramKind{argTag: paramString, argDetail: paramString}},
+	msgATReasonPermission:      {params: map[string]paramKind{argDetail: paramString}},
 }
 
 // uiText 是页面数据中的一段文字：消息（id 加参数，前端按当前语言显示），或原样显示的文字（raw）。零值是空串。

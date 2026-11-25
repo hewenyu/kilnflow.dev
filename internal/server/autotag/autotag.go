@@ -57,7 +57,7 @@ const maxReasonLen = 1000
 const sweepInterval = 10 * time.Minute
 
 // inactiveReason 是仓库停用时放弃 pending 记录的原因。
-const inactiveReason = "仓库已停用（GitHub App 不再能访问这个仓库）"
+var inactiveReason = Note{Code: ReasonRepoInactive}
 
 // ErrBusy 表示另一次处理正在进行。
 var ErrBusy = errors.New("自动打 tag 正在处理这个仓库，稍后重试")
@@ -98,7 +98,10 @@ type DevOrigin struct {
 	CreatorLogin   string
 	DeliveryTaskID int64
 	Issues         []int
-	Reason         string
+	// Reason 是不自动发布的中文说明；ReasonCode 是同一个原因的原因码（ReasonOrigin*、ReasonDesignPR，由组装层从 AI 开发的
+	// 原因码换过来；为空表示没有或者不认识）。
+	Reason     string
+	ReasonCode string
 }
 
 // OriginResolver 判断一个 PR 的来源（AI 开发的实现，PLAN #29.4、#30.3）；必须使用调用方传入的 q。
@@ -157,12 +160,14 @@ type Record struct {
 	// DefaultBranchAtMerge 是合并那一刻仓库的默认分支（未知时为空）；省略 tag.branch 时它是发版分支。
 	DefaultBranchAtMerge string `json:"default_branch_at_merge"`
 	// SkipCode 是结构化的跳过原因码（SkipCodeBranchNotRelease 等；不是跳过时为空）。
-	SkipCode   string    `json:"skip_code"`
-	WorkItemID *int64    `json:"work_item_id"`
-	Source     string    `json:"source"`
-	State      string    `json:"state"`
-	Tag        string    `json:"tag"`
-	Reason     string    `json:"reason"`
+	SkipCode   string `json:"skip_code"`
+	WorkItemID *int64 `json:"work_item_id"`
+	Source     string `json:"source"`
+	State      string `json:"state"`
+	Tag        string `json:"tag"`
+	Reason     string `json:"reason"`
+	// ReasonNote 是 Reason 的原因码和原始参数（Dashboard 按语言显示，见 notes.go）；升级前的旧记录原因码为空。
+	ReasonNote Note      `json:"-"`
 	Tries      int       `json:"tries"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
@@ -177,14 +182,14 @@ type Record struct {
 }
 
 const recordCols = `id, repo_id, sha, pr_number, labels, merged_by, sender_is_bot, head_ref, base_ref, default_branch_at_merge,
-	skip_code, work_item_id, source, state, tag, reason, tries, created_at, updated_at`
+	skip_code, work_item_id, source, state, tag, reason, reason_code, reason_params, tries, created_at, updated_at`
 
 func scanRecords(rows pgx.Rows) ([]*Record, error) {
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (*Record, error) {
 		var x Record
 		err := r.Scan(&x.ID, &x.RepoID, &x.SHA, &x.PR, &x.Labels, &x.MergedBy, &x.SenderIsBot, &x.HeadRef, &x.BaseRef,
-			&x.DefaultBranchAtMerge, &x.SkipCode, &x.WorkItemID, &x.Source, &x.State, &x.Tag, &x.Reason, &x.Tries, &x.CreatedAt,
-			&x.UpdatedAt)
+			&x.DefaultBranchAtMerge, &x.SkipCode, &x.WorkItemID, &x.Source, &x.State, &x.Tag, &x.Reason, &x.ReasonNote.Code,
+			&x.ReasonNote.Params, &x.Tries, &x.CreatedAt, &x.UpdatedAt)
 		return &x, err
 	})
 }
@@ -247,8 +252,8 @@ var ErrNotRetryable = errors.New("只能重试失败或跳过的记录")
 // 列表中会被认出来，列表滞后时创建同名 tag 得到"已存在"，按名字读到指向这个 commit 也会认出来）并通知执行者。
 func (s *Service) Retry(ctx context.Context, repoID int64, sha, actor string) error {
 	err := s.db.Tx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE auto_tags SET state='pending', tag='', reason='', skip_code='', work_item_id=NULL, updated_at=now()
-			WHERE repo_id=$1 AND sha=$2 AND state IN ('failed','skipped')`, repoID, sha)
+		tag, err := tx.Exec(ctx, `UPDATE auto_tags SET state='pending', tag='', reason='', reason_code='', reason_params='{}', skip_code='',
+			work_item_id=NULL, updated_at=now() WHERE repo_id=$1 AND sha=$2 AND state IN ('failed','skipped')`, repoID, sha)
 		if err != nil {
 			return err
 		}
@@ -353,8 +358,8 @@ func (s *Service) tagLocked(ctx context.Context, repoID int64) (_ *store.Repo, e
 		// 停用期间留下会被 Retry 误用）；tagging（已经请求创建、结果可能不明，tag 可能已经建好）和 tagged 保留，
 		// 仓库恢复后按名字确认、照常规划发布（T2，独立审查发现：以前 tagging 也放弃，建好的 tag 永远不发布）
 		err := store.TxOn(ctx, conn, func(tx pgx.Tx) error {
-			if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state='failed', reason=$2, updated_at=now()
-				WHERE repo_id=$1 AND state='pending'`, repoID, inactiveReason); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state='failed', reason=$2, reason_code=$3, reason_params=$4, updated_at=now()
+				WHERE repo_id=$1 AND state='pending'`, repoID, inactiveReason.Text(), inactiveReason.Code, inactiveReason.Params); err != nil {
 				return err
 			}
 			_, err := tx.Exec(ctx, `DELETE FROM auto_tag_candidates WHERE repo_id=$1`, repoID)
@@ -394,8 +399,9 @@ func (s *Service) planTagged(ctx context.Context, repo *store.Repo) error {
 	var errs []error
 	for _, r := range recs {
 		if err := s.plan(ctx, repo, r); err != nil {
-			if _, uerr := s.db.Exec(ctx, `UPDATE auto_tags SET tries=tries+1, reason=$2, updated_at=now() WHERE id=$1 AND state='tagged'`,
-				r.ID, shorten.Text("暂时失败，稍后重试："+err.Error(), maxReasonLen)); uerr != nil {
+			n := note(ReasonRetrying, NoteParams{Detail: err.Error()})
+			if _, uerr := s.db.Exec(ctx, `UPDATE auto_tags SET tries=tries+1, reason=$2, reason_code=$3, reason_params=$4, updated_at=now()
+				WHERE id=$1 AND state='tagged'`, r.ID, shorten.Text(n.Text(), maxReasonLen), n.Code, n.Params); uerr != nil {
 				err = errors.Join(err, uerr)
 			}
 			errs = append(errs, fmt.Errorf("自动打 tag（%s，PR #%d）：%w", shorten.Hash(r.SHA), r.PR, err))
@@ -420,9 +426,9 @@ type pass struct {
 }
 
 // permanentError 是重试没有意义的失败（配置错误、平台拒绝）：记为 failed 后继续处理后面的记录。
-type permanentError struct{ msg string }
+type permanentError struct{ note Note }
 
-func (e *permanentError) Error() string { return e.msg }
+func (e *permanentError) Error() string { return e.note.Text() }
 
 // process 推进一条记录直到建好 tag（tagged）或结束（skipped / failed）。暂时失败时返回错误（记下次数和原因）。
 func (p *pass) process(ctx context.Context, r *Record) error {
@@ -440,13 +446,14 @@ func (p *pass) process(ctx context.Context, r *Record) error {
 			continue
 		}
 		if pe, ok := errors.AsType[*permanentError](err); ok {
-			return p.finish(ctx, r, StateFailed, pe.msg, "autotag.failed")
+			return p.finishNote(ctx, r, StateFailed, pe.note, "autotag.failed")
 		}
 		if forge.IsRejected(err) {
-			return p.finish(ctx, r, StateFailed, err.Error()+"（GitHub App 需要 Contents 的读写权限）", "autotag.failed")
+			return p.finishNote(ctx, r, StateFailed, note(ReasonPermission, NoteParams{Detail: err.Error()}), "autotag.failed")
 		}
-		if _, uerr := p.conn.Exec(ctx, `UPDATE auto_tags SET tries=tries+1, reason=$2, updated_at=now() WHERE id=$1`,
-			r.ID, shorten.Text("暂时失败，稍后重试："+err.Error(), maxReasonLen)); uerr != nil {
+		n := note(ReasonRetrying, NoteParams{Detail: err.Error()})
+		if _, uerr := p.conn.Exec(ctx, `UPDATE auto_tags SET tries=tries+1, reason=$2, reason_code=$3, reason_params=$4, updated_at=now()
+			WHERE id=$1`, r.ID, shorten.Text(n.Text(), maxReasonLen), n.Code, n.Params); uerr != nil {
 			err = errors.Join(err, uerr)
 		}
 		return fmt.Errorf("自动打 tag（%s，PR #%d）：%w", shorten.Hash(r.SHA), r.PR, err)
@@ -475,12 +482,13 @@ func (p *pass) loadConfig(ctx context.Context) error {
 	return nil
 }
 
-// setState 把记录推进到 state（tag 为新的 tag 名，reason 为说明）。进入这些状态时清掉结构化的跳过原因码，并在同一个事务中
-// 清掉这个 commit 的待裁决候选（离开 pending 之后候选不再有意义，绝不残留）。
-func (p *pass) setState(ctx context.Context, r *Record, state, tag, reason string) error {
+// setState 把记录推进到 state（tag 为新的 tag 名，why 为原因，零值表示没有）。进入这些状态时清掉结构化的跳过原因码，并在
+// 同一个事务中清掉这个 commit 的待裁决候选（离开 pending 之后候选不再有意义，绝不残留）。
+func (p *pass) setState(ctx context.Context, r *Record, state, tag string, why Note) error {
+	reason := shorten.Text(why.Text(), maxReasonLen)
 	err := store.TxOn(ctx, p.conn, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, tag=$3, reason=$4, skip_code='', updated_at=now() WHERE id=$1`,
-			r.ID, state, tag, shorten.Text(reason, maxReasonLen)); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, tag=$3, reason=$4, reason_code=$5, reason_params=$6, skip_code='',
+			updated_at=now() WHERE id=$1`, r.ID, state, tag, reason, why.Code, why.Params); err != nil {
 			return err
 		}
 		return clearCandidates(ctx, tx, r.RepoID, r.SHA)
@@ -488,7 +496,7 @@ func (p *pass) setState(ctx context.Context, r *Record, state, tag, reason strin
 	if err != nil {
 		return err
 	}
-	r.State, r.Tag, r.Reason, r.SkipCode = state, tag, reason, ""
+	r.State, r.Tag, r.Reason, r.ReasonNote, r.SkipCode = state, tag, reason, why, ""
 	return nil
 }
 
@@ -530,13 +538,13 @@ const (
 // 当时的默认分支判断它合入的是不是发版分支。
 func (p *pass) resolveCandidates(ctx context.Context, r *Record, mergeDefault string) (candidateOutcome, error) {
 	var (
-		outcome    candidateOutcome
-		promoted   autoTagCandidate
-		skipReason string
+		outcome  candidateOutcome
+		promoted autoTagCandidate
+		skipNote Note
 	)
 	err := store.TxOn(ctx, p.conn, func(tx pgx.Tx) error {
 		// 重试时从头开始：上一次尝试的内存结果作废
-		outcome, promoted, skipReason = candidateMoved, autoTagCandidate{}, ""
+		outcome, promoted, skipNote = candidateMoved, autoTagCandidate{}, Note{}
 		// 第一句先锁父行（与 mqevents.RecordAutoTag 的 FOR UPDATE 串行化）
 		var state string
 		if err := tx.QueryRow(ctx, `SELECT state FROM auto_tags WHERE id=$1 FOR UPDATE`, r.ID).Scan(&state); err != nil {
@@ -565,8 +573,8 @@ func (p *pass) resolveCandidates(ctx context.Context, r *Record, mergeDefault st
 				continue
 			}
 			tag, err := tx.Exec(ctx, `UPDATE auto_tags SET pr_number=$2, labels=$3, merged_by=$4, sender_is_bot=$5, head_ref=$6,
-				base_ref=$7, default_branch_at_merge=$8, source=$9, work_item_id=NULL, tag='', reason='', skip_code='',
-				updated_at=now() WHERE id=$1 AND state='pending'`,
+				base_ref=$7, default_branch_at_merge=$8, source=$9, work_item_id=NULL, tag='', reason='', reason_code='', reason_params='{}',
+				skip_code='', updated_at=now() WHERE id=$1 AND state='pending'`,
 				r.ID, c.PR, c.Labels, c.MergedBy, c.SenderIsBot, c.HeadRef, c.BaseRef, c.DefaultBranchAtMerge, c.Source)
 			if err != nil {
 				return err
@@ -581,9 +589,11 @@ func (p *pass) resolveCandidates(ctx context.Context, r *Record, mergeDefault st
 			return nil
 		}
 		// 没有能发版的候选：同一个事务里记为跳过并清空候选（绝不残留会被误用的候选）
-		reason, _, _ := branchVerdict(r.BaseRef, p.cfg.Tag, mergeDefault)
-		if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason=$3, skip_code=$4, updated_at=now() WHERE id=$1`,
-			r.ID, StateSkipped, shorten.Text(reason, maxReasonLen), SkipCodeBranchNotRelease); err != nil {
+		why, _, _ := branchVerdict(r.BaseRef, p.cfg.Tag, mergeDefault)
+		reason := why.Text()
+		if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason=$3, reason_code=$5, reason_params=$6, skip_code=$4,
+			updated_at=now() WHERE id=$1`,
+			r.ID, StateSkipped, shorten.Text(reason, maxReasonLen), SkipCodeBranchNotRelease, why.Code, why.Params); err != nil {
 			return err
 		}
 		if err := clearCandidates(ctx, tx, r.RepoID, r.SHA); err != nil {
@@ -594,7 +604,7 @@ func (p *pass) resolveCandidates(ctx context.Context, r *Record, mergeDefault st
 		if err := store.Audit(ctx, tx, auditActor, "autotag.skipped", detail); err != nil {
 			return err
 		}
-		skipReason, outcome = reason, candidateSkipped
+		skipNote, outcome = why, candidateSkipped
 		return nil
 	})
 	if err != nil {
@@ -604,9 +614,9 @@ func (p *pass) resolveCandidates(ctx context.Context, r *Record, mergeDefault st
 	case candidatePromoted:
 		r.PR, r.Labels, r.MergedBy, r.SenderIsBot, r.HeadRef = promoted.PR, promoted.Labels, promoted.MergedBy, promoted.SenderIsBot, promoted.HeadRef
 		r.BaseRef, r.DefaultBranchAtMerge, r.Source = promoted.BaseRef, promoted.DefaultBranchAtMerge, promoted.Source
-		r.WorkItemID, r.Tag, r.Reason, r.SkipCode = nil, "", "", ""
+		r.WorkItemID, r.Tag, r.Reason, r.ReasonNote, r.SkipCode = nil, "", "", Note{}, ""
 	case candidateSkipped:
-		r.State, r.Reason, r.SkipCode = StateSkipped, skipReason, SkipCodeBranchNotRelease
+		r.State, r.Reason, r.ReasonNote, r.SkipCode = StateSkipped, skipNote.Text(), skipNote, SkipCodeBranchNotRelease
 	case candidateMoved:
 		// 记录在事务里已经不是 pending：重新读到真实的记录，交给 process 按状态继续（理论上不会发生）
 		if err := p.reload(ctx, r); err != nil {
@@ -632,21 +642,27 @@ func (p *pass) reload(ctx context.Context, r *Record) error {
 	return nil
 }
 
-// finish 把记录结束为 state（skipped / failed）并写审计日志。r.SkipCode 是结构化的跳过原因码（不跳过时为空）。
-func (p *pass) finish(ctx context.Context, r *Record, state, reason, action string) error {
+// finishNote 与 finish 相同，中文说明是原因码的说明。
+func (p *pass) finishNote(ctx context.Context, r *Record, state string, why Note, action string) error {
+	return p.finish(ctx, r, state, why.Text(), why, action)
+}
+
+// finish 把记录结束为 state（skipped / failed）并写审计日志：reason 是中文说明，why 是同一个原因的原因码（零值表示没有）。
+// r.SkipCode 是结构化的跳过原因码（不跳过时为空）。
+func (p *pass) finish(ctx context.Context, r *Record, state, reason string, why Note, action string) error {
 	// 写审计之前只读补齐来源详情：tagging 崩溃恢复后内存中的来源字段已经丢失（例如恢复后创建 tag 被平台明确拒绝、转到
 	// failed）。只用于审计，补齐失败只记 warn，不改变状态转移（T2 续做）。
 	p.s.enrichOrigin(ctx, p.conn, r)
 	return store.TxOn(ctx, p.conn, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason=$3, skip_code=$4, updated_at=now() WHERE id=$1`,
-			r.ID, state, shorten.Text(reason, maxReasonLen), r.SkipCode); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason=$3, reason_code=$5, reason_params=$6, skip_code=$4,
+			updated_at=now() WHERE id=$1`, r.ID, state, shorten.Text(reason, maxReasonLen), r.SkipCode, why.Code, why.Params); err != nil {
 			return err
 		}
 		// 离开 pending 时清掉这个 commit 的待裁决候选（没有能发版的候选时，这里和记 skipped 在同一个事务中完成）
 		if err := clearCandidates(ctx, tx, r.RepoID, r.SHA); err != nil {
 			return err
 		}
-		r.State, r.Reason = state, reason
+		r.State, r.Reason, r.ReasonNote = state, reason, why
 		detail := auditFields(r)
 		detail["reason"] = reason
 		return store.Audit(ctx, tx, auditActor, action, detail)
@@ -686,7 +702,7 @@ func (p *pass) decide(ctx context.Context, r *Record) error {
 		return err
 	}
 	if p.cfgErr != "" {
-		return &permanentError{"默认分支的配置错误：" + p.cfgErr}
+		return &permanentError{note(ReasonConfigError, NoteParams{Detail: p.cfgErr})}
 	}
 	// 先按目标分支裁决是否发版（PLAN #29.4）：不合入发版分支的合并正常打 tag 之前就跳过，不进来源判定、不检查
 	// label、不算版本号。合并那一刻的默认分支是省略 tag.branch 时的发版分支（默认分支改过名时也按合并当时判断）。
@@ -715,11 +731,11 @@ func (p *pass) decide(ctx context.Context, r *Record) error {
 		if r.BaseRef != "" && r.BaseRef != mergeDefault {
 			r.SkipCode = SkipCodeBranchNotRelease
 		}
-		return p.finish(ctx, r, StateSkipped, "默认分支的 "+mergecfg.Path+" 没有 tag:", "autotag.skipped")
+		return p.finishNote(ctx, r, StateSkipped, Note{Code: ReasonNoTagConfig}, "autotag.skipped")
 	}
-	if reason, code, skip := releaseBranchSkip(r, p.cfg.Tag, mergeDefault); skip {
+	if why, code, skip := releaseBranchSkip(r, p.cfg.Tag, mergeDefault); skip {
 		r.SkipCode = code
-		return p.finish(ctx, r, StateSkipped, reason, "autotag.skipped")
+		return p.finishNote(ctx, r, StateSkipped, why, "autotag.skipped")
 	}
 	origin := DevOrigin{Kind: OriginUnknown}
 	if p.s.devOrigin != nil {
@@ -739,17 +755,14 @@ func (p *pass) decide(ctx context.Context, r *Record) error {
 	}
 	bump, skip := BumpFor(r.Labels)
 	if skip {
-		return p.finish(ctx, r, StateSkipped, "PR 有 "+LabelSkip, "autotag.skipped")
+		return p.finishNote(ctx, r, StateSkipped, Note{Code: ReasonSkipLabel, Params: NoteParams{Label: LabelSkip}}, "autotag.skipped")
 	}
 	if origin.Kind == OriginDesign {
-		reason := origin.Reason
-		if reason == "" {
-			reason = fmt.Sprintf("这是 AI 开发工作项 #%d 的设计 PR，不打版本 tag", origin.WorkItemID)
-		}
-		return p.finish(ctx, r, StateSkipped, reason, "autotag.skipped")
+		reason, why := originNote(origin, Note{Code: ReasonDesignPR, Params: NoteParams{WorkItem: origin.WorkItemID}})
+		return p.finish(ctx, r, StateSkipped, reason, why, "autotag.skipped")
 	}
-	if ok, reason := authorizeRelease(r, origin); !ok {
-		return p.finish(ctx, r, StateSkipped, reason, "autotag.skipped")
+	if ok, reason, why := authorizeRelease(r, origin); !ok {
+		return p.finish(ctx, r, StateSkipped, reason, why, "autotag.skipped")
 	}
 	prefix := p.cfg.Tag.PrefixOr()
 	tags, err := p.knownTags(ctx, prefix)
@@ -766,7 +779,7 @@ func (p *pass) decide(ctx context.Context, r *Record) error {
 	}
 	if len(own) > 0 {
 		// 这个 commit 已经有版本 tag（例如上一次创建成功、还没记下就崩溃了）：认下来，照常规划发布（T2）
-		return p.setState(ctx, r, StateTagged, Latest(prefix, own), "这个 commit 已经有版本 tag")
+		return p.setState(ctx, r, StateTagged, Latest(prefix, own), Note{Code: ReasonAlreadyTagged})
 	}
 	if latest := Latest(prefix, names); latest != "" {
 		behind, err := p.f.Behind(ctx, tags[latest], r.SHA)
@@ -774,51 +787,41 @@ func (p *pass) decide(ctx context.Context, r *Record) error {
 			return fmt.Errorf("比较 %s 与 %s：%w", latest, shorten.Hash(r.SHA), err)
 		}
 		if behind > 0 {
-			return p.finish(ctx, r, StateSkipped, fmt.Sprintf("最新的版本 tag %s 不在这个 commit 的历史中（已有更新的提交打了 tag，或者有人在其他分支打了更大的版本）", latest),
-				"autotag.skipped")
+			return p.finishNote(ctx, r, StateSkipped, Note{Code: ReasonVersionOrder, Params: NoteParams{Tag: latest}}, "autotag.skipped")
 		}
 	}
 	next := Next(prefix, p.cfg.Tag.Initial, names, bump)
 	if !IsVersionTag(prefix, next) {
 		// 递增后超出版本号的范围（某个数字超过 9 位）：之后的计算认不出它，会反复算出同一个名字
-		return &permanentError{fmt.Sprintf("下一个版本 %s 超出范围（X.Y.Z 的每个数字最多 9 位）", next)}
+		return &permanentError{Note{Code: ReasonVersionOverflow, Params: NoteParams{Tag: next}}}
 	}
-	return p.setState(ctx, r, StateTagging, next, "")
+	return p.setState(ctx, r, StateTagging, next, Note{})
 }
 
 // releaseBranchSkip 判断这次合并能不能按 tag.branch 发版（PLAN #29.4）：不是发版分支时返回跳过的原因和原因码。
 // 省略 tag.branch 时发版分支是合并那一刻的默认分支；升级前的旧记录没有目标分支，省略 tag.branch 的放行（当时按默认
 // 分支准入），显式配置了 tag.branch 的跳过并说明原因。
-func releaseBranchSkip(r *Record, t *mergecfg.TagConfig, mergeDefault string) (reason, code string, skip bool) {
-	if t.Branch == nil {
-		return branchVerdict(r.BaseRef, t, mergeDefault)
-	}
-	if r.BaseRef == "" {
-		return "历史记录未记下目标分支，无法确认是否合入发版分支 " + *t.Branch, "", true
-	}
-	if r.BaseRef != *t.Branch {
-		return fmt.Sprintf("目标分支 %s 不是配置的发版分支 %s，不自动打 tag", r.BaseRef, *t.Branch), SkipCodeBranchNotRelease, true
-	}
-	return "", "", false
+func releaseBranchSkip(r *Record, t *mergecfg.TagConfig, mergeDefault string) (why Note, code string, skip bool) {
+	return branchVerdict(r.BaseRef, t, mergeDefault)
 }
 
 // branchVerdict 按目标分支 baseRef 判断能不能发版（PLAN #29.4），供决定跳过和按候选重新裁决共用：省略 tag.branch（包括
 // 没有配置 tag:，此时由调用方另行决定是否需要 tag）时发版分支是合并那一刻的默认分支；旧记录没有目标分支时放行。不是
 // 发版分支时返回原因和 SkipCodeBranchNotRelease；显式配置 tag.branch 而记录没有目标分支时跳过，但没有原因码（无法确认）。
-func branchVerdict(baseRef string, t *mergecfg.TagConfig, mergeDefault string) (reason, code string, skip bool) {
+func branchVerdict(baseRef string, t *mergecfg.TagConfig, mergeDefault string) (why Note, code string, skip bool) {
 	if t != nil && t.Branch != nil {
 		if baseRef == "" {
-			return "历史记录未记下目标分支，无法确认是否合入发版分支 " + *t.Branch, "", true
+			return Note{Code: ReasonBranchUnknown, Params: NoteParams{Release: *t.Branch}}, "", true
 		}
 		if baseRef != *t.Branch {
-			return fmt.Sprintf("目标分支 %s 不是配置的发版分支 %s，不自动打 tag", baseRef, *t.Branch), SkipCodeBranchNotRelease, true
+			return Note{Code: ReasonNotTagBranch, Params: NoteParams{Branch: baseRef, Release: *t.Branch}}, SkipCodeBranchNotRelease, true
 		}
-		return "", "", false
+		return Note{}, "", false
 	}
 	if baseRef == "" || baseRef == mergeDefault {
-		return "", "", false
+		return Note{}, "", false
 	}
-	return fmt.Sprintf("目标分支 %s 不是发版分支 %s，不自动打 tag", baseRef, mergeDefault), SkipCodeBranchNotRelease, true
+	return Note{Code: ReasonNotDefaultBranch, Params: NoteParams{Branch: baseRef, Release: mergeDefault}}, SkipCodeBranchNotRelease, true
 }
 
 // authorizeRelease 判断这条记录是否可以自动发布（PLAN #29.4）：人是发起者时总是允许；机器人（或者未知）是发起者时，
@@ -826,26 +829,26 @@ func branchVerdict(baseRef string, t *mergecfg.TagConfig, mergeDefault string) (
 //
 // 例外：AI 开发工作项的 PR 创建归属正在核验（创建 PR 的响应丢失、合并事件先到）时，无论人类还是机器人合并都先跳过——归属
 // 核验完成、补记之后可以 Retry。否则设计 PR 被人类合并、归属还没核验时会被误打 tag 并发布。
-func authorizeRelease(r *Record, origin DevOrigin) (bool, string) {
+func authorizeRelease(r *Record, origin DevOrigin) (bool, string, Note) {
 	if origin.Kind == OriginRecording {
-		if origin.Reason != "" {
-			return false, origin.Reason
-		}
-		return false, "AI 开发工作项的 PR 创建归属正在核验，确认后可重试"
+		reason, why := originNote(origin, Note{Code: ReasonOriginPending})
+		return false, reason, why
 	}
 	if !r.SenderIsBot && r.MergedBy != "" {
-		return true, ""
+		return true, "", Note{}
 	}
 	if origin.Kind == OriginImplementation {
-		return true, ""
+		return true, "", Note{}
 	}
 	if origin.Kind == OriginDenied && origin.Reason != "" {
-		return false, origin.Reason
+		reason, why := originNote(origin, Note{})
+		return false, reason, why
 	}
+	why := Note{Code: ReasonUnknownSender}
 	if r.MergedBy != "" {
-		return false, fmt.Sprintf("发布发起者是机器人（%s）且没有可信的 AI 开发实现工作项归属，按发布策略不自动打 tag", r.MergedBy)
+		why = Note{Code: ReasonBotSender, Params: NoteParams{Login: r.MergedBy}}
 	}
-	return false, "合并者和 PR 作者未知且没有可信的 AI 开发实现工作项归属，按发布策略不自动打 tag"
+	return false, why.Text(), why
 }
 
 // trustedWorkItem 返回要持久化到 auto_tags.work_item_id 的可信工作项：只有可信的 AI 开发实现 PR 才记（恢复保护、审计关联
@@ -931,7 +934,7 @@ func (p *pass) knownTags(ctx context.Context, prefix string) (map[string]string,
 // 记录不创建 tag（防止未经授权的异常记录绕过 decide）。
 func (p *pass) ensureTag(ctx context.Context, r *Record) error {
 	if r.SenderIsBot && r.WorkItemID == nil {
-		return p.finish(ctx, r, StateFailed, unauthorizedBotReason, "autotag.failed")
+		return p.finishNote(ctx, r, StateFailed, unauthorizedBotReason, "autotag.failed")
 	}
 	commit, err := p.f.TagCommit(ctx, r.Tag)
 	if err != nil {
@@ -953,7 +956,7 @@ func (p *pass) ensureTag(ctx context.Context, r *Record) error {
 			return err // 没有权限：process 记为 failed 并提示需要的权限
 		case !forge.Uncertain(err) && !forge.RateLimited(err):
 			// 平台明确拒绝（例如 commit 不存在、名字不合法）：重试没有意义
-			return &permanentError{fmt.Sprintf("创建 tag %s 被拒绝：%v", r.Tag, err)}
+			return &permanentError{note(ReasonTagRejected, NoteParams{Tag: r.Tag, Detail: err.Error()})}
 		}
 		// 结果不明（响应丢失、超时）：保持 tagging，下一次按名字读取确认，不会建出第二个 tag
 		return fmt.Errorf("创建 tag %s：%w", r.Tag, err)
@@ -963,7 +966,7 @@ func (p *pass) ensureTag(ctx context.Context, r *Record) error {
 	}
 	p.occupied[r.Tag] = commit
 	p.s.log.Info("自动打 tag：tag 名已被占用，重新计算", "repo", p.repo.FullName(), "tag", r.Tag, "commit", commit)
-	return p.setState(ctx, r, StatePending, "", fmt.Sprintf("tag %s 已经指向 %s，重新计算", r.Tag, shorten.Hash(commit)))
+	return p.setState(ctx, r, StatePending, "", Note{Code: ReasonTagOccupied, Params: NoteParams{Tag: r.Tag, SHA: commit}})
 }
 
 // tagged 记下 tag 已经存在且指向这个 commit。写审计之前只读补齐来源详情（tagging 崩溃恢复后内存中的详情已经丢失）。
@@ -982,7 +985,7 @@ func (p *pass) tagged(ctx context.Context, r *Record) error {
 }
 
 // unauthorizedBotReason 是机器人发起、又没有已落库的可信 AI 开发实现工作项归属时的失败原因（恢复保护）。
-const unauthorizedBotReason = "发布发起者是机器人且没有可信的 AI 开发实现工作项归属，按发布策略不发布"
+var unauthorizedBotReason = Note{Code: ReasonBotUnauthorized}
 
 // plan 是 tagged 的处理（第 6 步）：规划这个 tag 的 push 事件。发送者是真实的发布发起者（人，或者 Kiln 的 Bot——AI 开发
 // 的可信实现 PR 由 Bot 合并，规划时保留 SenderIsBot，由可信自动 tag 的规则放行发布）；重复规划按去重键不会建出第二个
@@ -993,14 +996,15 @@ func (s *Service) plan(ctx context.Context, repo *store.Repo, r *Record) error {
 	s.enrichOrigin(ctx, s.db, r)
 	if r.SenderIsBot && r.WorkItemID == nil {
 		return s.db.Tx(ctx, func(tx pgx.Tx) error {
-			tag, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason=$3, updated_at=now() WHERE id=$1 AND state=$4`,
-				r.ID, StateFailed, unauthorizedBotReason, StateTagged)
+			why := unauthorizedBotReason
+			tag, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason=$3, reason_code=$5, reason_params=$6, updated_at=now()
+				WHERE id=$1 AND state=$4`, r.ID, StateFailed, why.Text(), StateTagged, why.Code, why.Params)
 			if err != nil || tag.RowsAffected() == 0 {
 				return err
 			}
-			r.State, r.Reason = StateFailed, unauthorizedBotReason
+			r.State, r.Reason, r.ReasonNote = StateFailed, why.Text(), why
 			detail := auditFields(r)
-			detail["reason"] = unauthorizedBotReason
+			detail["reason"] = why.Text()
 			return store.Audit(ctx, tx, auditActor, "autotag.failed", detail)
 		})
 	}
@@ -1010,7 +1014,8 @@ func (s *Service) plan(ctx context.Context, repo *store.Repo, r *Record) error {
 	}
 	s.log.Info("自动打 tag：已规划发布", "repo", repo.FullName(), "tag", r.Tag, "runs", ids)
 	return s.db.Tx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason='', updated_at=now() WHERE id=$1 AND state=$3`, r.ID, StatePlanned, StateTagged)
+		tag, err := tx.Exec(ctx, `UPDATE auto_tags SET state=$2, reason='', reason_code='', reason_params='{}', updated_at=now()
+			WHERE id=$1 AND state=$3`, r.ID, StatePlanned, StateTagged)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}

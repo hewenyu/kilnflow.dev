@@ -29,6 +29,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/server/mqevents"
 	"github.com/hewenyu/kilnflow.dev/internal/server/outbox"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
+	"github.com/hewenyu/kilnflow.dev/internal/shorten"
 	"github.com/hewenyu/kilnflow.dev/internal/workflow"
 )
 
@@ -379,7 +380,20 @@ func (h *harness) entry(n int) *Entry {
 	if err != nil || e == nil {
 		h.t.Fatalf("读取 PR #%d 的队列项：%v，%v", n, e, err)
 	}
+	wantNote(h.t, "状态", e.Status, e.StatusNote)
+	wantNote(h.t, "原因", e.Reason, e.ReasonNote)
 	return e
+}
+
+// wantNote 断言执行者写下的中文说明都带着原因码（Dashboard 按语言显示），并且就是原因码的说明（同一个判断）。
+func wantNote(t *testing.T, what, text string, n Note) {
+	t.Helper()
+	if (text == "") != (n.Code == "") {
+		t.Fatalf("%s %q 的原因码是 %q：说明和原因码应一起写入、一起清空", what, text, n.Code)
+	}
+	if n.Code != "" && shorten.Text(n.Text(), maxReasonLen) != text {
+		t.Fatalf("%s的原因码 %s（%+v）的说明是 %q，记下的是 %q", what, n.Code, n.Params, n.Text(), text)
+	}
 }
 
 func (h *harness) pull(n int) fakegithub.Pull {

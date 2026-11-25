@@ -73,6 +73,9 @@ func TestCloseLinkedIssues(t *testing.T) {
 	h.mergeWithIssues(nil, fakegithub.IssueRef{Number: 3}, fakegithub.IssueRef{Number: 4}, fakegithub.IssueRef{Repo: otherRepo, Number: 5})
 
 	e := h.wantIssues(7, issuesDone, "已关闭关联的 issue #3")
+	if n := e.StatusNote; n.Code != StatusIssuesDone || !slices.Equal(n.Params.Closed, []int{3}) || len(n.Params.Unknown) != 0 {
+		t.Fatalf("关闭完成的原因码：%+v", n)
+	}
 	is := h.issue(thisRepo, 3)
 	if is.State != "closed" || is.StateReason != "completed" || is.Closes != 1 {
 		t.Fatalf("#3 应以 completed 关闭：%+v", is)
@@ -121,6 +124,11 @@ func TestCloseIssueFailure(t *testing.T) {
 	if e := h.entry(7); !strings.Contains(e.Status, "not accessible") || !strings.Contains(e.Status, "Issues 的读写权限") {
 		t.Fatalf("状态应包含原因和权限说明：%q", e.Status)
 	}
+	// 原因码：重试中的失败，第 1 次，平台拒绝（Dashboard 据此显示权限说明和失败样式），错误原文原样保存
+	if n := h.entry(7).StatusNote; n.Code != StatusIssuesRetry || n.Params.Tries != 1 || !n.Params.Rejected ||
+		!strings.Contains(n.Params.Detail, "not accessible") || strings.Contains(n.Params.Detail, "读写权限") {
+		t.Fatalf("关闭失败的原因码：%+v", n)
+	}
 	if p := h.pull(7); !p.Merged {
 		t.Fatalf("PR 应已合并：%+v", p)
 	}
@@ -162,7 +170,9 @@ func TestCloseIssuesForbidden(t *testing.T) {
 
 	h.exec(`UPDATE merge_queue SET finished_at=now()-interval '25 hours' WHERE pr_number=7`)
 	h.process()
-	h.wantIssues(7, issuesFailed, "已放弃")
+	if e := h.wantIssues(7, issuesFailed, "已放弃"); e.StatusNote.Code != StatusIssuesGaveUp || e.IssuesState != issuesFailed {
+		t.Fatalf("放弃的原因码：%+v", e.StatusNote)
+	}
 	mark := len(h.fake.Requests())
 	h.process()
 	if reqs := h.fake.Requests()[mark:]; len(reqs) != 0 {
@@ -178,7 +188,7 @@ func TestCloseIssuesRateLimited(t *testing.T) {
 	h.fake.SetIssue(thisRepo, fakegithub.Issue{Number: 3})
 	h.limitIssues.Store(2)
 	h.mergeWithIssues(nil, fakegithub.IssueRef{Number: 3})
-	h.wantIssues(7, issuesPending, statusClosingIssues)
+	h.wantIssues(7, issuesPending, statusClosingIssues.Text())
 	var tries int
 	if err := h.db.QueryRow(h.ctx, `SELECT issues_tries FROM merge_queue WHERE pr_number=7`).Scan(&tries); err != nil || tries != 0 {
 		t.Fatalf("限流不计失败次数：%d（%v）", tries, err)
@@ -311,7 +321,9 @@ func TestInactiveRepoGivesUpIssues(t *testing.T) {
 	h.mergeWithIssues(func(p *fakegithub.Pull) { p.ClosingIssuesForbidden = true }, fakegithub.IssueRef{Number: 3})
 	h.exec(`UPDATE repos SET active=false WHERE id=$1`, repoID)
 	h.process()
-	h.wantIssues(7, issuesFailed, "仓库已停用")
+	if e := h.wantIssues(7, issuesFailed, "仓库已停用"); e.StatusNote.Code != StatusIssuesInactive {
+		t.Fatalf("仓库停用的原因码：%+v", e.StatusNote)
+	}
 }
 
 // TestMergeResponseLost：平台已经合并、但合并请求的响应丢失时，下一次处理看到 PR 已合并，仍按队列自己合并的处理并关闭关联的 issue。
@@ -473,8 +485,10 @@ func TestRemovalCommentAttemptedBeforeCrash(t *testing.T) {
 	h.verified(7, head, store.RunFailed)
 	h.exec(`UPDATE merge_queue SET action='removing', reason='验证没有通过', comment_state='attempted' WHERE pr_number=7`)
 	h.process()
-	if e := h.entry(7); e.State != StateRemoved {
-		t.Fatalf("应出队：%+v", e)
+	// 升级前记下的原因没有原因码：照常出队，沿用记下的中文说明，原因码保持为空（Dashboard 原样显示）
+	e, err := Latest(h.ctx, h.db, repoID, 7)
+	if err != nil || e.State != StateRemoved || e.Reason != "验证没有通过" || e.ReasonNote.Code != "" {
+		t.Fatalf("应出队并沿用旧的原因：%+v，%v", e, err)
 	}
 	if p := h.pull(7); len(p.Comments) != 0 {
 		t.Fatalf("已经尝试过的评论不应再发：%q", p.Comments)

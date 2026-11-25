@@ -231,6 +231,26 @@ describe('run 详情页', () => {
       expect(screen.queryByRole('button', { name: '加入合并队列' })).not.toBeInTheDocument()
     })
 
+    it('队列给出的状态和原因（服务端的消息）按当前语言显示，没有原因码的旧记录原样显示', () => {
+      const waiting = { Status: { id: 'mqStatus.waitRuns', params: { done: 1, total: 2 } } }
+      let r = renderPage(withData(envelope(failedFixture), mq(waiting, 2)), '/runs/128')
+      expect(screen.getByText('合并队列：目标 main · 第 2 个 · 等待验证：1/2 个 run 已结束')).toBeInTheDocument()
+      r.unmount()
+      r = renderPage(withData(envelope(failedFixture), mq(waiting, 2)), '/runs/128', { locale: 'en' })
+      expect(screen.getByText('Merge queue: target main · position 2 · Waiting for checks: 1/2 runs finished')).toBeInTheDocument()
+      r.unmount()
+      const merged = { State: 'merged', MergeSHA: '', Reason: { id: 'mqReason.mergedOutside' }, FinishedAt: '2026-11-05T05:00:00-08:00' }
+      r = renderPage(withData(envelope(failedFixture), mq(merged)), '/runs/128', { locale: 'en' })
+      expect(screen.getByText('The PR was merged outside the merge queue')).toBeInTheDocument()
+      r.unmount()
+      const removed = { State: 'removed', Reason: { id: 'mqReason.labelRemoved', params: { label: 'kiln:merge' } } }
+      r = renderPage(withData(envelope(failedFixture), mq(removed)), '/runs/128', { locale: 'en' })
+      expect(screen.getByText('Removed from the merge queue: The kiln:merge label was removed')).toBeInTheDocument()
+      r.unmount()
+      renderPage(withData(envelope(failedFixture), mq({ State: 'removed', Reason: '验证失败：ci.yml' })), '/runs/128', { locale: 'en' })
+      expect(screen.getByText('Removed from the merge queue: 验证失败：ci.yml')).toBeInTheDocument()
+    })
+
     it('不是 PR 的 run 没有合并队列', () => {
       renderPage(envelope(failedFixture), '/runs/128')
       expect(screen.queryByRole('button', { name: '加入合并队列' })).not.toBeInTheDocument()

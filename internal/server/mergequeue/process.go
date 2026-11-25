@@ -82,21 +82,23 @@ func (s *Service) Process(ctx context.Context, repoID int64) (err error) {
 }
 
 // inactiveReason 是仓库停用时队列项的出队原因。
-const inactiveReason = "仓库已停用（GitHub App 不再能访问这个仓库），移出队列"
+var inactiveReason = Note{Code: ReasonRepoInactive}
 
 // removeInactive 把停用仓库（从 installation 中移除、App 被卸载等）排队中的项全部出队。平台已经不能访问，
 // 不去 label、不评论；仓库恢复后重新加上 label 即可再次入队。
 func (p *pass) removeInactive(ctx context.Context) error {
 	repo := p.repo
 	return p.tx(ctx, func(tx pgx.Tx) error {
-		prs, err := store.QueryIDs(ctx, tx, `UPDATE merge_queue SET state='removed', reason=$2, status='', action='none',
-			finished_at=now(), updated_at=now() WHERE repo_id=$1 AND state='queued' RETURNING pr_number`, repo.ID, inactiveReason)
+		reason := inactiveReason.Text()
+		prs, err := store.QueryIDs(ctx, tx, `UPDATE merge_queue SET state='removed', reason=$2, reason_code=$3, reason_params=$4,
+			status='', status_code='', status_params='{}', action='none', finished_at=now(), updated_at=now()
+			WHERE repo_id=$1 AND state='queued' RETURNING pr_number`, repo.ID, reason, inactiveReason.Code, inactiveReason.Params)
 		if err != nil {
 			return err
 		}
 		for _, pr := range prs {
 			if err := store.Audit(ctx, tx, auditActor, "mergequeue.removed",
-				map[string]any{"repo_id": repo.ID, "pr": pr, "reason": inactiveReason}); err != nil {
+				map[string]any{"repo_id": repo.ID, "pr": pr, "reason": reason}); err != nil {
 				return err
 			}
 		}
@@ -104,8 +106,9 @@ func (p *pass) removeInactive(ctx context.Context) error {
 			return err
 		}
 		// 已合并、还没关闭关联 issue 的项：平台已经不能访问，放弃
-		_, err = tx.Exec(ctx, `UPDATE merge_queue SET issues_state='failed', status=$2, updated_at=now()
-			WHERE repo_id=$1 AND issues_state='pending'`, repo.ID, "仓库已停用，没有关闭关联的 issue")
+		st := Note{Code: StatusIssuesInactive}
+		_, err = tx.Exec(ctx, `UPDATE merge_queue SET issues_state='failed', status=$2, status_code=$3, status_params=$4, updated_at=now()
+			WHERE repo_id=$1 AND issues_state='pending'`, repo.ID, st.Text(), st.Code, st.Params)
 		return err
 	})
 }
@@ -247,7 +250,7 @@ func (p *pass) prepare(ctx context.Context, entries []*Entry) ([]string, error) 
 	if p.cfgErr != "" {
 		// 配置损坏：保持队列不动，只更新显示的状态（不检查允许的分支，也不因为正在更新就继续发请求）
 		for _, a := range alive {
-			if err := p.setStatus(ctx, a.e, "配置错误："+p.cfgErr); err != nil {
+			if err := p.setStatus(ctx, a.e, configErrorStatus(p.cfgErr)); err != nil {
 				return nil, errors.Join(append(errs, err)...)
 			}
 		}
@@ -258,7 +261,7 @@ func (p *pass) prepare(ctx context.Context, entries []*Entry) ([]string, error) 
 	seen := make(map[string]bool, len(allowed))
 	for _, a := range alive {
 		if !p.cfg.AllowsBranch(a.pull.BaseRef, p.repo.DefaultBranch) {
-			reason := fmt.Sprintf("目标分支是 %s，合并队列只合并到 %s", a.pull.BaseRef, strings.Join(allowed, "、"))
+			reason := Note{Code: ReasonBranchNotAllowed, Params: NoteParams{Branch: a.pull.BaseRef, Allowed: allowed}}
 			if _, err := p.apply(ctx, a.e, a.pull, removeWithComment(reason)); err != nil {
 				// 单个 PR 的出队失败（例如去掉 label 时平台返回 500）只影响它所在的目标分支，不能拖垮其他健康的分支；
 				// 仓库级的限流、401/403 仍中止整轮。
@@ -350,11 +353,11 @@ func (p *pass) markWaitingList(ctx context.Context, base string, entries []*Entr
 }
 
 // waitingStatus 是一条目标分支上非队首项的显示状态：配置了多个分支或者不是默认分支时显示目标分支，避免多分支时看不出来。
-func (p *pass) waitingStatus(base string, pos int) string {
+func (p *pass) waitingStatus(base string, pos int) Note {
 	if len(p.cfg.AllowedBranches(p.repo.DefaultBranch)) > 1 || base != p.repo.DefaultBranch {
-		return fmt.Sprintf("目标 %s · 排在第 %d 个", base, pos)
+		return Note{Code: StatusPositionBranch, Params: NoteParams{Branch: base, Pos: pos}}
 	}
-	return fmt.Sprintf("排在第 %d 个", pos)
+	return Note{Code: StatusPosition, Params: NoteParams{Pos: pos}}
 }
 
 // observeBase 回填观测到的目标分支（PLAN #28.5），返回是否发生了真实的改投（不是升级前旧行的回填）。
@@ -379,12 +382,14 @@ func (p *pass) observeBase(ctx context.Context, e *Entry, base string) (bool, er
 		action_at=CASE WHEN action=$3 THEN NULL ELSE action_at END,
 		action_tries=CASE WHEN action=$3 THEN 0 ELSE action_tries END,
 		status=CASE WHEN action=$3 THEN '' ELSE status END,
+		status_code=CASE WHEN action=$3 THEN '' ELSE status_code END,
+		status_params=CASE WHEN action=$3 THEN '{}' ELSE status_params END,
 		updated_at=now() WHERE id=$1 AND state='queued'`, e.ID, base, actionUpdating); err != nil {
 		return false, err
 	}
 	e.BaseRef, e.ActionHead, e.ActionBase = base, "", ""
 	if e.Action == actionUpdating {
-		e.Action, e.ActionAt, e.ActionTries, e.Status = actionNone, nil, 0, ""
+		e.Action, e.ActionAt, e.ActionTries, e.Status, e.StatusNote = actionNone, nil, 0, "", Note{}
 	}
 	return true, nil
 }
@@ -466,8 +471,9 @@ func (p *pass) snapshot(ctx context.Context, e *Entry, expectedBase string) (*sn
 	}
 	if !p.cfg.AllowsBranch(pull.BaseRef, p.repo.DefaultBranch) {
 		s.BranchRemoval = true
-		s.BranchReason = fmt.Sprintf("目标分支是 %s，合并队列只合并到 %s", pull.BaseRef,
-			strings.Join(p.cfg.AllowedBranches(p.repo.DefaultBranch), "、"))
+		s.BranchReason = Note{Code: ReasonBranchNotAllowed, Params: NoteParams{
+			Branch: pull.BaseRef, Allowed: p.cfg.AllowedBranches(p.repo.DefaultBranch),
+		}}
 		return s, "", nil
 	}
 	if e.Action == actionUpdating {
@@ -548,15 +554,15 @@ func (p *pass) loadConfig(ctx context.Context) error {
 func (p *pass) apply(ctx context.Context, e *Entry, pull *forge.Pull, d decision) (bool, error) {
 	switch d.Kind {
 	case actWait:
-		return true, p.setStatus(ctx, e, d.Status)
+		return true, p.setStatus(ctx, e, d.StatusNote)
 	case actMerged:
 		if e.Action == actionMerging && !mergedByHuman(pull) {
 			// 上一次合并请求的结果未知（响应丢失、记录结果之前 Server 重启），PR 已经合并：按队列自己合并的处理。
 			// 平台记录的合并者是人时不是：期间用户自己合并了，按在队列之外合并处理，自动打 tag
 			// 由 webhook 按合并那一刻的 label 记录
-			return false, p.finishMerged(ctx, e, pull, pull.MergeSHA, "")
+			return false, p.finishMerged(ctx, e, pull, pull.MergeSHA, Note{})
 		}
-		return false, p.finishMerged(ctx, e, pull, pull.MergeSHA, "PR 在合并队列之外被合并")
+		return false, p.finishMerged(ctx, e, pull, pull.MergeSHA, Note{Code: ReasonMergedOutside})
 	case actRemove:
 		return false, p.remove(ctx, e, pull, d)
 	case actAcceptHead:
@@ -569,13 +575,14 @@ func (p *pass) apply(ctx context.Context, e *Entry, pull *forge.Pull, d decision
 	return false, fmt.Errorf("未知的动作 %d", d.Kind)
 }
 
-// setStatus 更新显示的状态（没有变化时不写）。
-func (p *pass) setStatus(ctx context.Context, e *Entry, status string) error {
-	status = shorten.Text(status, maxReasonLen)
-	if status == e.Status {
+// setStatus 更新显示的状态和原因码（没有变化时不写）。
+func (p *pass) setStatus(ctx context.Context, e *Entry, n Note) error {
+	status := shorten.Text(n.Text(), maxReasonLen)
+	if status == e.Status && n.Code == e.StatusNote.Code {
 		return nil
 	}
-	_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET status=$2, updated_at=now() WHERE id=$1 AND state='queued'`, e.ID, status)
+	_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET status=$2, status_code=$3, status_params=$4, updated_at=now()
+		WHERE id=$1 AND state='queued'`, e.ID, status, n.Code, n.Params)
 	return err
 }
 
@@ -583,7 +590,7 @@ func (p *pass) setStatus(ctx context.Context, e *Entry, status string) error {
 // （synchronize 事件可能在这之后才处理）。
 func (p *pass) acceptHead(ctx context.Context, e *Entry, head string) error {
 	_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET head_sha=$2, action='none', action_at=NULL, action_tries=0,
-		status='', updated_at=now() WHERE id=$1 AND state='queued'`, e.ID, head)
+		status='', status_code='', status_params='{}', updated_at=now() WHERE id=$1 AND state='queued'`, e.ID, head)
 	return err
 }
 
@@ -591,9 +598,11 @@ func (p *pass) acceptHead(ctx context.Context, e *Entry, head string) error {
 // 自动出队先记下原因（action=removing）：去掉 label 后评论失败时，重试按记下的原因继续，不会当成手动去掉了 label。
 func (p *pass) remove(ctx context.Context, e *Entry, pull *forge.Pull, d decision) error {
 	reason := shorten.Text(d.Reason, maxReasonLen)
-	if d.Comment && (e.Action != actionRemoving || e.Reason != reason) {
-		if _, err := p.conn.Exec(ctx, `UPDATE merge_queue SET action='removing', reason=$2, removal=$3, conflict_base=$4, status='正在移出队列',
-			updated_at=now() WHERE id=$1 AND state='queued'`, e.ID, reason, d.Removal, d.ConflictBase); err != nil {
+	if d.Comment && (e.Action != actionRemoving || e.Reason != reason || e.ReasonNote.Code != d.ReasonNote.Code) {
+		st := Note{Code: StatusRemoving}
+		if _, err := p.conn.Exec(ctx, `UPDATE merge_queue SET action='removing', reason=$2, reason_code=$5, reason_params=$6, removal=$3,
+			conflict_base=$4, status=$7, status_code=$8, status_params=$9, updated_at=now() WHERE id=$1 AND state='queued'`,
+			e.ID, reason, d.Removal, d.ConflictBase, d.ReasonNote.Code, d.ReasonNote.Params, st.Text(), st.Code, st.Params); err != nil {
 			return err
 		}
 	}
@@ -612,8 +621,9 @@ func (p *pass) remove(ctx context.Context, e *Entry, pull *forge.Pull, d decisio
 		}
 	}
 	return p.tx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE merge_queue SET state='removed', reason=$2, removal=$3, conflict_base=$4, status='', action='none',
-			finished_at=now(), updated_at=now() WHERE id=$1 AND state='queued'`, e.ID, reason, d.Removal, d.ConflictBase)
+		tag, err := tx.Exec(ctx, `UPDATE merge_queue SET state='removed', reason=$2, reason_code=$5, reason_params=$6, removal=$3,
+			conflict_base=$4, status='', status_code='', status_params='{}', action='none', finished_at=now(), updated_at=now()
+			WHERE id=$1 AND state='queued'`, e.ID, reason, d.Removal, d.ConflictBase, d.ReasonNote.Code, d.ReasonNote.Params)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
@@ -696,27 +706,33 @@ func (p *pass) handBack(ctx context.Context, tx pgx.Tx, e *Entry, pull *forge.Pu
 		return nil
 	}
 	p.s.log.Warn("合并队列：负责冲突 PR 的 AI 开发工作项已经结束或目标分支不同，改为等待人处理", "repo", p.repo.FullName(), "pr", e.PR)
-	_, err := tx.Exec(ctx, `UPDATE merge_queue SET removal=$2, reason=$3 WHERE id=$1`, e.ID, RemovalConflictAuthor,
-		shorten.Text(d.Reason+"；负责它的 AI 开发工作项已经结束或者目标分支不同，不自动返修，需要人处理", maxReasonLen))
+	// 原因码沿用冲突的参数；升级前记下的旧原因没有原因码，只追加说明
+	n := Note{}
+	if d.ReasonNote.Code == ReasonConflictDev {
+		n = Note{Code: ReasonConflictDevUnavailable, Params: d.ReasonNote.Params}
+	}
+	_, err := tx.Exec(ctx, `UPDATE merge_queue SET removal=$2, reason=$3, reason_code=$4, reason_params=$5 WHERE id=$1`, e.ID,
+		RemovalConflictAuthor, shorten.Text(d.Reason+devUnavailableSuffix, maxReasonLen), n.Code, n.Params)
 	return err
 }
 
-// finishMerged 记录 PR 已经合并。reason 说明不是由队列合并的（由队列合并时为空）。由队列合并时同时标记为要关闭关联的
+// finishMerged 记录 PR 已经合并。reason 说明不是由队列合并的（由队列合并时为零值）。由队列合并时同时标记为要关闭关联的
 // issue（issues_state=pending，平台只在用户合并时关闭它们，见 closeissues.go）；在队列之外合并的由平台自己关闭。
 //
 // 由队列合并时同一事务中记下要自动打 tag 的 commit（PLAN #29.4，T4）：pull_request.closed 的发送者是 App 自己，
 // webhook 那边不会记录。在队列之外合并的不在这里记：由 webhook 按合并那一刻的快照（label）记录，这里读到的是现在的
 // label，合并后被整理过（例如去掉 release:skip）时会抢先写入错误的记录（(repo_id, sha) 唯一，webhook 的正确记录
 // 被忽略）。pull 为 nil 时（只在测试中）不记录。
-func (p *pass) finishMerged(ctx context.Context, e *Entry, pull *forge.Pull, mergeSHA, reason string) error {
-	issues, status := "", ""
+func (p *pass) finishMerged(ctx context.Context, e *Entry, pull *forge.Pull, mergeSHA string, why Note) error {
+	reason := why.Text()
+	issues, status := "", Note{}
 	if reason == "" {
 		issues, status = issuesPending, statusClosingIssues
 	}
 	return p.tx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE merge_queue SET state='merged', merge_sha=$2, reason=$3, status=$4, issues_state=$5,
-			action='none', finished_at=now(), updated_at=now()
-			WHERE id=$1 AND state='queued'`, e.ID, mergeSHA, reason, status, issues)
+		tag, err := tx.Exec(ctx, `UPDATE merge_queue SET state='merged', merge_sha=$2, reason=$3, reason_code=$6, reason_params=$7,
+			status=$4, status_code=$8, status_params=$9, issues_state=$5, action='none', finished_at=now(), updated_at=now()
+			WHERE id=$1 AND state='queued'`, e.ID, mergeSHA, reason, status.Text(), issues, why.Code, why.Params, status.Code, status.Params)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
@@ -787,10 +803,11 @@ func OwnsMerge(ctx context.Context, q store.Querier, repoID int64, pr int, sha s
 // （UpdatedFrom）都不能跨分支。
 func (p *pass) update(ctx context.Context, e *Entry, pull *forge.Pull) (bool, error) {
 	// action_at 与判断超时用同一个时钟（s.now）
+	st := Note{Code: StatusUpdating}
 	if _, err := p.conn.Exec(ctx, `UPDATE merge_queue SET action='updating', action_head=$2, action_base=$4, action_at=$3,
-		action_tries=action_tries+1, base_ref=$4, status='正在更新 PR 分支，等待新的 commit', updated_at=now()
+		action_tries=action_tries+1, base_ref=$4, status=$5, status_code=$6, status_params=$7, updated_at=now()
 		WHERE id=$1 AND state='queued'`,
-		e.ID, e.HeadSHA, p.s.now(), pull.BaseRef); err != nil {
+		e.ID, e.HeadSHA, p.s.now(), pull.BaseRef, st.Text(), st.Code, st.Params); err != nil {
 		return false, err
 	}
 	e.BaseRef, e.ActionBase = pull.BaseRef, pull.BaseRef
@@ -806,23 +823,24 @@ func (p *pass) update(ctx context.Context, e *Entry, pull *forge.Pull) (bool, er
 		return p.conflict(ctx, e, pull.BaseRef, err)
 	case forge.IsRejected(err):
 		// 没有权限、其他原因被拒：出队并评论原因，不交给 AI 开发（不是冲突）
-		return false, p.remove(ctx, e, pull, removeWithComment("更新 PR 分支失败："+err.Error()))
+		return false, p.remove(ctx, e, pull, removeWithComment(note(ReasonUpdateRejected, NoteParams{Detail: err.Error()})))
 	}
 	// 暂时失败：结果未知（平台可能已经接受了请求，只是响应丢失），保留更新意图和 action_head，清空请求时间并且不计这次请求。
 	// 下一次处理时新 head 到了就按队列更新接受，没到就立即重新请求（decide）。
-	return false, p.retryUpdate(ctx, e, "更新 PR 分支暂时失败，稍后重试："+err.Error(), false, err)
+	return false, p.retryUpdate(ctx, e, note(StatusUpdateRetry, NoteParams{Detail: err.Error()}), false, err)
 }
 
 // retryUpdate 保留更新意图、清空请求时间（下一次处理立即重新请求，decide），显示状态 status，返回 cause（稍后重试）。
 // counted 为 false 时不计这次请求（结果不明）；为 true 时计入，用完 maxUpdateTries 次出队（decide）。
-func (p *pass) retryUpdate(ctx context.Context, e *Entry, status string, counted bool, cause error) error {
+func (p *pass) retryUpdate(ctx context.Context, e *Entry, status Note, counted bool, cause error) error {
 	tries := `greatest(action_tries-1, 0)`
 	if counted {
 		tries = `action_tries`
 	}
 	err := cause
-	if _, uerr := p.conn.Exec(ctx, `UPDATE merge_queue SET action_at=NULL, action_tries=`+tries+`, status=$2, updated_at=now()
-		WHERE id=$1 AND state='queued'`, e.ID, shorten.Text(status, maxReasonLen)); uerr != nil {
+	if _, uerr := p.conn.Exec(ctx, `UPDATE merge_queue SET action_at=NULL, action_tries=`+tries+`, status=$2, status_code=$3,
+		status_params=$4, updated_at=now() WHERE id=$1 AND state='queued'`,
+		e.ID, shorten.Text(status.Text(), maxReasonLen), status.Code, status.Params); uerr != nil {
 		err = errors.Join(err, uerr)
 	}
 	if err == nil {
@@ -841,7 +859,7 @@ func (p *pass) retryUpdate(ctx context.Context, e *Entry, status string, counted
 func (p *pass) conflict(ctx context.Context, e *Entry, expectedBase string, cause error) (bool, error) {
 	cur, err := p.f.GetPull(ctx, e.PR)
 	if err != nil {
-		return false, p.retryUpdate(ctx, e, "更新 PR 分支时平台报告冲突，读取 PR 失败，稍后重试："+err.Error(), false, err)
+		return false, p.retryUpdate(ctx, e, note(StatusConflictReadFailed, NoteParams{Detail: err.Error()}), false, err)
 	}
 	if cur.State != forge.PullOpen || cur.HeadSHA != e.HeadSHA || cur.BaseRef != expectedBase ||
 		!p.cfg.AllowsBranch(cur.BaseRef, p.repo.DefaultBranch) {
@@ -850,12 +868,12 @@ func (p *pass) conflict(ctx context.Context, e *Entry, expectedBase string, caus
 	}
 	if !cur.Conflicted() {
 		state := cmp.Or(cur.MergeableState, "unknown")
-		return false, p.retryUpdate(ctx, e, fmt.Sprintf("平台报告冲突，但 PR 的可合并状态是 %s（可能还在计算）：等待 GitHub 确认后重新更新 PR 分支", state),
+		return false, p.retryUpdate(ctx, e, Note{Code: StatusMergeability, Params: NoteParams{State: state}},
 			true, fmt.Errorf("%w（mergeable_state=%s）", cause, state))
 	}
 	base, err := p.f.BranchHead(ctx, cur.BaseRef)
 	if err != nil {
-		return false, p.retryUpdate(ctx, e, "读取目标分支失败，稍后重试："+err.Error(), false, err)
+		return false, p.retryUpdate(ctx, e, note(StatusBaseReadFailed, NoteParams{Detail: err.Error()}), false, err)
 	}
 	owner := DevOwner{}
 	if p.s.devConflicts != nil {
@@ -863,25 +881,27 @@ func (p *pass) conflict(ctx context.Context, e *Entry, expectedBase string, caus
 			return false, err
 		}
 	}
-	what := fmt.Sprintf("与目标分支 %s（%s）冲突", cur.BaseRef, shorten.Hash(base))
-	d := removeWithComment(what + "，请提交者把目标分支合并进来（或 rebase）解决冲突")
-	d.Removal, d.ConflictBase = RemovalConflictAuthor, base
+	params := NoteParams{Branch: cur.BaseRef, SHA: base}
+	code, removal := ReasonConflictAuthor, RemovalConflictAuthor
 	switch owner.Kind {
 	case DevOwnerRecording:
 		// AI 开发刚建了这个 PR、还没记下编号：等它记下（记下时通知合并队列），不出队、不评论
-		return true, p.retryUpdate(ctx, e, fmt.Sprintf("%s：等待 AI 开发记下 PR 归属（工作项 #%d）", what, owner.WorkItem), false, nil)
+		params.WorkItem = owner.WorkItem
+		return true, p.retryUpdate(ctx, e, Note{Code: StatusConflictRecording, Params: params}, false, nil)
 	case DevOwnerActive:
+		params.WorkItem = owner.WorkItem
 		if owner.BaseRef != cur.BaseRef {
 			// PR 改投了别的目标分支（例如默认分支改了名）：工作项的目标分支、交付核对和返修输入都按它开始时的目标分支，
 			// 交回会让 AI 开发合并旧的目标分支，解决不了这个冲突。不自动返修，请人处理
-			d.Reason = fmt.Sprintf("%s；PR 的目标分支已从 AI 开发工作项 #%d 的目标分支 %s 改为 %s，不自动返修，需要人处理",
-				what, owner.WorkItem, owner.BaseRef, cur.BaseRef)
+			code, params.From = ReasonConflictRetargeted, owner.BaseRef
 			break
 		}
-		d.Reason, d.Removal = fmt.Sprintf("%s，已交给 AI 开发返修（工作项 #%d）", what, owner.WorkItem), RemovalConflictDev
+		code, removal = ReasonConflictDev, RemovalConflictDev
 	case DevOwnerEnded:
-		d.Reason = fmt.Sprintf("%s；负责它的 AI 开发工作项 #%d 已经结束（%s），不自动返修，需要人处理", what, owner.WorkItem, owner.State)
+		code, params.WorkItem, params.State = ReasonConflictEnded, owner.WorkItem, owner.State
 	}
+	d := removeWithComment(Note{Code: code, Params: params})
+	d.Removal, d.ConflictBase = removal, base
 	p.s.log.Info("合并队列：PR 与目标分支冲突", "repo", p.repo.FullName(), "pr", e.PR, "head", e.HeadSHA, "base", base, "removal", d.Removal)
 	return false, p.remove(ctx, e, cur, d)
 }
@@ -910,8 +930,10 @@ func (p *pass) merge(ctx context.Context, e *Entry, pull *forge.Pull) (bool, err
 	if pull != nil { // 只在测试中为 nil
 		labels = append(labels, pull.Labels...)
 	}
-	if _, err := p.conn.Exec(ctx, `UPDATE merge_queue SET action=$2, issues=$3, merge_labels=$4, status='正在合并', updated_at=now()
-		WHERE id=$1 AND state='queued'`, e.ID, actionMerging, frozen, labels); err != nil {
+	st := Note{Code: StatusMerging}
+	if _, err := p.conn.Exec(ctx, `UPDATE merge_queue SET action=$2, issues=$3, merge_labels=$4, status=$5, status_code=$6,
+		status_params=$7, updated_at=now() WHERE id=$1 AND state='queued'`,
+		e.ID, actionMerging, frozen, labels, st.Text(), st.Code, st.Params); err != nil {
 		return false, err
 	}
 	e.MergeLabels = labels
@@ -919,14 +941,14 @@ func (p *pass) merge(ctx context.Context, e *Entry, pull *forge.Pull) (bool, err
 	switch {
 	case err == nil:
 		p.s.log.Info("合并队列：合并 PR", "repo", p.repo.FullName(), "pr", e.PR, "head", e.HeadSHA, "merge_sha", sha)
-		return false, p.finishMerged(ctx, e, pull, sha, "")
+		return false, p.finishMerged(ctx, e, pull, sha, Note{})
 	case errors.Is(err, forge.ErrHeadChanged):
 		// 平台确认没有合并：清掉合并意图，之后在队列之外合并的不会被当成队列合并的
 		_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET action='none', merge_labels=NULL, updated_at=now()
 			WHERE id=$1 AND state='queued' AND action=$2`, e.ID, actionMerging)
 		return false, err
 	case forge.IsRejected(err):
-		return false, p.remove(ctx, e, pull, removeWithComment("合并被拒绝："+err.Error()))
+		return false, p.remove(ctx, e, pull, removeWithComment(note(ReasonMergeRejected, NoteParams{Detail: err.Error()})))
 	case !forge.Uncertain(err):
 		// 平台明确没有执行（限流、其他 4xx）：清掉合并意图和记下的 label，之后用户自己合并的不会被当成队列合并的；稍后重试
 		if _, uerr := p.conn.Exec(ctx, `UPDATE merge_queue SET action='none', merge_labels=NULL, updated_at=now()
