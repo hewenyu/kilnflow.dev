@@ -1,6 +1,8 @@
 {
  "Page": "settings_members",
- "Title": "成员",
+ "Title": {
+  "id": "settings.titleMembers"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/settings_npm.json'
 import failed from '../../dev/fixtures/settings_npm.new.json'
-import { envelope, renderPage } from '../test/render'
+import { envelope, renderPage, switchLocale, tFor, withData } from '../test/render'
 import { hidden, stubSubmit } from './settings/testing'
 
 afterEach(() => {
@@ -43,10 +43,27 @@ describe('设置 · npm', () => {
     const form = screen.getByRole('form', { name: 'npm 配置' })
     expect(within(form).getByText('没有保存。')).toBeInTheDocument()
     expect(within(form).getByRole('textbox', { name: /scope/ })).toHaveAttribute('aria-invalid', 'true')
-    expect(within(form).getByText('scope "@Acme" 无效：不能有大写字母')).toBeInTheDocument()
+    expect(within(form).getByText('scope @Acme 无效：不能有大写字母')).toBeInTheDocument()
     expect(container.querySelector('input[name="token"]')).toHaveValue('')
     expect(within(form).getByText(/刚才输入的 token 没有保留/)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '删除 npm 配置' })).not.toBeInTheDocument()
+  })
+
+  it('保存失败的字段错误按语言显示：英文界面是英文，中途切换语言随之切换', async () => {
+    const en = tFor('en')
+    const scopeEN = en('settingsErr.scopeUppercase', { value: '@Acme' })
+    const tokenEN = en('settingsNpm.errTokenNotKept')
+    renderPage(envelope(failed), '/settings/npm?account=acme-sandbox', { locale: 'en' })
+    expect(screen.getByText(scopeEN)).toBeInTheDocument()
+    expect(screen.getByText(tokenEN)).toBeInTheDocument()
+    expect(screen.queryByText('scope @Acme 无效：不能有大写字母')).not.toBeInTheDocument()
+    await switchLocale('简体中文')
+    expect(screen.getByText('scope @Acme 无效：不能有大写字母')).toBeInTheDocument()
+    expect(screen.getByText(/刚才输入的 token 没有保留/)).toBeInTheDocument()
+    expect(screen.queryByText(scopeEN)).not.toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText(scopeEN)).toBeInTheDocument()
+    expect(screen.getByText(tokenEN)).toBeInTheDocument()
   })
 
   it('保存时提交账号、scope、registry 和 token', async () => {
@@ -78,5 +95,29 @@ describe('设置 · npm', () => {
     expect(post?.url).toBe('/settings/npm/delete')
     expect(post?.body.get('account')).toBe('acme')
     expect(post?.body.get('confirm')).toBe('1')
+  })
+  it('英文界面：registry 带用户信息时说明原因，不回显；中途切换语言保留 scope，token 为空', async () => {
+    const en = tFor('en')
+    const env = withData(envelope(failed), {
+      Form: {
+        Values: { scope: '@acme', registry: '', token: 'npm_t0ken_leak' },
+        Errors: { registry: { id: 'settingsErr.urlUserInfo' } },
+        Failed: true,
+      },
+    })
+    const { container } = renderPage(env, '/settings/npm?account=acme-sandbox', { locale: 'en' })
+    expect(container.innerHTML).not.toContain('npm_t0ken_leak')
+    expect(container.querySelector('input[name="token"]')).toHaveValue('')
+    expect(container.querySelector('input[name="registry"]')).toHaveValue('')
+    expect(screen.getByText(en('settingsErr.urlUserInfo'))).toBeInTheDocument()
+    const scope = container.querySelector('input[name="scope"]')
+    if (!(scope instanceof HTMLInputElement)) throw new Error('应有 scope 字段')
+    await userEvent.clear(scope)
+    await userEvent.type(scope, '@kiln')
+    await switchLocale('简体中文')
+    expect(container.querySelector('input[name="scope"]')).toHaveValue('@kiln')
+    expect(container.querySelector('input[name="token"]')).toHaveValue('')
+    await switchLocale('English')
+    expect(screen.getByText(en('settingsForm.notSaved'))).toBeInTheDocument()
   })
 })

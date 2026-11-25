@@ -1,5 +1,5 @@
 import { ContainerIcon, OrganizationIcon, PackageIcon } from '@primer/octicons-react'
-import { Link, LinkButton } from '@primer/react'
+import { LinkButton } from '@primer/react'
 import { z } from 'zod'
 import { definePage, type PageProps } from '../app/definePage'
 import { Box, BoxBody, BoxHeader } from '../components/Box'
@@ -7,8 +7,18 @@ import { Callout } from '../components/Callout'
 import { EmptyState } from '../components/EmptyState'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { Subhead } from '../components/Subhead'
+import { Trans, useT } from '../i18n/locale'
 import { list } from '../lib/envelope'
-import { DockerOverride, DockerStatusLabel, DockerSummary, NpmStatusLabel, NpmSummary } from './settings/common'
+import {
+  DockerOverride,
+  DockerStatusLabel,
+  DockerSummary,
+  dockerFieldLabels,
+  NpmStatusLabel,
+  NpmSummary,
+  settingsTags,
+  withLink,
+} from './settings/common'
 import { dockerViewSchema, npmViewSchema, type DockerView, type NpmView } from './settings/schemas'
 import css from './settings.module.css'
 
@@ -22,6 +32,7 @@ const schema = z.object({
 type Data = z.infer<typeof schema>
 
 function DockerCard({ v }: { v: DockerView }) {
+  const t = useT()
   const titleID = `docker-${v.Account}-title`
   return (
     <Box as="section" aria-labelledby={titleID}>
@@ -39,14 +50,14 @@ function DockerCard({ v }: { v: DockerView }) {
       <BoxBody className={css.body}>
         <DockerSummary v={v} />
         {v.Status === 'incomplete' && (
-          <Callout tone="warning" title="连接不完整" hideTitle>
-            还缺少：{v.Missing.join('、')}。
+          <Callout tone="warning" title={t('settingsConn.incompleteTitle')} hideTitle>
+            {t('settingsConn.missing', { fields: v.Missing.map((f) => t(dockerFieldLabels[f])).join(t('list.enum')) })}
           </Callout>
         )}
         <DockerOverride v={v} />
         <div>
           <LinkButton href={v.URL} variant={v.Status === 'unconfigured' ? 'primary' : 'default'}>
-            {v.Status === 'unconfigured' ? '配置 Docker Hub' : '编辑连接'}
+            {v.Status === 'unconfigured' ? t('settingsConn.configureDocker') : t('settingsConn.editConnection')}
           </LinkButton>
         </div>
       </BoxBody>
@@ -55,6 +66,7 @@ function DockerCard({ v }: { v: DockerView }) {
 }
 
 function NpmCard({ v }: { v: NpmView }) {
+  const t = useT()
   const titleID = `npm-${v.Account}-title`
   return (
     <Box as="section" aria-labelledby={titleID}>
@@ -73,7 +85,7 @@ function NpmCard({ v }: { v: NpmView }) {
         <NpmSummary v={v} />
         <div>
           <LinkButton href={v.URL} variant={v.Config ? 'default' : 'primary'}>
-            {v.Config ? '编辑配置' : '配置 npm'}
+            {v.Config ? t('settingsConn.editNpm') : t('settingsConn.configureNpm')}
           </LinkButton>
         </div>
       </BoxBody>
@@ -82,20 +94,17 @@ function NpmCard({ v }: { v: NpmView }) {
 }
 
 function Settings({ data }: PageProps<Data>) {
+  const t = useT()
   return (
     <SettingsLayout section={data.Section}>
-      <Subhead description="发布镜像和 npm 包需要的外部账号。每个 GitHub 账号配置一次，账号下的所有仓库共用。">连接与发布凭据</Subhead>
+      <Subhead description={t('settingsConn.description')}>{t('settingsNav.conn')}</Subhead>
       {data.Docker.length > 0 ? (
         <>
           <section aria-labelledby="docker-title">
             <Subhead
               level={2}
               id="docker-title"
-              description={
-                <>
-                  workflow 中 <code>release.images</code> 推送镜像到 Docker Hub 时使用。
-                </>
-              }
+              description={<Trans id="settingsConn.dockerDesc" tags={settingsTags} />}
             >
               Docker Hub
             </Subhead>
@@ -110,11 +119,7 @@ function Settings({ data }: PageProps<Data>) {
               level={2}
               id="npm-title"
               spaced
-              description={
-                <>
-                  workflow 中 <code>release.npm</code> 的包用这里的 scope、registry 和 token 发布，workflow 中不写凭据。
-                </>
-              }
+              description={<Trans id="settingsConn.npmDesc" tags={settingsTags} />}
             >
               npm
             </Subhead>
@@ -127,17 +132,16 @@ function Settings({ data }: PageProps<Data>) {
         </>
       ) : (
         <Box>
-          <EmptyState icon={OrganizationIcon} title="还没有已安装 App 的账号">
-            确认 App 已安装、账号在 KILN_ALLOWED_ACCOUNTS 中，然后到 <Link href="/settings/repos">仓库</Link> 同步。
+          <EmptyState icon={OrganizationIcon} title={t('settingsConn.emptyTitle')}>
+            <Trans id="settingsConn.emptyText" tags={withLink('/settings/repos')} />
           </EmptyState>
         </Box>
       )}
       <Subhead level={2} spaced>
-        其他发布目标
+        {t('settingsConn.otherTitle')}
       </Subhead>
       <p className={css.other}>
-        GitHub Release 使用 GitHub App 的权限发布，不需要在这里配置。其他变量和 secret（例如部署密钥）在{' '}
-        <Link href="/settings/variables">变量与密钥</Link> 中按账号、仓库或 environment 配置。
+        <Trans id="settingsConn.otherText" tags={withLink('/settings/variables')} />
       </p>
     </SettingsLayout>
   )

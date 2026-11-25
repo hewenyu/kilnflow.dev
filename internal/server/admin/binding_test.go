@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -27,6 +28,19 @@ func TestBinding(t *testing.T) {
 	e.must(err)
 	_, err = cl.UnbindAdmin(ctx, req(&apiv1.UnbindAdminRequest{}))
 	wantCode(t, "没有绑定时解除", err, connect.CodeFailedPrecondition)
+	// Dashboard 直接调用 Service：前提不满足是可以判断的 sentinel（包装在 FailedPrecondition 中），CLI 的说明不变
+	for name, c := range map[string]struct {
+		err  error
+		want error
+	}{
+		"关闭 token 登录": {e.svc.SetTokenLogin(ctx, false, testActor), ErrNotBound},
+		"解除绑定":        {e.svc.UnbindAdmin(ctx, testActor), ErrAlreadyUnbound},
+	} {
+		ce, ok := errors.AsType[*connect.Error](c.err)
+		if !errors.Is(c.err, c.want) || !ok || ce.Code() != connect.CodeFailedPrecondition || ce.Message() != c.want.Error() {
+			t.Errorf("%s：%#v，期望 FailedPrecondition 包装的 %v", name, c.err, c.want)
+		}
+	}
 
 	// 没有绑定时 CLI 的操作者是 TokenActor
 	_, err = cl.SetVariable(ctx, req(&apiv1.SetVariableRequest{Scope: repoScope, Name: "A", Value: "1"}))

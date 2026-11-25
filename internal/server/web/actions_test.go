@@ -126,7 +126,7 @@ func TestPostSyncAndReconcile(t *testing.T) {
 
 	// 刷新仓库：回到仓库页（保留搜索词），页面记录最近一次刷新
 	flash := wantRedirect(t, "刷新仓库", e.post(e.alice, "/sync", back), "/settings/repos?q=demo")
-	if flash != "已刷新仓库：1 个 installation，1 个启用中的仓库" {
+	if flashZH(t, flash) != "已刷新仓库：1 个 installation，1 个启用中的仓库。" {
 		t.Errorf("刷新仓库的提示 = %q", flash)
 	}
 	// store.SyncStatus 按它的 json 标签编码（小写）
@@ -138,21 +138,21 @@ func TestPostSyncAndReconcile(t *testing.T) {
 	// 补对账：第一次只记录基线
 	form := url.Values{"repo": {testRepo}, "q": {"demo"}, "page": {"2"}}
 	flash = wantRedirect(t, "第一次补对账", e.post(e.alice, "/settings/repos/reconcile", form), "/settings/repos?page=2&q=demo")
-	mustHave(t, "提示", flash, "tester/demo 补对账完成：1 个分支、0 个 tag、0 个打开的 PR，补上 0 个 run", "这是第一次对账")
+	mustHave(t, "提示", flashZH(t, flash), "tester/demo 补对账完成：1 个分支、0 个 tag、0 个打开的 PR，补上 0 个 run", "这是第一次对账")
 	// 推送了新的提交而 webhook 丢失：补上 push 的 run
 	if err := os.WriteFile(filepath.Join(e.repoDir, "README.md"), []byte("changed\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	gitRun(t, e.repoDir, "commit", "-q", "-am", "change")
 	flash = wantRedirect(t, "第二次补对账", e.post(e.alice, "/settings/repos/reconcile", url.Values{"repo": {testRepo}}), "/settings/repos")
-	if flash != "tester/demo 补对账完成：1 个分支、0 个 tag、0 个打开的 PR，补上 1 个 run" {
+	if flashZH(t, flash) != "tester/demo 补对账完成：1 个分支、0 个 tag、0 个打开的 PR，补上 1 个 run。" {
 		t.Errorf("第二次补对账的提示 = %q", flash)
 	}
 	if n := e.count(`SELECT count(*) FROM runs WHERE source='reconcile'`); n != 1 {
 		t.Errorf("应补上 1 个 run：%d", n)
 	}
 	flash = wantRedirect(t, "补对账不存在的仓库", e.post(e.alice, "/settings/repos/reconcile", url.Values{"repo": {"tester/nope"}}), "/settings/repos")
-	mustHave(t, "提示", flash, "tester/nope 补对账失败：")
+	mustHave(t, "提示", flashZH(t, flash), "仓库 tester/nope 不在 Kiln 中")
 	if a := e.audits("repo.reconcile"); len(a) != 2 || a[0].Actor != "alice" {
 		t.Errorf("补对账的审计 = %+v", a)
 	}
@@ -162,9 +162,9 @@ func TestPostSyncWithoutGitHub(t *testing.T) {
 	t.Parallel()
 	e := newWebEnv(t)
 	flash := wantRedirect(t, "没有连接 GitHub 时刷新仓库", e.post(e.alice, "/sync", nil), "/settings/repos")
-	mustHave(t, "提示", flash, "刷新仓库失败：")
+	mustHave(t, "提示", flashZH(t, flash), "刷新仓库失败：")
 	flash = wantRedirect(t, "没有连接 GitHub 时补对账", e.post(e.alice, "/settings/repos/reconcile", url.Values{"repo": {testRepo}}), "/settings/repos")
-	mustHave(t, "提示", flash, "tester/demo 补对账失败：")
+	mustHave(t, "提示", flashZH(t, flash), "tester/demo 补对账失败：")
 }
 
 // 操作失败的说明：给用户看的说明（校验失败、不存在、前提不满足）显示原文；内部错误（数据库、网络、超时、Internal）
@@ -193,7 +193,7 @@ func TestFailure(t *testing.T) {
 			t.Parallel()
 			d, _, logs := testDashboard(t, "")
 			r := httptest.NewRequest(http.MethodPost, "/runs/9/cancel", nil)
-			got := d.failure(r, tt.err)
+			got := textZH(t, d.failureText(r, tt.err))
 			out := logs.String()
 			if tt.want != "" {
 				if got != tt.want {

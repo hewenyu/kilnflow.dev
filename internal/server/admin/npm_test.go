@@ -1,9 +1,12 @@
 package admin
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/hewenyu/kilnflow.dev/internal/endpoint"
+	"github.com/hewenyu/kilnflow.dev/internal/npm"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
 )
 
@@ -67,8 +70,12 @@ func TestNpmAccount(t *testing.T) {
 	if creds, _ = store.ResolveNpmCredentials(e.ctx, e.db, testMasterKey, repo.OwnerID); creds != nil {
 		t.Errorf("删除后仍有配置 %+v", creds)
 	}
-	if err := e.svc.DeleteNpmAccount(e.ctx, testAccount, "alice"); err == nil || !strings.Contains(err.Error(), "没有配置 npm") {
+	err = e.svc.DeleteNpmAccount(e.ctx, testAccount, "alice")
+	if err == nil || !strings.Contains(err.Error(), "没有配置 npm") {
 		t.Errorf("再次删除：%v", err)
+	}
+	if ne, ok := errors.AsType[*NpmNotConfiguredError](err); !ok || ne.Account != testAccount {
+		t.Errorf("再次删除应是 *NpmNotConfiguredError：%#v", err)
 	}
 }
 
@@ -76,18 +83,36 @@ func TestNpmAccountInvalid(t *testing.T) {
 	e := newEnv(t)
 	for _, tc := range []struct {
 		name, account, scope, registry, token, want string
+		// is 判断错误的类型（Dashboard 按它显示当前语言的说明）
+		is func(error) bool
 	}{
-		{"scope 大写", testAccount, "@Bad", "", "t", "scope"},
-		{"scope 为空", testAccount, "", "", "t", "scope"},
-		{"registry 不是 https", testAccount, "@ok", "http://npm.example.com/", "t", "https"},
-		{"token 为空", testAccount, "@ok", "", "  ", "token 为空"},
-		{"账号不存在", "nobody", "@ok", "", "t", "不在 Kiln 中"},
-		{"没有账号", "", "@ok", "", "t", "需要指定账号"},
+		{"scope 大写", testAccount, "@Bad", "", "t", "scope", func(err error) bool {
+			se, ok := errors.AsType[*npm.ScopeError](err)
+			return ok && se.Scope == "@Bad" && se.Part != nil && se.Part.Problem == npm.PartUppercase
+		}},
+		{"scope 为空", testAccount, "", "", "t", "scope", func(err error) bool {
+			se, ok := errors.AsType[*npm.ScopeError](err)
+			return ok && se.Part != nil && se.Part.Problem == npm.PartEmpty
+		}},
+		{"registry 不是 https", testAccount, "@ok", "http://npm.example.com/", "t", "https", func(err error) bool {
+			ee, ok := errors.AsType[*endpoint.Error](err)
+			return ok && ee.Problem == endpoint.ProblemScheme && ee.Raw == "http://npm.example.com/"
+		}},
+		{"token 为空", testAccount, "@ok", "", "  ", "token 为空", isErr(ErrNpmTokenEmpty)},
+		{"token 太长", testAccount, "@ok", "", strings.Repeat("t", maxNpmToken+1), "token 太长", isErr(ErrNpmTokenTooLong)},
+		{"账号不存在", "nobody", "@ok", "", "t", "不在 Kiln 中", func(err error) bool {
+			ae, ok := errors.AsType[*store.AccountNotFoundError](err)
+			return ok && ae.Account == "nobody"
+		}},
+		{"没有账号", "", "@ok", "", "t", "需要指定账号", isErr(store.ErrScopeRequired)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := e.svc.SetNpmAccount(e.ctx, tc.account, tc.scope, tc.registry, tc.token, "alice")
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("错误 %v，期望包含 %q", err, tc.want)
+			}
+			if err != nil && !tc.is(err) {
+				t.Errorf("错误的类型不对：%#v", err)
 			}
 		})
 	}

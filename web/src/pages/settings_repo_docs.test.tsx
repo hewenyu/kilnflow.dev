@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/settings_repo_docs.json'
 import empty from '../../dev/fixtures/settings_repo_docs.empty.json'
 import failed from '../../dev/fixtures/settings_repo_docs.failed.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, tFor, withData } from '../test/render'
 import { hidden, stubSubmit } from './settings/testing'
 
 // 设置 · 仓库 · 外部文档：只读展示绑定与验证状态，管理员显式触发验证，页面不含 token。
@@ -34,7 +34,7 @@ describe('设置 · 仓库 · 外部文档', () => {
     const decision = screen.getByRole('region', { name: '待决策清单' })
     expect(decision).toHaveTextContent('已配置')
     expect(decision).toHaveTextContent('11111111-1111-4111-8111-111111111111')
-    expect(decision).toHaveTextContent('18200 个字符')
+    expect(decision).toHaveTextContent('18,200 个字符')
     expect(decision).toHaveTextContent('接近推荐篇幅')
     // 只读页面不显示 token，也不声称验证过写权限
     expect(screen.getByText(/这里不显示写 token/)).toBeInTheDocument()
@@ -112,5 +112,29 @@ describe('设置 · 仓库 · 外部文档', () => {
     expect(screen.getByText('已验证 · 空集合')).toHaveAttribute('data-variant', 'success')
     expect(screen.getByText('0 篇')).toHaveAttribute('data-variant', 'secondary')
     expect(binding).toHaveTextContent('当前没有文档（冻结时会记录一个空集合，不是读取失败）')
+  })
+  it('Outline 验证反馈：通过、失败原因和未知错误码都按语言显示', async () => {
+    const en = tFor('en')
+    const ok = { id: 'settingsDocs.verifyOK', params: { count: 1, doc: 'doc-1' } }
+    renderPage(envelope(fixture, { Flash: ok }), '/settings/repos/docs?repo=acme%2Fkiln')
+    expect(screen.getByText('验证通过：文档集可访问，共 1 篇文档，抽查了 doc-1 的正文。')).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText(en('settingsDocs.verifyOK', { count: 1, doc: 'doc-1' }))).toHaveTextContent('with 1 document;')
+  })
+
+  it('英文界面：读取失败的原因来自错误码，错误码原样显示', () => {
+    const en = tFor('en')
+    renderPage(envelope(failed), '/settings/repos/docs?repo=acme%2Flegacy-api', { locale: 'en' })
+    const binding = screen.getByRole('region', { name: en('repoDocs.bindingTitle') })
+    expect(binding).toHaveTextContent(en('docCheck.authFailed'))
+    expect(binding).toHaveTextContent('auth_failed')
+    expect(screen.getByRole('button', { name: en('repoDocs.verify') })).toBeInTheDocument()
+  })
+
+  it('未知的错误码：说明前后端版本可能不一致并给出原样的错误码', () => {
+    const env = envelope(failed)
+    const next = withData(env, { Binding: { ...failed.Data.Binding, CheckErrorCode: 'brand_new', CheckErrorText: { id: 'docCheck.unknown', params: { code: 'brand_new' } } } })
+    renderPage(next, '/settings/repos/docs?repo=acme%2Flegacy-api', { locale: 'en' })
+    expect(screen.getByText(tFor('en')('docCheck.unknown', { code: 'brand_new' }))).toBeInTheDocument()
   })
 })

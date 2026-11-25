@@ -1,6 +1,8 @@
 {
  "Page": "settings_vars",
- "Title": "设置 · 变量与密钥",
+ "Title": {
+  "id": "settings.titleVars"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

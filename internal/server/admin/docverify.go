@@ -34,6 +34,11 @@ const (
 // ErrDocBindingChangedDuringVerify 表示验证期间仓库的文档绑定被重绑或解绑：本次结果属于旧配置，没有写入。
 var ErrDocBindingChangedDuringVerify = errors.New("验证期间文档绑定已变更，本次检查结果未应用")
 
+// NoDocBindingError 表示要验证的仓库没有文档绑定；Repo 是仓库全名。
+type NoDocBindingError struct{ Repo string }
+
+func (e *NoDocBindingError) Error() string { return e.Repo + " 没有文档绑定" }
+
 // DocVerifyResult 是一次显式验证的结果（不含 token 与远端原始信息）。
 type DocVerifyResult struct {
 	Repo string
@@ -82,7 +87,7 @@ func (s *Service) VerifyDocBinding(ctx context.Context, fullName, actor string) 
 		return nil, err
 	}
 	if tok == nil {
-		return nil, fmt.Errorf("%s 没有文档绑定", repo.FullName())
+		return nil, &NoDocBindingError{Repo: repo.FullName()}
 	}
 	startedAt := time.Now().UTC()
 	// 外部只读探测另外再受 externalTimeout 限制；即使耗尽，下面的收尾事务仍在总预算内把结论写进去。

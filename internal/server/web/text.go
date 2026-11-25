@@ -470,6 +470,199 @@ const (
 	msgATReasonPermission      msgID = "autoTagReason.permission"
 )
 
+// 设置页（settings_text.go）：标题、校验与前提错误、操作结果、活动说明。
+const (
+	msgSetTitleConn               msgID = "settings.titleConn"
+	msgSetTitleVars               msgID = "settings.titleVars"
+	msgSetTitleEnvs               msgID = "settings.titleEnvs"
+	msgSetTitleEnvNew             msgID = "settings.titleEnvNew"
+	msgSetTitleRepos              msgID = "settings.titleRepos"
+	msgSetTitleRepoDocs           msgID = "settings.titleRepoDocs"
+	msgSetTitleOps                msgID = "settings.titleOps"
+	msgSetTitleUpgrade            msgID = "settings.titleUpgrade"
+	msgSetTitleAccount            msgID = "settings.titleAccount"
+	msgSetTitleMembers            msgID = "settings.titleMembers"
+	msgSetTitleActivity           msgID = "settings.titleActivity"
+	msgSetTitleDocker             msgID = "settings.titleDocker"
+	msgSetTitleNpm                msgID = "settings.titleNpm"
+	msgSetTitleVarNew             msgID = "settings.titleVarNew"
+	msgSetTitleVarEdit            msgID = "settings.titleVarEdit"
+	msgSetTitleSecretNew          msgID = "settings.titleSecretNew"
+	msgSetTitleSecretEdit         msgID = "settings.titleSecretEdit"
+	msgSetErrNameEmpty            msgID = "settingsErr.nameEmpty"
+	msgSetErrNameInvalid          msgID = "settingsErr.nameInvalid"
+	msgSetErrEnvNameRequired      msgID = "settingsErr.envNameRequired"
+	msgSetErrEnvNameSpace         msgID = "settingsErr.envNameSpace"
+	msgSetErrPublishRepo          msgID = "settingsErr.publishRepo"
+	msgSetErrEnvRequired          msgID = "settingsErr.envRequired"
+	msgSetErrScopeRequired        msgID = "settingsErr.scopeRequired"
+	msgSetErrAccountNotFound      msgID = "settingsErr.accountNotFound"
+	msgSetErrRepoNotFound         msgID = "settingsErr.repoNotFound"
+	msgSetErrRepoName             msgID = "settingsErr.repoName"
+	msgSetErrEnvNotFound          msgID = "settingsErr.envNotFound"
+	msgSetErrNpmTokenEmpty        msgID = "settingsErr.npmTokenEmpty"   //nolint:gosec // 消息键，不是凭据
+	msgSetErrNpmTokenLong         msgID = "settingsErr.npmTokenTooLong" //nolint:gosec // 消息键，不是凭据
+	msgSetErrNpmNotConfigured     msgID = "settingsErr.npmNotConfigured"
+	msgSetErrScopeNoAt            msgID = "settingsErr.scopeNoAt"
+	msgSetErrScopeEmpty           msgID = "settingsErr.scopeEmpty"
+	msgSetErrScopeDot             msgID = "settingsErr.scopeLeadingDot"
+	msgSetErrScopeUpper           msgID = "settingsErr.scopeUppercase"
+	msgSetErrScopeChar            msgID = "settingsErr.scopeBadChar"
+	msgSetErrURLInvalid           msgID = "settingsErr.urlInvalid"
+	msgSetErrURLNoHost            msgID = "settingsErr.urlNoHost"
+	msgSetErrURLUserInfo          msgID = "settingsErr.urlUserInfo"
+	msgSetErrURLQuery             msgID = "settingsErr.urlQuery"
+	msgSetErrURLScheme            msgID = "settingsErr.urlScheme"
+	msgSetErrNotBound             msgID = "settingsErr.notBound"
+	msgSetErrAlreadyUnbound       msgID = "settingsErr.alreadyUnbound"
+	msgSetErrRateLimited          msgID = "settingsErr.rateLimited"
+	msgSetErrNoDocBinding         msgID = "settingsErr.noDocBinding"
+	msgEnvErrScope                msgID = "settingsEnv.errScope"
+	msgEnvErrName                 msgID = "settingsEnv.errName"
+	msgEnvErrExists               msgID = "settingsEnv.errExists"
+	msgEnvSaveFailed              msgID = "settingsEnv.saveFailed"
+	msgEnvCreateFailed            msgID = "settingsEnv.createFailed"
+	msgEnvSaved                   msgID = "settingsEnv.saved"
+	msgEnvCreated                 msgID = "settingsEnv.created"
+	msgEnvDeleted                 msgID = "settingsEnv.deleted"
+	msgEnvDeleteFailed            msgID = "settingsEnv.deleteFailed"
+	msgEnvDeleteFailedRef         msgID = "settingsEnv.deleteFailedRef"
+	msgScopeEnvNotFound           msgID = "settingsScope.envNotFound"
+	msgScopeInvalid               msgID = "settingsScope.invalid"
+	msgItemNoName                 msgID = "settingsItem.noName"
+	msgItemVarMissing             msgID = "settingsItem.varMissing"
+	msgItemSecretMissing          msgID = "settingsItem.secretMissing"
+	msgItemVarExists              msgID = "settingsItem.varExists"
+	msgItemSecretExists           msgID = "settingsItem.secretExists"
+	msgItemVarSaveFailed          msgID = "settingsItem.varSaveFailed"
+	msgItemSecretSaveFailed       msgID = "settingsItem.secretSaveFailed"
+	msgItemVarSaved               msgID = "settingsItem.varSaved"
+	msgItemVarCreated             msgID = "settingsItem.varCreated"
+	msgItemVarDeleted             msgID = "settingsItem.varDeleted"
+	msgItemVarDeleteFailed        msgID = "settingsItem.varDeleteFailed"
+	msgItemVarDeleteFailedRef     msgID = "settingsItem.varDeleteFailedRef"
+	msgItemSecretUnchanged        msgID = "settingsItem.secretUnchanged"
+	msgItemSecretEmpty            msgID = "settingsItem.secretValueEmpty"
+	msgItemSecretNotKept          msgID = "settingsItem.secretValueNotKept"
+	msgItemSecretSaved            msgID = "settingsItem.secretSaved"
+	msgItemSecretDeleted          msgID = "settingsItem.secretDeleted"
+	msgItemSecretDeleteFailed     msgID = "settingsItem.secretDeleteFailed"
+	msgItemSecretDeleteFailedRef  msgID = "settingsItem.secretDeleteFailedRef"
+	msgConnEnterFromCard          msgID = "settingsConn.enterFromCard"
+	msgConnNotSaved               msgID = "settingsConn.notSaved"
+	msgConnAccountMissing         msgID = "settingsConn.accountMissing"
+	msgDockerErrUserEmpty         msgID = "settingsDocker.errUserEmpty"
+	msgDockerErrUserInvalid       msgID = "settingsDocker.errUserInvalid"
+	msgDockerErrNSEmpty           msgID = "settingsDocker.errNamespaceEmpty"
+	msgDockerErrNSInvalid         msgID = "settingsDocker.errNamespaceInvalid"
+	msgDockerErrTokenRequired     msgID = "settingsDocker.errTokenRequired"
+	msgDockerErrTokenNotKept      msgID = "settingsDocker.errTokenNotKept"
+	msgDockerSaveFailed           msgID = "settingsDocker.saveFailed"
+	msgDockerSavedCreated         msgID = "settingsDocker.savedCreated"
+	msgDockerSaved                msgID = "settingsDocker.saved"
+	msgDockerSavedTokenKept       msgID = "settingsDocker.savedTokenKept"
+	msgDockerUnchanged            msgID = "settingsDocker.unchanged"
+	msgDockerDeleteUnconfirmed    msgID = "settingsDocker.deleteUnconfirmed"
+	msgDockerDeleteNothing        msgID = "settingsDocker.deleteNothing"
+	msgDockerDeleteFailed         msgID = "settingsDocker.deleteFailed"
+	msgDockerDeleteFailedRef      msgID = "settingsDocker.deleteFailedRef"
+	msgDockerDeleted              msgID = "settingsDocker.deleted"
+	msgNpmErrScopeEmpty           msgID = "settingsNpm.errScopeEmpty"
+	msgNpmErrTokenEmpty           msgID = "settingsNpm.errTokenEmpty"   //nolint:gosec // 消息键，不是凭据
+	msgNpmErrTokenNotKept         msgID = "settingsNpm.errTokenNotKept" //nolint:gosec // 消息键，不是凭据
+	msgNpmSaveFailed              msgID = "settingsNpm.saveFailed"
+	msgNpmSaved                   msgID = "settingsNpm.saved"
+	msgNpmDeleteUnconfirmed       msgID = "settingsNpm.deleteUnconfirmed"
+	msgNpmDeleteFailed            msgID = "settingsNpm.deleteFailed"
+	msgNpmDeleteFailedRef         msgID = "settingsNpm.deleteFailedRef"
+	msgNpmDeleted                 msgID = "settingsNpm.deleted"
+	msgUpgradeSetRegistryFailed   msgID = "settingsUpgrade.registryFailed"
+	msgUpgradeSetRegistryDefault  msgID = "settingsUpgrade.registryDefault"
+	msgUpgradeSetRegistrySet      msgID = "settingsUpgrade.registrySet"
+	msgUpgradeSetCheckRequested   msgID = "settingsUpgrade.checkRequested"
+	msgAccountBindNoOAuth         msgID = "settingsAccount.bindNoOAuth"
+	msgAccountUnbindUnconfirmed   msgID = "settingsAccount.unbindUnconfirmed"
+	msgAccountUnbindFailed        msgID = "settingsAccount.unbindFailed"
+	msgAccountTokenNeedGitHub     msgID = "settingsAccount.tokenLoginNeedGitHub"
+	msgAccountTokenFailed         msgID = "settingsAccount.tokenLoginFailed"
+	msgAccountTokenDisabled       msgID = "settingsAccount.tokenLoginDisabled"
+	msgAccountTokenEnabled        msgID = "settingsAccount.tokenLoginEnabled"
+	msgMemberSourceBound          msgID = "members.sourceBound"
+	msgReposSynced                msgID = "settingsRepos.synced"
+	msgReposSyncFailed            msgID = "settingsRepos.syncFailed"
+	msgReposSyncFailedRef         msgID = "settingsRepos.syncFailedRef"
+	msgReposReconciled            msgID = "settingsRepos.reconciled"
+	msgReposReconciledBase        msgID = "settingsRepos.reconciledBaseline"
+	msgReposReconcileFailed       msgID = "settingsRepos.reconcileFailed"
+	msgReposReconcileFailedRef    msgID = "settingsRepos.reconcileFailedRef"
+	msgReposReconcileLimited      msgID = "settingsRepos.reconcileRateLimited"
+	msgOpsRetried                 msgID = "settingsOps.retried"
+	msgOpsRetryNotFound           msgID = "settingsOps.retryNotFound"
+	msgOpsRetryFailed             msgID = "settingsOps.retryFailed"
+	msgOpsRetryFailedRef          msgID = "settingsOps.retryFailedRef"
+	msgDocsNoRepo                 msgID = "settingsDocs.noRepo"
+	msgDocsRepoNotFound           msgID = "settingsDocs.repoNotFound"
+	msgDocsVerifyNoRepo           msgID = "settingsDocs.verifyNoRepo"
+	msgDocsVerifyChanged          msgID = "settingsDocs.verifyChanged"
+	msgDocsVerifyFailed           msgID = "settingsDocs.verifyFailed"
+	msgDocsVerifyFailedRef        msgID = "settingsDocs.verifyFailedRef"
+	msgDocsVerifyOK               msgID = "settingsDocs.verifyOK"
+	msgDocsVerifyEmpty            msgID = "settingsDocs.verifyEmpty"
+	msgDocCheckAuthFailed         msgID = "docCheck.authFailed"
+	msgDocCheckForbidden          msgID = "docCheck.forbidden"
+	msgDocCheckNotFound           msgID = "docCheck.notFound"
+	msgDocCheckCollectionNotFound msgID = "docCheck.collectionNotFound"
+	msgDocCheckSampleNotFound     msgID = "docCheck.sampleNotFound"
+	msgDocCheckRateLimited        msgID = "docCheck.rateLimited"
+	msgDocCheckUpstream           msgID = "docCheck.upstreamError"
+	msgDocCheckInvalidResponse    msgID = "docCheck.invalidResponse"
+	msgDocCheckInvalidBaseURL     msgID = "docCheck.invalidBaseUrl"
+	msgDocCheckNetworkError       msgID = "docCheck.networkError"
+	msgDocCheckTimeout            msgID = "docCheck.timeout"
+	msgDocCheckInvalidDocument    msgID = "docCheck.invalidDocument"
+	msgDocCheckSampleInvalid      msgID = "docCheck.sampleInvalid"
+	msgDocCheckUnknown            msgID = "docCheck.unknown"
+	msgActLoginToken              msgID = "activity.loginToken"
+	msgActLoginGitHub             msgID = "activity.loginGitHub"
+	msgActRunDispatch             msgID = "activity.runDispatch"
+	msgActRunCancel               msgID = "activity.runCancel"
+	msgActRunRerun                msgID = "activity.runRerun"
+	msgActRunRerunFirst           msgID = "activity.runRerunFirst"
+	msgActRunRerunJob             msgID = "activity.runRerunJob"
+	msgActRunRerunJobFirst        msgID = "activity.runRerunJobFirst"
+	msgActRunnerDrain             msgID = "activity.runnerDrain"
+	msgActRunnerUndrain           msgID = "activity.runnerUndrain"
+	msgActRunnerRevoke            msgID = "activity.runnerRevoke"
+	msgActRunnerDelete            msgID = "activity.runnerDelete"
+	msgActRunnerToken             msgID = "activity.runnerToken"
+	msgActRunnerEnroll            msgID = "activity.runnerEnroll"
+	msgActReposSync               msgID = "activity.reposSync"
+	msgActRepoReconcile           msgID = "activity.repoReconcile"
+	msgActCacheBump               msgID = "activity.cacheBump"
+	msgActOutboxRetry             msgID = "activity.outboxRetry"
+	msgActAdminBind               msgID = "activity.adminBind"
+	msgActAdminRebind             msgID = "activity.adminRebind"
+	msgActAdminUnbind             msgID = "activity.adminUnbind"
+	msgActTokenDisable            msgID = "activity.tokenLoginDisable"
+	msgActTokenEnable             msgID = "activity.tokenLoginEnable"
+	msgActVarSet                  msgID = "activity.varSet"
+	msgActVarDelete               msgID = "activity.varDelete"
+	msgActSecretSet               msgID = "activity.secretSet"
+	msgActSecretDelete            msgID = "activity.secretDelete"
+	msgActEnvUpsert               msgID = "activity.envUpsert"
+	msgActEnvDelete               msgID = "activity.envDelete"
+	msgActNpmSet                  msgID = "activity.npmSet"
+	msgActNpmDelete               msgID = "activity.npmDelete"
+	msgActDocBind                 msgID = "activity.docBind"
+	msgActDocUnbind               msgID = "activity.docUnbind"
+	msgActDecisionSet             msgID = "activity.decisionSet"
+	msgActDecisionClear           msgID = "activity.decisionClear"
+	msgActConfigOther             msgID = "activity.configOther"
+	msgActAIReview                msgID = "activity.aiReviewTrigger"
+	msgActAICancel                msgID = "activity.aiRequestCancel"
+	msgActAIRerun                 msgID = "activity.aiRequestRerun"
+)
+
 // 消息的参数名（同一个参数名在各条消息中的含义相同）。
 const (
 	argLogin = "login"
@@ -544,6 +737,27 @@ const (
 	argClosed     = "closed"
 	argUnknown    = "unknown"
 	argTag        = "tag"
+)
+
+// 设置页消息的参数名。
+const (
+	argAccount       = "account"
+	argAdded         = "added"
+	argBranches      = "branches"
+	argChar          = "char"
+	argEnv           = "env"
+	argFields        = "fields"
+	argInstallations = "installations"
+	argOp            = "op"
+	argPool          = "pool"
+	argPrevious      = "previous"
+	argPulls         = "pulls"
+	argRefs          = "refs"
+	argRegistry      = "registry"
+	argRepos         = "repos"
+	argRun           = "run"
+	argScope         = "scope"
+	argTags          = "tags"
 )
 
 // messages 是服务端给出的全部消息（只读）。
@@ -870,6 +1084,196 @@ var messages = map[msgID]msgSpec{
 	msgATReasonTagOccupied:     {params: map[string]paramKind{argTag: paramString, argSHA: paramString}},
 	msgATReasonTagRejected:     {params: map[string]paramKind{argTag: paramString, argDetail: paramString}},
 	msgATReasonPermission:      {params: map[string]paramKind{argDetail: paramString}},
+
+	msgSetTitleConn:               {},
+	msgSetTitleVars:               {},
+	msgSetTitleEnvs:               {},
+	msgSetTitleEnvNew:             {},
+	msgSetTitleRepos:              {},
+	msgSetTitleRepoDocs:           {params: map[string]paramKind{argRepo: paramString}},
+	msgSetTitleOps:                {},
+	msgSetTitleUpgrade:            {},
+	msgSetTitleAccount:            {},
+	msgSetTitleMembers:            {},
+	msgSetTitleActivity:           {},
+	msgSetTitleDocker:             {params: map[string]paramKind{argAccount: paramString}},
+	msgSetTitleNpm:                {params: map[string]paramKind{argAccount: paramString}},
+	msgSetTitleVarNew:             {params: map[string]paramKind{argScope: paramString}},
+	msgSetTitleVarEdit:            {params: map[string]paramKind{argName: paramString, argScope: paramString}},
+	msgSetTitleSecretNew:          {params: map[string]paramKind{argScope: paramString}},
+	msgSetTitleSecretEdit:         {params: map[string]paramKind{argName: paramString, argScope: paramString}},
+	msgSetErrNameEmpty:            {flash: true},
+	msgSetErrNameInvalid:          {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgSetErrEnvNameRequired:      {flash: true},
+	msgSetErrEnvNameSpace:         {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgSetErrPublishRepo:          {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgSetErrEnvRequired:          {flash: true},
+	msgSetErrScopeRequired:        {flash: true},
+	msgSetErrAccountNotFound:      {params: map[string]paramKind{argAccount: paramString}, flash: true},
+	msgSetErrRepoNotFound:         {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgSetErrRepoName:             {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgSetErrEnvNotFound:          {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgSetErrNpmTokenEmpty:        {flash: true},
+	msgSetErrNpmTokenLong:         {flash: true},
+	msgSetErrNpmNotConfigured:     {params: map[string]paramKind{argAccount: paramString}, flash: true},
+	msgSetErrScopeNoAt:            {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrScopeEmpty:           {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrScopeDot:             {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrScopeUpper:           {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrScopeChar:            {params: map[string]paramKind{argValue: paramString, argChar: paramString}, flash: true},
+	msgSetErrURLInvalid:           {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrURLNoHost:            {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrURLUserInfo:          {flash: true},
+	msgSetErrURLQuery:             {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrURLScheme:            {params: map[string]paramKind{argValue: paramString}, flash: true},
+	msgSetErrNotBound:             {flash: true},
+	msgSetErrAlreadyUnbound:       {flash: true},
+	msgSetErrRateLimited:          {params: map[string]paramKind{argAt: paramInt}, flash: true},
+	msgSetErrNoDocBinding:         {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgEnvErrScope:                {},
+	msgEnvErrName:                 {},
+	msgEnvErrExists:               {params: map[string]paramKind{argName: paramString}},
+	msgEnvSaveFailed:              {params: map[string]paramKind{argReason: paramString}},
+	msgEnvCreateFailed:            {params: map[string]paramKind{argReason: paramString}},
+	msgEnvSaved:                   {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgEnvCreated:                 {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgEnvDeleted:                 {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgEnvDeleteFailed:            {params: map[string]paramKind{argName: paramString, argReason: paramString}, flash: true},
+	msgEnvDeleteFailedRef:         {params: map[string]paramKind{argName: paramString, argRef: paramString}, flash: true},
+	msgScopeEnvNotFound:           {},
+	msgScopeInvalid:               {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgItemNoName:                 {},
+	msgItemVarMissing:             {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemSecretMissing:          {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemVarExists:              {params: map[string]paramKind{argName: paramString}},
+	msgItemSecretExists:           {params: map[string]paramKind{argName: paramString}},
+	msgItemVarSaveFailed:          {params: map[string]paramKind{argReason: paramString}},
+	msgItemSecretSaveFailed:       {params: map[string]paramKind{argReason: paramString}},
+	msgItemVarSaved:               {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemVarCreated:             {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemVarDeleted:             {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemVarDeleteFailed:        {params: map[string]paramKind{argName: paramString, argReason: paramString}, flash: true},
+	msgItemVarDeleteFailedRef:     {params: map[string]paramKind{argName: paramString, argRef: paramString}, flash: true},
+	msgItemSecretUnchanged:        {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemSecretEmpty:            {},
+	msgItemSecretNotKept:          {},
+	msgItemSecretSaved:            {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemSecretDeleted:          {params: map[string]paramKind{argName: paramString}, flash: true},
+	msgItemSecretDeleteFailed:     {params: map[string]paramKind{argName: paramString, argReason: paramString}, flash: true},
+	msgItemSecretDeleteFailedRef:  {params: map[string]paramKind{argName: paramString, argRef: paramString}, flash: true},
+	msgConnEnterFromCard:          {flash: true},
+	msgConnNotSaved:               {flash: true},
+	msgConnAccountMissing:         {flash: true},
+	msgDockerErrUserEmpty:         {},
+	msgDockerErrUserInvalid:       {},
+	msgDockerErrNSEmpty:           {},
+	msgDockerErrNSInvalid:         {},
+	msgDockerErrTokenRequired:     {},
+	msgDockerErrTokenNotKept:      {},
+	msgDockerSaveFailed:           {params: map[string]paramKind{argReason: paramString}},
+	msgDockerSavedCreated:         {params: map[string]paramKind{argEnv: paramString, argRefs: paramString}, flash: true},
+	msgDockerSaved:                {params: map[string]paramKind{argFields: paramString}, flash: true},
+	msgDockerSavedTokenKept:       {params: map[string]paramKind{argFields: paramString}, flash: true},
+	msgDockerUnchanged:            {flash: true},
+	msgDockerDeleteUnconfirmed:    {flash: true},
+	msgDockerDeleteNothing:        {flash: true},
+	msgDockerDeleteFailed:         {params: map[string]paramKind{argAccount: paramString, argReason: paramString}, flash: true},
+	msgDockerDeleteFailedRef:      {params: map[string]paramKind{argAccount: paramString, argRef: paramString}, flash: true},
+	msgDockerDeleted:              {params: map[string]paramKind{argAccount: paramString, argEnv: paramString}, flash: true},
+	msgNpmErrScopeEmpty:           {},
+	msgNpmErrTokenEmpty:           {},
+	msgNpmErrTokenNotKept:         {},
+	msgNpmSaveFailed:              {params: map[string]paramKind{argReason: paramString}},
+	msgNpmSaved:                   {params: map[string]paramKind{argScope: paramString}, flash: true},
+	msgNpmDeleteUnconfirmed:       {flash: true},
+	msgNpmDeleteFailed:            {params: map[string]paramKind{argAccount: paramString, argReason: paramString}, flash: true},
+	msgNpmDeleteFailedRef:         {params: map[string]paramKind{argAccount: paramString, argRef: paramString}, flash: true},
+	msgNpmDeleted:                 {params: map[string]paramKind{argAccount: paramString}, flash: true},
+	msgUpgradeSetRegistryFailed:   {params: map[string]paramKind{argReason: paramString}},
+	msgUpgradeSetRegistryDefault:  {params: map[string]paramKind{argRegistry: paramString}, flash: true},
+	msgUpgradeSetRegistrySet:      {params: map[string]paramKind{argRegistry: paramString}, flash: true},
+	msgUpgradeSetCheckRequested:   {params: map[string]paramKind{argCount: paramInt, argPoll: paramInt}, flash: true},
+	msgAccountBindNoOAuth:         {flash: true},
+	msgAccountUnbindUnconfirmed:   {flash: true},
+	msgAccountUnbindFailed:        {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgAccountTokenNeedGitHub:     {flash: true},
+	msgAccountTokenFailed:         {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgAccountTokenDisabled:       {flash: true},
+	msgAccountTokenEnabled:        {flash: true},
+	msgMemberSourceBound:          {},
+	msgReposSynced:                {params: map[string]paramKind{argInstallations: paramInt, argRepos: paramInt}, flash: true},
+	msgReposSyncFailed:            {params: map[string]paramKind{argReason: paramString}, flash: true},
+	msgReposSyncFailedRef:         {params: map[string]paramKind{argRef: paramString}, flash: true},
+	msgReposReconciled:            {params: map[string]paramKind{argRepo: paramString, argBranches: paramInt, argTags: paramInt, argPulls: paramInt, argAdded: paramInt}, flash: true},
+	msgReposReconciledBase:        {params: map[string]paramKind{argRepo: paramString, argBranches: paramInt, argTags: paramInt, argPulls: paramInt, argAdded: paramInt}, flash: true},
+	msgReposReconcileFailed:       {params: map[string]paramKind{argRepo: paramString, argReason: paramString}, flash: true},
+	msgReposReconcileFailedRef:    {params: map[string]paramKind{argRepo: paramString, argRef: paramString}, flash: true},
+	msgReposReconcileLimited:      {params: map[string]paramKind{argRepo: paramString, argAt: paramInt}, flash: true},
+	msgOpsRetried:                 {params: map[string]paramKind{argID: paramInt}, flash: true},
+	msgOpsRetryNotFound:           {params: map[string]paramKind{argID: paramInt}, flash: true},
+	msgOpsRetryFailed:             {params: map[string]paramKind{argID: paramInt, argReason: paramString}, flash: true},
+	msgOpsRetryFailedRef:          {params: map[string]paramKind{argID: paramInt, argRef: paramString}, flash: true},
+	msgDocsNoRepo:                 {},
+	msgDocsRepoNotFound:           {params: map[string]paramKind{argRepo: paramString}},
+	msgDocsVerifyNoRepo:           {flash: true},
+	msgDocsVerifyChanged:          {flash: true},
+	msgDocsVerifyFailed:           {params: map[string]paramKind{argRepo: paramString, argReason: paramString}, flash: true},
+	msgDocsVerifyFailedRef:        {params: map[string]paramKind{argRepo: paramString, argRef: paramString}, flash: true},
+	msgDocsVerifyOK:               {params: map[string]paramKind{argCount: paramInt, argDoc: paramString}, flash: true},
+	msgDocsVerifyEmpty:            {flash: true},
+	msgDocCheckAuthFailed:         {flash: true},
+	msgDocCheckForbidden:          {flash: true},
+	msgDocCheckNotFound:           {flash: true},
+	msgDocCheckCollectionNotFound: {flash: true},
+	msgDocCheckSampleNotFound:     {flash: true},
+	msgDocCheckRateLimited:        {flash: true},
+	msgDocCheckUpstream:           {flash: true},
+	msgDocCheckInvalidResponse:    {flash: true},
+	msgDocCheckInvalidBaseURL:     {flash: true},
+	msgDocCheckNetworkError:       {flash: true},
+	msgDocCheckTimeout:            {flash: true},
+	msgDocCheckInvalidDocument:    {flash: true},
+	msgDocCheckSampleInvalid:      {flash: true},
+	msgDocCheckUnknown:            {params: map[string]paramKind{argCode: paramString}, flash: true},
+	msgActLoginToken:              {},
+	msgActLoginGitHub:             {},
+	msgActRunDispatch:             {params: map[string]paramKind{argRun: paramInt}},
+	msgActRunCancel:               {params: map[string]paramKind{argRun: paramInt}},
+	msgActRunRerun:                {params: map[string]paramKind{argRun: paramInt, argN: paramInt}},
+	msgActRunRerunFirst:           {params: map[string]paramKind{argRun: paramInt}},
+	msgActRunRerunJob:             {params: map[string]paramKind{argRun: paramInt, argJob: paramInt, argN: paramInt}},
+	msgActRunRerunJobFirst:        {params: map[string]paramKind{argRun: paramInt, argJob: paramInt}},
+	msgActRunnerDrain:             {params: map[string]paramKind{argName: paramString}},
+	msgActRunnerUndrain:           {params: map[string]paramKind{argName: paramString}},
+	msgActRunnerRevoke:            {params: map[string]paramKind{argName: paramString}},
+	msgActRunnerDelete:            {params: map[string]paramKind{argName: paramString}},
+	msgActRunnerToken:             {params: map[string]paramKind{argPool: paramString}},
+	msgActRunnerEnroll:            {params: map[string]paramKind{argPool: paramString}},
+	msgActReposSync:               {},
+	msgActRepoReconcile:           {params: map[string]paramKind{argRepo: paramString}},
+	msgActCacheBump:               {params: map[string]paramKind{argRepo: paramString}},
+	msgActOutboxRetry:             {params: map[string]paramKind{argID: paramInt}},
+	msgActAdminBind:               {params: map[string]paramKind{argLogin: paramString}},
+	msgActAdminRebind:             {params: map[string]paramKind{argPrevious: paramString, argLogin: paramString}},
+	msgActAdminUnbind:             {params: map[string]paramKind{argLogin: paramString}},
+	msgActTokenDisable:            {},
+	msgActTokenEnable:             {},
+	msgActVarSet:                  {params: map[string]paramKind{argName: paramString, argScope: paramString}},
+	msgActVarDelete:               {params: map[string]paramKind{argName: paramString, argScope: paramString}},
+	msgActSecretSet:               {params: map[string]paramKind{argName: paramString, argScope: paramString}},
+	msgActSecretDelete:            {params: map[string]paramKind{argName: paramString, argScope: paramString}},
+	msgActEnvUpsert:               {params: map[string]paramKind{argName: paramString, argScope: paramString}},
+	msgActEnvDelete:               {params: map[string]paramKind{argScope: paramString}},
+	msgActNpmSet:                  {params: map[string]paramKind{argAccount: paramString, argScope: paramString}},
+	msgActNpmDelete:               {params: map[string]paramKind{argAccount: paramString}},
+	msgActDocBind:                 {params: map[string]paramKind{argRepo: paramString}},
+	msgActDocUnbind:               {params: map[string]paramKind{argRepo: paramString}},
+	msgActDecisionSet:             {params: map[string]paramKind{argRepo: paramString}},
+	msgActDecisionClear:           {params: map[string]paramKind{argRepo: paramString}},
+	msgActConfigOther:             {params: map[string]paramKind{argOp: paramString}},
+	msgActAIReview:                {params: map[string]paramKind{argID: paramInt, argRepo: paramString, argGitRef: paramString}},
+	msgActAICancel:                {params: map[string]paramKind{argID: paramInt}},
+	msgActAIRerun:                 {params: map[string]paramKind{argID: paramInt, argRequest: paramInt}},
 }
 
 // uiText 是页面数据中的一段文字：消息（id 加参数，前端按当前语言显示），或原样显示的文字（raw）。零值是空串。

@@ -1,6 +1,11 @@
 {
  "Page": "settings_item",
- "Title": "新建变量 · acme/kilnflow.dev",
+ "Title": {
+  "id": "settings.titleVarNew",
+  "params": {
+   "scope": "acme/kilnflow.dev"
+  }
+ },
  "Nav": "settings",
  "Status": 422,
  "Session": {
@@ -20,7 +25,6 @@
   "Env": "",
   "Label": "acme/kilnflow.dev",
   "Kind": "variables",
-  "KindLabel": "仓库级",
   "Environment": null,
   "Vars": [
    {
@@ -47,7 +51,6 @@
    "Errors": {},
    "Failed": false
   },
-  "CrumbLabel": "变量与密钥",
   "CrumbURL": "/settings/variables",
   "URL": "/settings/scope?repo=acme%2Fkilnflow.dev",
   "Query": "repo=acme%2Fkilnflow.dev",
@@ -59,10 +62,16 @@
     "value": "kiln.example.com"
    },
    "Errors": {
-    "name": "名称只能包含字母、数字和 _，不能为空"
+    "name": {
+     "id": "settingsErr.nameInvalid",
+     "params": {
+      "name": "DEPLOY HOST"
+     }
+    }
    },
    "Failed": true
   },
-  "IsSecret": false
+  "IsSecret": false,
+  "ScopeKind": "repo"
  }
 }

@@ -20,7 +20,6 @@
   "Env": "release",
   "Label": "acme/release",
   "Kind": "environment",
-  "KindLabel": "账号级 environment（账号下的所有仓库共用）",
   "Environment": {
    "name": "release",
    "account": "acme",
@@ -71,7 +70,6 @@
    "Errors": {},
    "Failed": false
   },
-  "CrumbLabel": "环境",
   "CrumbURL": "/settings/environments",
   "URL": "/settings/scope?account=acme&env=release",
   "Query": "account=acme&env=release"

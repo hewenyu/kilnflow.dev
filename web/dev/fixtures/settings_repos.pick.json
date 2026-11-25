@@ -1,6 +1,8 @@
 {
  "Page": "settings_repos",
- "Title": "设置 · 仓库",
+ "Title": {
+  "id": "settings.titleRepos"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

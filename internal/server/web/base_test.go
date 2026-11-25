@@ -558,7 +558,7 @@ func TestLayoutShell(t *testing.T) {
 		r.Header.Set(uiHeader, "1")
 		r.AddCookie(tok)
 		w := httptest.NewRecorder()
-		d.render(w, r, page, "标题", struct{}{})
+		d.renderPage(w, r, page, rawText("标题"), struct{}{}, http.StatusOK)
 		pg := parsePage(t, w.Body.String())
 		if pg.Page != page || pg.Nav != nav || textZH(t, pg.Flash) != "已暂停接单" || textZH(t, pg.Title) != "标题" {
 			t.Errorf("页面 %s：Page %q Nav %q Flash %q，导航应为 %q", page, pg.Page, pg.Nav, pg.Flash, nav)

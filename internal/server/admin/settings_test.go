@@ -113,6 +113,11 @@ func (e *testEnv) configChanges() []map[string]any {
 	return out
 }
 
+// isErr 返回判断错误是否包装了 target 的函数。
+func isErr(target error) func(error) bool {
+	return func(err error) bool { return errors.Is(err, target) }
+}
+
 func TestValidName(t *testing.T) {
 	t.Parallel()
 	for _, n := range []string{"TOKEN", "a_b1", "_X"} {
@@ -124,6 +129,17 @@ func TestValidName(t *testing.T) {
 		if ValidName(n) == nil {
 			t.Errorf("ValidName(%q) 应失败", n)
 		}
+	}
+	// 结构化的错误：为空是 ErrNameEmpty，含非法字符是带原样名称的 *InvalidNameError；CLI 的说明不变
+	if err := ValidName(""); !errors.Is(err, ErrNameEmpty) || err.Error() != "名称不能为空" {
+		t.Errorf("ValidName(\"\") = %v", err)
+	}
+	err := ValidName("a-b")
+	if ie, ok := errors.AsType[*InvalidNameError](err); !ok || ie.Name != "a-b" || errors.Is(err, ErrNameEmpty) {
+		t.Errorf("ValidName(a-b) = %#v", err)
+	}
+	if err.Error() != `名称 "a-b" 只能包含字母、数字和 _` {
+		t.Errorf("CLI 的说明 = %q", err)
 	}
 }
 
@@ -464,20 +480,37 @@ func TestService_UpsertEnvironmentInvalid(t *testing.T) {
 		name string
 		env  *apiv1.Environment
 		want string
+		// is 判断错误的类型（Dashboard 按它显示当前语言的说明）
+		is func(error) bool
 	}{
-		{"nil", nil, "需要 environment 名称"},
-		{"没有名称", &apiv1.Environment{Repo: testRepo}, "需要 environment 名称"},
-		{"名称只有空白", &apiv1.Environment{Name: " ", Repo: testRepo}, "需要 environment 名称"},
-		{"名称首尾有空白", &apiv1.Environment{Name: "release ", Repo: testRepo}, "不能以空白开头或结尾"},
-		{"允许发布的仓库写法错误", &apiv1.Environment{Name: "x", Repo: testRepo, AllowedPublishRepos: []string{"pub"}}, "owner/name"},
-		{"允许发布的仓库缺少名称", &apiv1.Environment{Name: "x", Repo: testRepo, AllowedPublishRepos: []string{"tester/"}}, "owner/name"},
-		{"仓库不存在", &apiv1.Environment{Name: "x", Repo: "tester/nope"}, "仓库不在 Kiln 中"},
-		{"没有作用域", &apiv1.Environment{Name: "x"}, "需要指定账号"},
+		{"nil", nil, "需要 environment 名称", isErr(ErrEnvNameRequired)},
+		{"没有名称", &apiv1.Environment{Repo: testRepo}, "需要 environment 名称", isErr(ErrEnvNameRequired)},
+		{"名称只有空白", &apiv1.Environment{Name: " ", Repo: testRepo}, "需要 environment 名称", isErr(ErrEnvNameRequired)},
+		{"名称首尾有空白", &apiv1.Environment{Name: "release ", Repo: testRepo}, "不能以空白开头或结尾", func(err error) bool {
+			e, ok := errors.AsType[*EnvNameSpaceError](err)
+			return ok && e.Name == "release "
+		}},
+		{"允许发布的仓库写法错误", &apiv1.Environment{Name: "x", Repo: testRepo, AllowedPublishRepos: []string{"pub"}}, "owner/name", func(err error) bool {
+			e, ok := errors.AsType[*PublishRepoError](err)
+			return ok && e.Repo == "pub"
+		}},
+		{"允许发布的仓库缺少名称", &apiv1.Environment{Name: "x", Repo: testRepo, AllowedPublishRepos: []string{"tester/"}}, "owner/name", func(err error) bool {
+			e, ok := errors.AsType[*PublishRepoError](err)
+			return ok && e.Repo == "tester/"
+		}},
+		{"仓库不存在", &apiv1.Environment{Name: "x", Repo: "tester/nope"}, "仓库不在 Kiln 中", func(err error) bool {
+			e, ok := errors.AsType[*store.RepoNotFoundError](err)
+			return ok && e.Name == "tester/nope"
+		}},
+		{"没有作用域", &apiv1.Environment{Name: "x"}, "需要指定账号", isErr(store.ErrScopeRequired)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			err := e.svc.UpsertEnvironment(e.ctx, c.env, testActor)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("应失败并说明 %q：%v", c.want, err)
+			}
+			if !c.is(err) {
+				t.Errorf("错误的类型不对：%#v", err)
 			}
 		})
 	}
@@ -514,10 +547,12 @@ func TestService_DeleteEnvironment(t *testing.T) {
 	e.wantAudit("config.environment.delete", testActor, map[string]any{"scope": "tester/demo/RELEASE"})
 
 	// 不是 environment 的作用域、不存在的 environment：失败，不删除任何东西
-	for _, sc := range []*apiv1.Scope{repoScope, envScope(testRepo, "release")} {
-		if err := e.svc.DeleteEnvironment(e.ctx, sc, testActor); err == nil {
-			t.Errorf("DeleteEnvironment(%v) 应失败", sc)
-		}
+	if err := e.svc.DeleteEnvironment(e.ctx, repoScope, testActor); !errors.Is(err, ErrEnvRequired) {
+		t.Errorf("DeleteEnvironment(仓库作用域) = %v，期望 ErrEnvRequired", err)
+	}
+	err := e.svc.DeleteEnvironment(e.ctx, envScope(testRepo, "release"), testActor)
+	if ne, ok := errors.AsType[*store.EnvironmentNotFoundError](err); !ok || ne.Name != "release" {
+		t.Errorf("DeleteEnvironment(不存在的 environment) = %#v", err)
 	}
 	if e.count(`SELECT count(*) FROM environments`) != 1 || len(e.audits("config.environment.delete")) != 1 {
 		t.Errorf("失败的删除不应改变任何东西")

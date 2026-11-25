@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -19,7 +18,8 @@ import (
 // errScopeNotFound 表示作用域配置页要找的 environment 不存在。
 var errScopeNotFound = errors.New("作用域不存在")
 
-// badScopeError 是解析作用域失败（账号、仓库或 environment 无效）的错误，消息可以直接显示给用户。
+// badScopeError 是解析作用域失败（账号、仓库或 environment 无效）的错误：包装的是 store.ResolveScope 的错误，
+// 提示按它的类型显示（见 settingsErrText）。
 type badScopeError struct{ err error }
 
 func (e *badScopeError) Error() string { return e.err.Error() }
@@ -46,10 +46,10 @@ type scopePage struct {
 	settingsBase
 	// Account / Repo / Env 是表单中回传的作用域（Repo 非空时 Account 为空）。
 	Account, Repo, Env string
-	Label              string
-	Kind               store.ScopeKind
-	// KindLabel 是作用域的类型说明，例如"仓库级"。
-	KindLabel string
+	// Label 是作用域的名称（账号、仓库或 <账号或仓库>/<environment>，原样显示）；Kind 是作用域的类型，
+	// 前端按 Kind 和 Repo（environment 属于账号还是仓库）显示当前语言的类型说明。
+	Label string
+	Kind  store.ScopeKind
 	// Environment 是 Env 对应的 environment（只用于 environment 作用域）。
 	Environment *envView
 	Vars        []store.Variable
@@ -59,8 +59,8 @@ type scopePage struct {
 	DockerURL string
 	// EnvForm 是 environment 保护规则表单（校验失败时带着输入和错误重新渲染）。
 	EnvForm *formState
-	// CrumbLabel / CrumbURL 是返回的上一级分区。
-	CrumbLabel, CrumbURL string
+	// CrumbURL 是返回的上一级分区（变量与密钥或环境，与 Section 对应，前端按 Section 显示分区名）。
+	CrumbURL string
 }
 
 // URL 返回作用域配置页的地址。
@@ -101,14 +101,9 @@ func (d *Dashboard) loadScope(ctx context.Context, account, repo, env string) (*
 		return nil, &badScopeError{err: err}
 	}
 	p.Label, p.Kind = ref.Label, ref.Kind
-	p.Section, p.CrumbLabel, p.CrumbURL = sectionVars, "变量与密钥", "/settings/variables"
-	switch ref.Kind {
-	case store.ScopeOwner:
-		p.KindLabel = "账号级（账号下的所有仓库可见）"
-	case store.ScopeRepo:
-		p.KindLabel = "仓库级"
-	case store.ScopeEnvironment:
-		p.Section, p.CrumbLabel, p.CrumbURL = sectionEnvs, "环境", "/settings/environments"
+	p.Section, p.CrumbURL = sectionVars, "/settings/variables"
+	if ref.Kind == store.ScopeEnvironment {
+		p.Section, p.CrumbURL = sectionEnvs, "/settings/environments"
 		if err := d.findEnvironment(ctx, p); err != nil {
 			return nil, err
 		}
@@ -138,10 +133,6 @@ func (d *Dashboard) findEnvironment(ctx context.Context, p *scopePage) error {
 	if p.Environment == nil {
 		return errScopeNotFound
 	}
-	p.KindLabel = "账号级 environment（账号下的所有仓库共用）"
-	if p.Repo != "" {
-		p.KindLabel = "仓库级 environment"
-	}
 	if p.Environment.Docker {
 		p.Docker = true
 		p.DockerURL = dockerURL(p.Environment.Account)
@@ -159,11 +150,15 @@ func scopeFromQuery(q url.Values) (account, repo, env string) {
 // 其他错误返回 500。
 func (d *Dashboard) scopeError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, errScopeNotFound) {
-		d.notFound(w, r, "没有这个 environment：名称可能写错了，或者它已经被删除。可以在设置的“环境”分区中查看全部 environment。")
+		d.notFoundText(w, r, message(msgScopeEnvNotFound))
 		return
 	}
 	if _, ok := errors.AsType[*badScopeError](err); ok {
-		d.flashBack(w, r, "/settings/variables", err.Error())
+		msg := settingsErrText(err)
+		if msg.IsZero() {
+			msg = message(msgScopeInvalid, strArg(argReason, flashArgText(connectMessage(err))))
+		}
+		d.flashMsg(w, r, "/settings/variables", msg)
 		return
 	}
 	d.serverError(w, r, err)
@@ -190,7 +185,7 @@ func (d *Dashboard) renderScope(w http.ResponseWriter, r *http.Request, a *scope
 	if a.EnvForm != nil {
 		p.EnvForm = a.EnvForm
 	}
-	d.renderStatus(w, r, "settings_scope", p.Label, p, status)
+	d.renderPage(w, r, "settings_scope", rawText(p.Label), p, status)
 }
 
 // itemPage 是变量或 secret 的新建、编辑页的数据。
@@ -223,7 +218,7 @@ func (d *Dashboard) pageItem(kind itemKind, edit bool) func(w http.ResponseWrite
 		a := &itemArgs{Kind: kind}
 		if edit {
 			if a.Name = strings.TrimSpace(r.URL.Query().Get("name")); a.Name == "" {
-				d.notFound(w, r, "地址中没有要编辑的名称（name 参数）。请从变量与密钥的列表中打开。")
+				d.notFoundText(w, r, message(msgItemNoName))
 				return
 			}
 		}
@@ -246,11 +241,11 @@ func (d *Dashboard) renderItem(w http.ResponseWriter, r *http.Request, a *itemAr
 		switch {
 		case a.Kind == kindSecrets:
 			if p.Secret = sp.secret(a.Name); p.Secret == nil {
-				d.flashBack(w, r, sp.URL(), fmt.Sprintf("secret %s 不存在（可能已被删除）", a.Name))
+				d.flashMsg(w, r, sp.URL(), message(msgItemSecretMissing, strArg(argName, a.Name)))
 				return
 			}
 		case !sp.HasVar(a.Name):
-			d.flashBack(w, r, sp.URL(), fmt.Sprintf("变量 %s 不存在（可能已被删除）", a.Name))
+			d.flashMsg(w, r, sp.URL(), message(msgItemVarMissing, strArg(argName, a.Name)))
 			return
 		case a.Form == nil:
 			for _, v := range sp.Vars {
@@ -260,32 +255,32 @@ func (d *Dashboard) renderItem(w http.ResponseWriter, r *http.Request, a *itemAr
 			}
 		}
 	}
-	title := "新建变量"
+	scope, name := strArg(argScope, sp.Label), strArg(argName, a.Name)
+	title := message(msgSetTitleVarNew, scope)
 	switch {
 	case a.Kind == kindSecrets && a.Name != "":
-		title = "替换 secret " + a.Name
+		title = message(msgSetTitleSecretEdit, name, scope)
 	case a.Kind == kindSecrets:
-		title = "新建 secret"
+		title = message(msgSetTitleSecretNew, scope)
 	case a.Name != "":
-		title = "编辑变量 " + a.Name
+		title = message(msgSetTitleVarEdit, name, scope)
 	}
-	d.renderStatus(w, r, "settings_item", title+" · "+sp.Label, p, status)
+	d.renderPage(w, r, "settings_item", title, p, status)
 }
 
 // itemForm 读取变量或 secret 表单的公共部分：mode（new、edit；空表示新建或覆盖，兼容旧表单和脚本）和名称。
 func itemForm(r *http.Request, sp *scopePage, kind itemKind) (mode itemMode, name string, f *formState) {
 	mode, name, f = itemMode(r.PostFormValue("mode")), strings.TrimSpace(r.PostFormValue("name")), newForm()
 	f.Values["name"] = name
-	if admin.ValidName(name) != nil {
-		f.fail("name", "名称只能包含字母、数字和 _，不能为空")
+	if err := admin.ValidName(name); err != nil {
+		f.failText("name", settingsErrText(err))
 	}
-	exists := sp.HasVar(name)
-	what := "变量"
+	exists, existsMsg := sp.HasVar(name), msgItemVarExists
 	if kind == kindSecrets {
-		exists, what = sp.secret(name) != nil, "secret"
+		exists, existsMsg = sp.secret(name) != nil, msgItemSecretExists
 	}
 	if mode == modeNew && exists {
-		f.fail("name", fmt.Sprintf("%s %s 已存在。要修改它，请回到列表点它的编辑或替换", what, name))
+		f.failText("name", message(existsMsg, strArg(argName, name)))
 	}
 	return mode, name, f
 }
@@ -310,7 +305,7 @@ func (d *Dashboard) postVariable(w http.ResponseWriter, r *http.Request, se *ses
 	f.Values["value"] = value
 	if !f.Failed() {
 		if err := d.admin.SetVariable(r.Context(), sc, name, value, se.Login); err != nil {
-			f.fail(formGeneral, "保存变量失败："+d.failure(r, err))
+			f.failText(formGeneral, d.settingsFormFailure(r, err, msgItemVarSaveFailed))
 		}
 	}
 	if f.Failed() {
@@ -318,21 +313,21 @@ func (d *Dashboard) postVariable(w http.ResponseWriter, r *http.Request, se *ses
 		d.renderItem(w, r, a, http.StatusUnprocessableEntity)
 		return
 	}
-	msg := "已保存变量 " + name
+	msg := msgItemVarSaved
 	if mode == modeNew {
-		msg = "已创建变量 " + name
+		msg = msgItemVarCreated
 	}
-	d.flashBack(w, r, scopeBack(sc), msg)
+	d.flashMsg(w, r, scopeBack(sc), message(msg, strArg(argName, name)))
 }
 
 func (d *Dashboard) postVariableDelete(w http.ResponseWriter, r *http.Request, se *session) {
 	sc := formScope(r)
 	name := r.PostFormValue("name")
 	if err := d.admin.DeleteVariable(r.Context(), sc, name, se.Login); err != nil {
-		d.flashBack(w, r, scopeBack(sc), "删除变量失败："+d.failure(r, err))
+		d.flashMsg(w, r, scopeBack(sc), d.settingsFailureFlash(r, err, msgItemVarDeleteFailed, msgItemVarDeleteFailedRef, strArg(argName, name)))
 		return
 	}
-	d.flashBack(w, r, scopeBack(sc), "已删除变量 "+name)
+	d.flashMsg(w, r, scopeBack(sc), message(msgItemVarDeleted, strArg(argName, name)))
 }
 
 // postSecret 新建（mode=new）或替换 secret。替换时值为空（或只有空白）不做任何修改，已有的值保持不变；新建时值不能为空。
@@ -348,18 +343,18 @@ func (d *Dashboard) postSecret(w http.ResponseWriter, r *http.Request, se *sessi
 	value := r.PostFormValue("value")
 	blank := strings.TrimSpace(value) == ""
 	if blank && mode != modeNew && !f.Failed() {
-		d.flashBack(w, r, scopeBack(sc), fmt.Sprintf("没有填写新值，secret %s 保持不变", name))
+		d.flashMsg(w, r, scopeBack(sc), message(msgItemSecretUnchanged, strArg(argName, name)))
 		return
 	}
 	switch {
 	case blank:
-		f.fail("value", "请填写 secret 的值")
+		f.failText("value", message(msgItemSecretEmpty))
 	case f.Failed():
-		f.fail("value", "为了安全，刚才输入的值没有保留，请重新输入")
+		f.failText("value", message(msgItemSecretNotKept))
 	}
 	if !f.Failed() {
 		if err := d.admin.SetSecret(r.Context(), sc, name, value, se.Login); err != nil {
-			f.fail(formGeneral, "保存 secret 失败："+d.failure(r, err))
+			f.failText(formGeneral, d.settingsFormFailure(r, err, msgItemSecretSaveFailed))
 		}
 	}
 	if f.Failed() {
@@ -367,15 +362,15 @@ func (d *Dashboard) postSecret(w http.ResponseWriter, r *http.Request, se *sessi
 		d.renderItem(w, r, a, http.StatusUnprocessableEntity)
 		return
 	}
-	d.flashBack(w, r, scopeBack(sc), fmt.Sprintf("已保存 secret %s（值不会再显示）", name))
+	d.flashMsg(w, r, scopeBack(sc), message(msgItemSecretSaved, strArg(argName, name)))
 }
 
 func (d *Dashboard) postSecretDelete(w http.ResponseWriter, r *http.Request, se *session) {
 	sc := formScope(r)
 	name := r.PostFormValue("name")
 	if err := d.admin.DeleteSecret(r.Context(), sc, name, se.Login); err != nil {
-		d.flashBack(w, r, scopeBack(sc), "删除 secret 失败："+d.failure(r, err))
+		d.flashMsg(w, r, scopeBack(sc), d.settingsFailureFlash(r, err, msgItemSecretDeleteFailed, msgItemSecretDeleteFailedRef, strArg(argName, name)))
 		return
 	}
-	d.flashBack(w, r, scopeBack(sc), "已删除 secret "+name)
+	d.flashMsg(w, r, scopeBack(sc), message(msgItemSecretDeleted, strArg(argName, name)))
 }

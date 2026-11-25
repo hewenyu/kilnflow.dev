@@ -1,6 +1,11 @@
 {
  "Page": "settings_npm",
- "Title": "npm · acme",
+ "Title": {
+  "id": "settings.titleNpm",
+  "params": {
+   "account": "acme"
+  }
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

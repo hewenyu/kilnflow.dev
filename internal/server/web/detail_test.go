@@ -191,8 +191,8 @@ type runData struct {
 		Kept int
 	}
 	Activity []struct {
-		Actor, Action, Text, Link string
-		RunText                   uiText
+		Actor, Action, Link string
+		Text, RunText       uiText
 	}
 	Start, End int64
 	Ref        string
@@ -214,7 +214,7 @@ func TestRunDetailRender(t *testing.T) {
 	expect(t, "job 列表", d.Jobs, len(d.Jobs) == 1 && d.Jobs[0].CachedFrom != nil && *d.Jobs[0].CachedFrom == 3, len(d.Stages) == 1)
 	if expect(t, "活动", d.Activity, len(d.Activity) == 1) {
 		a := d.Activity[0]
-		expect(t, "活动", a, a.Actor == "bob", a.Link == "/runs/7", textZH(t, a.RunText) == "重跑了这个 run（只重跑未成功的 job），开始第 1 次重跑", a.Text == "重跑了 run #7（第 1 次重跑）")
+		expect(t, "活动", a, a.Actor == "bob", a.Link == "/runs/7", textZH(t, a.RunText) == "重跑了这个 run（只重跑未成功的 job），开始第 1 次重跑", textZH(t, a.Text) == "重跑了 run #7（第 1 次重跑）")
 	}
 	// job 列表不带 spec（只在 job 详情页）
 	if strings.Contains(body, `"Spec"`) {

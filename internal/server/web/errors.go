@@ -184,19 +184,12 @@ func connectMessage(err error) string {
 	return err.Error()
 }
 
-// failure 返回表单操作失败时显示在提示或表单上的说明（管理操作的错误，例如 admin.Service 返回的）：
+// failureText 返回表单操作失败时显示在提示或表单上的说明（管理操作的错误，例如 admin.Service 返回的）：
 //   - 内部错误（见 internalError：数据库、网络、磁盘、超时，或 Internal、Unknown 的 *connect.Error）与 500 错误页相同：
-//     页面上只有通用的说明和错误编号，详细信息只写日志（原来数据库错误的原文会显示在页面上，日志中没有记录）；
-//   - 其余是给用户看的说明（校验失败、前提不满足、不存在等），显示原文（去掉 connect 的状态码前缀）；
+//     页面上只有带错误编号的通用说明（消息，按当前语言显示），详细信息只写日志；
+//   - 其余是给用户看的说明（校验失败、前提不满足、不存在等），原样显示（去掉 connect 的状态码前缀）；
 //     不是 *connect.Error 的（admin.Service 的校验错误多是普通的 error）也写一条日志，便于排查。
-func (d *Dashboard) failure(r *http.Request, err error) string {
-	if ref := d.failureRef(r, err); ref != "" {
-		return "服务器出错了（错误编号 " + ref + "），操作可能没有完成。请确认结果后再决定是否重试；问题持续出现时，请把错误编号告诉管理员。"
-	}
-	return connectMessage(err)
-}
-
-// failureText 与 failure 相同，返回页面数据中的文字：内部错误是带错误编号的消息（按当前语言显示），其余是原样的说明。
+//     设置页已知的校验和前提错误按类型显示为消息，见 settingsFormFailure。
 func (d *Dashboard) failureText(r *http.Request, err error) uiText {
 	if ref := d.failureRef(r, err); ref != "" {
 		return message(msgActionInternal, strArg(argRef, ref))

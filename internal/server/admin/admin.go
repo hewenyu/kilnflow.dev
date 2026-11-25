@@ -174,8 +174,16 @@ func (a *rpcAPI) SyncInstallations(ctx context.Context, _ *connect.Request[apiv1
 	return connect.NewResponse(&apiv1.SyncInstallationsResponse{Installations: clampInt32(res.Installations), Repos: clampInt32(res.Repos)}), nil
 }
 
+// RateLimitedError 表示补对账被 GitHub 限流：Until 是可以再试的时间。Dashboard 把它按浏览器的时区和语言显示，
+// CLI 和日志用 Error()（按 Server 的时区写出时间）。ReconcileRepo 把它包装在 ResourceExhausted 的 *connect.Error 中。
+type RateLimitedError struct{ Until time.Time }
+
+func (e *RateLimitedError) Error() string {
+	return fmt.Sprintf("被 GitHub 限流，%s 后再试（已经补上的 run 不会重复）", e.Until.Local().Format(time.DateTime))
+}
+
 // ReconcileRepo 对一个仓库补对账（用户显式操作，PLAN #7.3）：只请求这个仓库的分支、tag 和打开的 PR，补上漏掉的事件，并写审计日志。
-// 被 GitHub 限流时返回可读的错误，稍后再试即可（已经补上的不会重复）。
+// 被 GitHub 限流时返回 *RateLimitedError，稍后再试即可（已经补上的不会重复）。
 func (s *Service) ReconcileRepo(ctx context.Context, fullName, actor string) (ingest.ReconcileResult, error) {
 	repo, err := store.FindRepo(ctx, s.db, fullName)
 	if err != nil {
@@ -188,8 +196,7 @@ func (s *Service) ReconcileRepo(ctx context.Context, fullName, actor string) (in
 	}
 	s.auditBestEffort(ctx, actor, "repo.reconcile", detail)
 	if rl, ok := gh.RateLimited(err); ok {
-		return res, connect.NewError(connect.CodeResourceExhausted,
-			fmt.Errorf("被 GitHub 限流，%s 后再试（已经补上的 run 不会重复）", rl.Until.Local().Format(time.DateTime)))
+		return res, connect.NewError(connect.CodeResourceExhausted, &RateLimitedError{Until: rl.Until})
 	}
 	return res, err
 }

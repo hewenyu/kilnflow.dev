@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -68,7 +67,7 @@ func (d *Dashboard) pageNpm(w http.ResponseWriter, r *http.Request, _ *session) 
 		return
 	}
 	if account == "" {
-		d.flashBack(w, r, "/settings", "请从连接卡片进入：账号不在 Kiln 中")
+		d.flashMsg(w, r, "/settings", message(msgConnEnterFromCard))
 		return
 	}
 	v, err := d.npmStatus(ctx, account)
@@ -86,7 +85,7 @@ func (d *Dashboard) pageNpm(w http.ResponseWriter, r *http.Request, _ *session) 
 
 func (d *Dashboard) renderNpm(w http.ResponseWriter, r *http.Request, v *npmView, f *formState, status int) {
 	p := &npmPage{Section: sectionConn, Npm: v, Form: f, DefaultRegistry: npm.DefaultRegistry}
-	d.renderStatus(w, r, "settings_npm", "npm · "+v.Account, p, status)
+	d.renderPage(w, r, "settings_npm", message(msgSetTitleNpm, strArg(argAccount, v.Account)), p, status)
 }
 
 // readNpmForm 读取并校验 npm 表单（scope、registry、token）。token 只返回，不写入表单状态。
@@ -97,9 +96,9 @@ func readNpmForm(r *http.Request) (f *formState, token string) {
 	f.Values["scope"], f.Values["registry"] = scope, registry
 	switch s, err := npm.NormalizeScope(scope); {
 	case scope == "":
-		f.fail("scope", "请填写 npm scope，例如 @acme（包发布为 @acme/<name>）")
+		f.failText("scope", message(msgNpmErrScopeEmpty))
 	case err != nil:
-		f.fail("scope", err.Error())
+		f.failText("scope", settingsErrText(err))
 	default:
 		f.Values["scope"] = s
 	}
@@ -108,14 +107,15 @@ func readNpmForm(r *http.Request) (f *formState, token string) {
 		f.Values["registry"] = registry
 	}
 	if err := npm.CheckRegistry(registry); err != nil {
-		f.fail("registry", err.Error())
+		f.failText("registry", settingsErrText(err))
+		dropUserInfo(f, "registry", err)
 	}
 	token = strings.TrimSpace(r.PostFormValue("token"))
 	switch {
 	case token == "":
-		f.fail("token", "请填写 npm token（已保存的 token 不能读出，每次保存都要重新填写）")
+		f.failText("token", message(msgNpmErrTokenEmpty))
 	case f.Failed():
-		f.fail("token", "为了安全，刚才输入的 token 没有保留，修正上面的错误后请重新输入")
+		f.failText("token", message(msgNpmErrTokenNotKept))
 	}
 	return f, token
 }
@@ -130,7 +130,7 @@ func (d *Dashboard) postNpm(w http.ResponseWriter, r *http.Request, se *session)
 		return
 	}
 	if account == "" {
-		d.flashBack(w, r, "/settings", "账号不在 Kiln 中，没有保存")
+		d.flashMsg(w, r, "/settings", message(msgConnNotSaved))
 		return
 	}
 	v, err := d.npmStatus(ctx, account)
@@ -143,7 +143,7 @@ func (d *Dashboard) postNpm(w http.ResponseWriter, r *http.Request, se *session)
 	if !f.Failed() {
 		acct, err := d.admin.SetNpmAccount(ctx, account, scope, f.Values["registry"], token, se.Login)
 		if err != nil {
-			f.fail(formGeneral, "保存 npm 配置失败："+d.failure(r, err))
+			f.failText(formGeneral, d.settingsFormFailure(r, err, msgNpmSaveFailed))
 		} else {
 			scope = acct.Scope
 		}
@@ -152,7 +152,7 @@ func (d *Dashboard) postNpm(w http.ResponseWriter, r *http.Request, se *session)
 		d.renderNpm(w, r, v, f, http.StatusUnprocessableEntity)
 		return
 	}
-	d.flashBack(w, r, npmURL(account), fmt.Sprintf("已保存 npm 配置：release.npm 发布到 %s/<name>（token 不会再显示）", scope))
+	d.flashMsg(w, r, npmURL(account), message(msgNpmSaved, strArg(argScope, scope)))
 }
 
 // postNpmDelete 删除账号的 npm 配置。需要确认（confirm=1）。
@@ -164,18 +164,18 @@ func (d *Dashboard) postNpmDelete(w http.ResponseWriter, r *http.Request, se *se
 		return
 	}
 	if account == "" {
-		d.flashBack(w, r, "/settings", "账号不在 Kiln 中")
+		d.flashMsg(w, r, "/settings", message(msgConnAccountMissing))
 		return
 	}
 	if r.PostFormValue("confirm") != "1" {
-		d.flashBack(w, r, npmURL(account), "没有删除：请先确认")
+		d.flashMsg(w, r, npmURL(account), message(msgNpmDeleteUnconfirmed))
 		return
 	}
 	if err := d.admin.DeleteNpmAccount(ctx, account, se.Login); err != nil {
-		d.flashBack(w, r, npmURL(account), "删除 npm 配置失败："+d.failure(r, err))
+		d.flashMsg(w, r, npmURL(account), d.settingsFailureFlash(r, err, msgNpmDeleteFailed, msgNpmDeleteFailedRef, strArg(argAccount, account)))
 		return
 	}
-	d.flashBack(w, r, "/settings", fmt.Sprintf("已删除 %s 的 npm 配置；重新配置之前 release.npm 无法发布", account))
+	d.flashMsg(w, r, "/settings", message(msgNpmDeleted, strArg(argAccount, account)))
 }
 
 // npmjsHost 是 npm 官方 registry 的主机：发布到这里的包在 www.npmjs.com 上有页面。

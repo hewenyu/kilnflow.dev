@@ -19,10 +19,16 @@ import (
 
 // 管理操作（PLAN #27.13、#27.14，CLI 和 Dashboard 共用）。参数错误返回 *InvalidError，当前状态不允许时返回 *RefusedError。
 
-// InvalidError 是管理操作的参数错误。Msg 是给 CLI 和日志的说明。
-type InvalidError struct{ Msg string }
+// InvalidError 是管理操作的参数错误。Msg 是给 CLI 和日志的说明；Err 是校验给出的错误（例如 registry 地址不合格时的
+// *endpoint.Error，Dashboard 按它的原因码显示当前语言的说明），可以为 nil。
+type InvalidError struct {
+	Msg string
+	Err error
+}
 
 func (e *InvalidError) Error() string { return e.Msg }
+
+func (e *InvalidError) Unwrap() error { return e.Err }
 
 // RefusedError 表示 Runner 当前的状态不允许这个操作（已是最新、需要 service install、没有进行中的请求等）。
 // Msg 是给 CLI 和日志的中文说明（带 Runner 名称）；Reason 是稳定的原因码和原始参数，Dashboard 按它显示当前语言的说明。
@@ -146,7 +152,7 @@ func SetRegistry(ctx context.Context, db *store.DB, registry, actor string) erro
 	registry = strings.TrimSpace(registry)
 	if registry != "" {
 		if err := npm.CheckRegistry(registry); err != nil {
-			return &InvalidError{Msg: err.Error()}
+			return &InvalidError{Msg: err.Error(), Err: err}
 		}
 	}
 	return db.Tx(ctx, func(tx pgx.Tx) error {

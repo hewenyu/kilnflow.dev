@@ -24,7 +24,7 @@ import (
 
 // 文件布局：
 //   - web.go：Dashboard、渲染页面数据、中间件和路由；ui.go：前端（index.html、静态文件）和 JSON 模式；json.go：页面数据的 JSON 编码；
-//     funcs.go：少量共用的文字；form.go：表单状态；errors.go：错误页。
+//     text.go：页面数据中的文字（消息与原样文字，各领域的消息在 *_text.go）；form.go：表单状态；errors.go：错误页。
 //   - session.go：登录、会话和登录后的跳转；account.go：登录与身份（绑定 GitHub 账号）、成员、活动；actions.go：run、job、Runner、outbox 和仓库的表单操作。
 //   - runs.go：运行列表和启动构建；run_detail.go、job_detail.go：run 和 job 详情页（日志、产物下载）。
 //   - merge_queue.go：合并队列页、入队和移除，以及 run 详情页上 PR 的队列状态。
@@ -115,16 +115,6 @@ func New(cfg Config, deps Deps) (*Dashboard, error) {
 		githubURL:  githubWebURL,
 		reveals:    newEnrollReveals(),
 	}, nil
-}
-
-// render 渲染页面。先渲染到缓冲区，出错时返回 500 而不是半个页面。title 是原样显示的标题（还没有迁移成消息的页面）。
-func (d *Dashboard) render(w http.ResponseWriter, r *http.Request, page, title string, data any) {
-	d.renderPage(w, r, page, rawText(title), data, http.StatusOK)
-}
-
-// renderStatus 与 render 相同，使用状态码 status（例如表单校验失败时的 422）。
-func (d *Dashboard) renderStatus(w http.ResponseWriter, r *http.Request, page, title string, data any, status int) {
-	d.renderPage(w, r, page, rawText(title), data, status)
 }
 
 // renderPage 渲染页面并使用状态码 status，title 是消息或原样的文字（见 text.go）：前端请求返回页面数据（JSON）；
@@ -294,12 +284,6 @@ func (d *Dashboard) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /outbox/{id}/retry", d.web(true, d.postOutboxRetry))
 	mux.HandleFunc("POST /sync", d.web(true, d.postSync))
 	mux.HandleFunc("POST /settings/repos/reconcile", d.web(true, d.postReconcile))
-}
-
-// flashBack 重定向到站内页面 to，并带上一条原样显示的提示（还没有迁移成消息的操作；新的操作用 flashMsg）。
-// to 由调用方用常量或 ID 拼成，不来自用户输入。
-func (d *Dashboard) flashBack(w http.ResponseWriter, r *http.Request, to, msg string) {
-	d.redirect(w, r, withFlash(to, msg))
 }
 
 // flashMsg 重定向到站内页面 to，并带上一条消息作为提示（前端按当前语言显示）。消息必须登记为 flash（见 text.go）；

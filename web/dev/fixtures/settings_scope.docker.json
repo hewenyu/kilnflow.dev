@@ -20,7 +20,6 @@
   "Env": "docker-release",
   "Label": "acme/docker-release",
   "Kind": "environment",
-  "KindLabel": "账号级 environment（账号下的所有仓库共用）",
   "Environment": {
    "name": "docker-release",
    "account": "acme",
@@ -60,11 +59,15 @@
     "allowed_publish_repos": "acme/kilnx"
    },
    "Errors": {
-    "allowed_publish_repos": "每个仓库都应写成 owner/name：octocat"
+    "allowed_publish_repos": {
+     "id": "settingsErr.publishRepo",
+     "params": {
+      "repo": "octocat"
+     }
+    }
    },
    "Failed": true
   },
-  "CrumbLabel": "环境",
   "CrumbURL": "/settings/environments",
   "URL": "/settings/scope?account=acme&env=docker-release",
   "Query": "account=acme&env=docker-release"

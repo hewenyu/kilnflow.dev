@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
@@ -394,14 +393,6 @@ func (d *Dashboard) pageRunners(w http.ResponseWriter, r *http.Request, _ *sessi
 	}
 	p.Self = runnersURL(p.State, p.Pool)
 	d.renderPage(w, r, "runners", message(msgRunnersTitle), p, http.StatusOK)
-}
-
-// humanDuration 把时长写成"2 分钟""90 秒"（还没有迁移的设置页用；迁移后的页面传秒数，见 seconds）。
-func humanDuration(d time.Duration) string {
-	if d >= time.Minute && d%time.Minute == 0 {
-		return fmt.Sprintf("%d 分钟", int(d/time.Minute))
-	}
-	return fmt.Sprintf("%d 秒", int(d.Round(time.Second)/time.Second))
 }
 
 // ---- 注册新的 Runner ----

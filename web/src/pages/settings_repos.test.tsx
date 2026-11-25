@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import fixture from '../../dev/fixtures/settings_repos.json'
 import empty from '../../dev/fixtures/settings_repos.empty.json'
 import pick from '../../dev/fixtures/settings_repos.pick.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, tFor, withData } from '../test/render'
 import { hidden } from './settings/testing'
 
 describe('设置 · 仓库', () => {
@@ -71,5 +71,25 @@ describe('设置 · 仓库', () => {
     const search = screen.getByRole('form', { name: '搜索仓库' })
     expect(hidden(search, 'pick')).toBe('env')
     expect(screen.getByRole('link', { name: '清除' })).toHaveAttribute('href', '/settings/repos?pick=env')
+  })
+  it('补对账被限流：时间按语言格式化为本地时间，不显示 Unix 秒', () => {
+    const at = 1_795_000_000
+    const flash = { id: 'settingsRepos.reconcileRateLimited', params: { repo: 'acme/kiln', at } }
+    for (const locale of ['zh-CN', 'en'] as const) {
+      const { unmount } = renderPage(envelope(fixture, { Flash: flash }), '/settings/repos', { locale })
+      const text = tFor(locale)('settingsRepos.reconcileRateLimited', { repo: 'acme/kiln', at })
+      expect(screen.getByText(text)).toBeInTheDocument()
+      expect(text).not.toContain(String(at))
+      expect(text).toContain('acme/kiln')
+      unmount()
+    }
+  })
+
+  it('英文界面：统计、复数和操作的无障碍名称', () => {
+    const en = tFor('en')
+    renderPage(envelope(fixture), '/settings/repos', { locale: 'en' })
+    expect(screen.getByText(/^112 repositories/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: en('repos.varsLabel', { repo: 'acme/kiln' }) })).toHaveAttribute('href', '/settings/scope?repo=acme%2Fkiln')
+    expect(screen.getByText(en('settingsRepos.synced', { installations: 2, repos: 11 }))).toBeInTheDocument()
   })
 })

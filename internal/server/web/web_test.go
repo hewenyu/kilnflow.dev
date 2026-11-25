@@ -95,7 +95,7 @@ func TestPagesRender(t *testing.T) {
 		"runners":    testRunnersPage(now),
 		"runner_new": testEnrollPage(now, enrollUnused, "kiln-enroll-x"),
 		"settings": &connPage{Section: sectionConn, Docker: []*dockerView{
-			{Account: "empty", Status: dockerUnconfigured, Missing: []string{"访问令牌"}},
+			{Account: "empty", Status: dockerUnconfigured, Missing: []string{dockerFieldToken}},
 			testDocker(now),
 		}, Npm: []*npmView{{Account: "empty"}, testNpm(now)}},
 		"settings_docker": &dockerPage{Section: sectionConn, Docker: testDocker(now), Form: failedForm(), DefaultRef: dockerDefaultRef},
@@ -121,8 +121,8 @@ func TestPagesRender(t *testing.T) {
 			Binding: &store.AdminBinding{GitHubID: 42, GitHubLogin: "alice", TokenLogin: true, BoundBy: "admin", BoundAt: now},
 		},
 		"settings_members": &membersPage{Section: sectionMembers, Admins: 1, Users: 1, Bound: true, Members: []member{
-			{Login: "alice", Role: roleAdmin, Bound: true, Source: "绑定的 GitHub 账号", LastLogin: now, Me: true},
-			{Login: "bob", Role: roleUser, Source: "KILN_USERS"},
+			{Login: "alice", Role: roleAdmin, Bound: true, Source: message(msgMemberSourceBound), LastLogin: now, Me: true},
+			{Login: "bob", Role: roleUser, Source: rawText("KILN_USERS")},
 		}},
 		"settings_activity": &activityPage{
 			Section: sectionActivity, Actor: "alice", Actors: []string{"alice", "bob"}, OlderURL: "/settings/activity?before=1",
@@ -180,11 +180,11 @@ func testScope(now time.Time) *scopePage {
 	env := envViews(testEnvs)[0]
 	return &scopePage{
 		Section: sectionEnvs,
-		Account: "tester", Env: "docker-release", Label: "tester/docker-release", Kind: store.ScopeEnvironment, KindLabel: "账号级 environment",
+		Account: "tester", Env: "docker-release", Label: "tester/docker-release", Kind: store.ScopeEnvironment,
 		Environment: &env, Docker: true, DockerURL: dockerURL("tester"), EnvForm: failedForm(),
-		Vars:       []store.Variable{{Name: "DOCKERHUB_USERNAME", Value: "bob"}},
-		Secrets:    []store.SecretMeta{{Name: "DOCKERHUB_TOKEN", UpdatedBy: "alice", UpdatedAt: now}},
-		CrumbLabel: "环境", CrumbURL: "/settings/environments",
+		Vars:     []store.Variable{{Name: "DOCKERHUB_USERNAME", Value: "bob"}},
+		Secrets:  []store.SecretMeta{{Name: "DOCKERHUB_TOKEN", UpdatedBy: "alice", UpdatedAt: now}},
+		CrumbURL: "/settings/environments",
 	}
 }
 
@@ -192,7 +192,7 @@ func testScope(now time.Time) *scopePage {
 func failedForm() *formState {
 	f := newForm()
 	for _, k := range []string{formGeneral, "name", "value", "username", "namespace", "token", "scope", "registry", "allowed_publish_repos"} {
-		f.fail(k, "错误："+k)
+		f.failText(k, rawText("错误："+k))
 		f.Values[k] = "v-" + k
 	}
 	return f

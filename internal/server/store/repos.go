@@ -77,7 +77,22 @@ func ReposByIDs(ctx context.Context, q Querier, ids []int64) (map[int64]*Repo, e
 // ErrRepoNotFound 表示仓库没有同步到 Kiln（或已停用）。
 var ErrRepoNotFound = errors.New("仓库不在 Kiln 中")
 
-// FindRepo 按全名（owner/name，不区分大小写）查找启用中的仓库。不存在时返回包装了 ErrRepoNotFound 的错误。
+// RepoNotFoundError 是找不到仓库的错误：Name 是原样的全名，errors.Is 匹配 ErrRepoNotFound，说明文字给 CLI 和日志。
+type RepoNotFoundError struct{ Name string }
+
+func (e *RepoNotFoundError) Error() string {
+	return fmt.Sprintf("%s：%s（App 是否已安装到这个仓库？）", ErrRepoNotFound, e.Name)
+}
+
+func (e *RepoNotFoundError) Unwrap() error { return ErrRepoNotFound }
+
+// RepoNameError 表示仓库名没有写成 owner/name；Name 是原样的输入。
+type RepoNameError struct{ Name string }
+
+func (e *RepoNameError) Error() string { return "仓库应写成 owner/name：" + e.Name }
+
+// FindRepo 按全名（owner/name，不区分大小写）查找启用中的仓库。不存在时返回 *RepoNotFoundError（包装了 ErrRepoNotFound），
+// 名称不是 owner/name 时返回 *RepoNameError。
 func FindRepo(ctx context.Context, q Querier, fullName string) (*Repo, error) {
 	return findRepo(ctx, q, fullName, true)
 }
@@ -90,7 +105,7 @@ func FindRepoAny(ctx context.Context, q Querier, fullName string) (*Repo, error)
 func findRepo(ctx context.Context, q Querier, fullName string, activeOnly bool) (*Repo, error) {
 	owner, name, ok := strings.Cut(fullName, "/")
 	if !ok {
-		return nil, fmt.Errorf("仓库应写成 owner/name：%s", fullName)
+		return nil, &RepoNameError{Name: fullName}
 	}
 	where := `lower(owner)=lower($1) AND lower(name)=lower($2)`
 	if activeOnly {
@@ -99,7 +114,7 @@ func findRepo(ctx context.Context, q Querier, fullName string, activeOnly bool) 
 	r, err := scanRepo(q.QueryRow(ctx, `SELECT `+repoCols+` FROM repos WHERE `+where+`
 		ORDER BY updated_at DESC LIMIT 1`, owner, name))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("%w：%s（App 是否已安装到这个仓库？）", ErrRepoNotFound, fullName)
+		return nil, &RepoNotFoundError{Name: fullName}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("查找仓库 %s：%w", fullName, err)

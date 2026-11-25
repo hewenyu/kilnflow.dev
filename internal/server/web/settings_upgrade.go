@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -64,7 +63,7 @@ func (d *Dashboard) renderRunnerUpgrade(w http.ResponseWriter, r *http.Request, 
 		d.serverError(w, r, err)
 		return
 	}
-	d.renderStatus(w, r, "settings_upgrade", "设置 · Runner 升级", p, status)
+	d.renderPage(w, r, "settings_upgrade", message(msgSetTitleUpgrade), p, status)
 }
 
 func (d *Dashboard) pageRunnerUpgrade(w http.ResponseWriter, r *http.Request, _ *session) {
@@ -78,12 +77,14 @@ func (d *Dashboard) postRunnerUpgradeRegistry(w http.ResponseWriter, r *http.Req
 	f.Values["registry"] = registry
 	if registry != "" {
 		if err := npm.CheckRegistry(registry); err != nil {
-			f.fail("registry", err.Error())
+			f.failText("registry", settingsErrText(err))
+			dropUserInfo(f, "registry", err)
 		}
 	}
 	if !f.Failed() {
 		if err := d.admin.SetRunnerUpgradeRegistry(r.Context(), registry, se.Login); err != nil {
-			f.fail("registry", d.upgradeSettingFailure(r, err))
+			f.failText("registry", d.upgradeSettingFailure(r, err))
+			dropUserInfo(f, "registry", err)
 		}
 	}
 	if f.Failed() {
@@ -91,30 +92,27 @@ func (d *Dashboard) postRunnerUpgradeRegistry(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if registry == "" {
-		d.flashBack(w, r, runnerUpgradeURL, "Runner 使用官方 registry（"+upgrade.DefaultRegistry+"）查询和下载升级包")
+		d.flashMsg(w, r, runnerUpgradeURL, message(msgUpgradeSetRegistryDefault, strArg(argRegistry, upgrade.DefaultRegistry)))
 		return
 	}
-	d.flashBack(w, r, runnerUpgradeURL, "Runner 使用 "+registry+" 查询和下载升级包，下一次连接 Server 时重新查询最新版本")
+	d.flashMsg(w, r, runnerUpgradeURL, message(msgUpgradeSetRegistrySet, strArg(argRegistry, registry)))
 }
 
 // postRunnerUpgradeCheck 让全部没有吊销的 Runner 立即查询最新版本。
 func (d *Dashboard) postRunnerUpgradeCheck(w http.ResponseWriter, r *http.Request, se *session) {
 	n, err := d.admin.CheckRunnerUpgrade(r.Context(), "", se.Login)
 	if err != nil {
-		d.flashBack(w, r, runnerUpgradeURL, "没有检查："+d.upgradeSettingFailure(r, err))
+		d.flashMsg(w, r, runnerUpgradeURL, d.upgradeFailure(r, err, "", msgUpgradeCheckFailed, msgUpgradeCheckFailedRef))
 		return
 	}
-	d.flashBack(w, r, runnerUpgradeURL, fmt.Sprintf("已请求 %d 台 Runner 查询最新版本：在线的 Runner 下一次连接 Server 时查询（最长约 %s）", n, humanDuration(d.longPoll())))
+	d.flashMsg(w, r, runnerUpgradeURL, message(msgUpgradeSetCheckRequested, intArg(argCount, int64(n)), intArg(argPoll, seconds(d.longPoll()))))
 }
 
-// upgradeSettingFailure 返回升级设置页（还没有迁移成消息，Issue #7）上操作失败的说明：参数错误、当前状态不允许时
-// 显示 upgradectl 的中文说明，其他错误按 failure 处理。
-func (d *Dashboard) upgradeSettingFailure(r *http.Request, err error) string {
-	if re, ok := errors.AsType[*upgradectl.RefusedError](err); ok {
-		return re.Msg
+// upgradeSettingFailure 返回保存 registry 失败时显示在字段旁的说明：当前状态不允许时按 upgradectl 的原因码显示，
+// 参数错误（*upgradectl.InvalidError，包装着 registry 地址的 *endpoint.Error）和其他错误按 settingsFormFailure 处理。
+func (d *Dashboard) upgradeSettingFailure(r *http.Request, err error) uiText {
+	if re, ok := errors.AsType[*upgradectl.RefusedError](err); ok && !re.Reason.IsZero() {
+		return upgradeReasonText(re.Reason)
 	}
-	if ie, ok := errors.AsType[*upgradectl.InvalidError](err); ok {
-		return ie.Msg
-	}
-	return d.failure(r, err)
+	return d.settingsFormFailure(r, err, msgUpgradeSetRegistryFailed)
 }

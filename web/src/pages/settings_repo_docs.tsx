@@ -8,8 +8,10 @@ import { Callout } from '../components/Callout'
 import { Form, SubmitButton } from '../components/Form'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { Subhead } from '../components/Subhead'
-import { Ago } from '../components/Time'
-import { Crumbs, settingsCss } from './settings/common'
+import { Msg, Trans, useT } from '../i18n/locale'
+import { isEmpty, type MsgKey } from '../i18n/messages'
+import { textSchema } from '../lib/envelope'
+import { Crumbs, settingsCss, settingsTags, withAgo } from './settings/common'
 import { docStatus, emptyDocCountLabel } from './settings/docStatus'
 import css from './settings_repo_docs.module.css'
 
@@ -37,7 +39,8 @@ const bindingSchema = z.object({
   CheckedAt: z.string().nullable(),
   CheckedBy: z.string(),
   CheckErrorCode: z.string(),
-  CheckErrorText: z.string(),
+  /** 失败原因：按 CheckErrorCode 给出的消息。 */
+  CheckErrorText: textSchema,
   CheckDocCount: z.number().nullable(),
   CheckSampleDocID: z.string(),
   ObservedCollectionName: z.string(),
@@ -71,11 +74,12 @@ type Data = z.infer<typeof schema>
 
 /** CheckLabel 区分"配置已保存"和"已验证可以读取"，不把保存当成连接正常。 */
 function CheckLabel({ status }: { status: string }) {
+  const t = useT()
   const s = docStatus(status)
   return (
     <>
-      <Label variant={s.variant}>{s.text}</Label>
-      {status === 'empty' && <Label variant={emptyDocCountLabel.variant}>{emptyDocCountLabel.text}</Label>}
+      <Label variant={s.variant}>{t(s.text)}</Label>
+      {status === 'empty' && <Label variant={emptyDocCountLabel.variant}>{t(emptyDocCountLabel.text)}</Label>}
     </>
   )
 }
@@ -85,20 +89,19 @@ function Provider({ name }: { name: string }) {
 }
 
 function BindingBox({ repo, b }: { repo: string; b: Binding | null }) {
+  const t = useT()
   if (!b) {
     return (
       <Box as="section" aria-labelledby="doc-binding">
-        <BoxHeader id="doc-binding" title="文档集绑定">
-          <Label variant="secondary">未绑定</Label>
+        <BoxHeader id="doc-binding" title={t('repoDocs.bindingTitle')}>
+          <Label variant="secondary">{t('repoDocs.unbound')}</Label>
         </BoxHeader>
         <BoxRow className={css.block}>
-          <p>这个仓库还没有绑定文档集。绑定用 CLI，token 从标准输入读取：</p>
+          <p>{t('repoDocs.noBinding')}</p>
           <pre className={settingsCss.pre}>
-            {`kiln doc bind ${repo} \\\n  --base-url https://outline.example.com \\\n  --collection <collection-uuid> --name 设计`}
+            {`kiln doc bind ${repo} \\\n  --base-url https://outline.example.com \\\n  --collection <collection-uuid> --name ${t('repoDocs.exampleName')}`}
           </pre>
-          <p className={settingsCss.muted}>
-            绑定只把配置保存到 Kiln，不访问 Outline。保存后回到这里点“验证读取”，确认 token 能读到文档集；验证前页面不会显示连接正常。
-          </p>
+          <p className={settingsCss.muted}>{t('repoDocs.bindNote')}</p>
         </BoxRow>
       </Box>
     )
@@ -106,16 +109,16 @@ function BindingBox({ repo, b }: { repo: string; b: Binding | null }) {
   const observed = b.ObservedCollectionName && b.ObservedCollectionName !== b.CollectionName ? b.ObservedCollectionName : ''
   return (
     <Box as="section" aria-labelledby="doc-binding">
-      <BoxHeader id="doc-binding" title="文档集绑定">
+      <BoxHeader id="doc-binding" title={t('repoDocs.bindingTitle')}>
         <CheckLabel status={b.CheckStatus} />
       </BoxHeader>
       <BoxRow className={css.block}>
         <dl className={css.kv}>
-          <dt>提供方</dt>
+          <dt>{t('repoDocs.provider')}</dt>
           <dd>
             <Provider name={b.Provider} />
           </dd>
-          <dt>站点</dt>
+          <dt>{t('repoDocs.site')}</dt>
           <dd>
             {b.SiteURL ? (
               <a href={b.SiteURL} target="_blank" rel="noreferrer">
@@ -125,26 +128,32 @@ function BindingBox({ repo, b }: { repo: string; b: Binding | null }) {
               <code>{b.BaseURL}</code>
             )}
           </dd>
-          <dt>文档集</dt>
+          <dt>{t('repoDocs.collection')}</dt>
           <dd>
-            {b.CollectionName || '（没有记录名称）'} · <code>{b.CollectionID}</code>
+            {b.CollectionName || t('repoDocs.noName')} · <code>{b.CollectionID}</code>
             {b.CollectionURL && (
               <a className={css.ext} href={b.CollectionURL} target="_blank" rel="noreferrer">
-                在 Outline 中打开 <LinkExternalIcon aria-hidden />
+                {t('repoDocs.openOutline')} <LinkExternalIcon aria-hidden />
               </a>
             )}
-            {observed && <div className={css.note}>验证时观测到的名称：{observed}</div>}
+            {observed && <div className={css.note}>{t('repoDocs.observedName', { name: observed })}</div>}
           </dd>
-          <dt>配置</dt>
+          <dt>{t('repoDocs.config')}</dt>
           <dd>
-            <Ago t={b.UpdatedAt} /> 更新
-            {b.UpdatedBy ? `，由 ${b.UpdatedBy}` : '（历史记录没有更新者）'}
+            {b.UpdatedBy ? (
+              <Trans id="repoDocs.updatedBy" params={{ login: b.UpdatedBy }} tags={withAgo(b.UpdatedAt)} />
+            ) : (
+              <Trans id="repoDocs.updatedNoBy" tags={withAgo(b.UpdatedAt)} />
+            )}
             <div className={css.note}>
-              创建于 <Ago t={b.CreatedAt} />
-              {b.CreatedBy && `，由 ${b.CreatedBy}`} · 第 {b.Generation} 代
+              {b.CreatedBy ? (
+                <Trans id="repoDocs.created" params={{ login: b.CreatedBy, gen: b.Generation }} tags={withAgo(b.CreatedAt)} />
+              ) : (
+                <Trans id="repoDocs.createdNoBy" params={{ gen: b.Generation }} tags={withAgo(b.CreatedAt)} />
+              )}
             </div>
           </dd>
-          <dt>读取验证</dt>
+          <dt>{t('repoDocs.check')}</dt>
           <dd>
             <CheckStatus b={b} />
           </dd>
@@ -154,77 +163,81 @@ function BindingBox({ repo, b }: { repo: string; b: Binding | null }) {
   )
 }
 
+function CheckedNote({ b, by, noBy }: { b: Binding; by: MsgKey; noBy: MsgKey }) {
+  return (
+    <div className={css.note}>
+      {b.CheckedBy ? (
+        <Trans id={by} params={{ login: b.CheckedBy }} tags={withAgo(b.CheckedAt)} />
+      ) : (
+        <Trans id={noBy} tags={withAgo(b.CheckedAt)} />
+      )}
+    </div>
+  )
+}
+
 function CheckStatus({ b }: { b: Binding }) {
+  const t = useT()
   if (b.CheckStatus === 'ok' || b.CheckStatus === 'empty') {
     return (
       <>
         {b.CheckStatus === 'ok' ? (
           <>
-            可以读取：文档集可访问，共 {b.CheckDocCount ?? 0} 篇文档
-            {b.CheckSampleDocID && (
-              <>
-                ，抽查了 <code>{b.CheckSampleDocID}</code> 的正文
-              </>
-            )}
+            {t('repoDocs.checkOK', { count: b.CheckDocCount ?? 0 })}
+            {b.CheckSampleDocID && <Trans id="repoDocs.checkSample" params={{ doc: b.CheckSampleDocID }} tags={settingsTags} />}
           </>
         ) : (
-          <>可以读取：文档集可访问，但当前没有文档（冻结时会记录一个空集合，不是读取失败）</>
+          t('repoDocs.checkEmpty')
         )}
-        <div className={css.note}>
-          <Ago t={b.CheckedAt} />
-          {b.CheckedBy && `，由 ${b.CheckedBy}`} · 只读检查，不测试写 token
-        </div>
+        <CheckedNote b={b} by="repoDocs.checkedBy" noBy="repoDocs.checkedNoBy" />
       </>
     )
   }
   if (b.CheckStatus === 'failed') {
     return (
       <>
-        <span className={css.failed}>{b.CheckErrorText || '读取失败'}</span>
+        <span className={css.failed}>{isEmpty(b.CheckErrorText) ? t('docStatus.failed') : <Msg text={b.CheckErrorText} />}</span>
         {b.CheckErrorCode && (
           <>
             {' '}
             <code className={css.note}>{b.CheckErrorCode}</code>
           </>
         )}
-        <div className={css.note}>
-          <Ago t={b.CheckedAt} />
-          {b.CheckedBy && `，由 ${b.CheckedBy}`} · 检查没有读到文档集；配置仍然保留，修正后可以重新验证
-        </div>
+        <CheckedNote b={b} by="repoDocs.failedBy" noBy="repoDocs.failedNoBy" />
       </>
     )
   }
   return (
     <>
-      还没有验证。绑定只保存了配置，不会访问 Outline，也不能据此认为连接正常。
-      <div className={css.note}>点右上角“验证读取”做一次只读检查（列出文档集与文档、抽查一篇正文）。</div>
+      {t('repoDocs.notVerified')}
+      <div className={css.note}>{t('repoDocs.notVerifiedHint')}</div>
     </>
   )
 }
 
 function DecisionBox({ d }: { d: Decision }) {
+  const t = useT()
   if (!d.Configured) {
     return (
       <Box as="section" aria-labelledby="decision-doc">
-        <BoxHeader id="decision-doc" title="待决策清单">
-          <Label variant="secondary">未配置</Label>
+        <BoxHeader id="decision-doc" title={t('repoDocs.decisionTitle')}>
+          <Label variant="secondary">{t('repoDocs.notConfigured')}</Label>
         </BoxHeader>
         <BoxRow className={css.block}>
-          <p>没有配置待决策清单。AI 开发在 PR 中记录的有疑问决定不会写进 Outline。</p>
+          <p>{t('repoDocs.noDecision')}</p>
           <pre className={settingsCss.pre}>{`printf '%s' "$OUTLINE_WRITE_TOKEN" | kiln doc decision-doc set <repo> --doc-id <doc-uuid> --base-url https://outline.example.com`}</pre>
-          <p className={settingsCss.muted}>写 token 只从标准输入读取，保存后不会再显示；这条命令会先用它只读校验目标文档。</p>
+          <p className={settingsCss.muted}>{t('repoDocs.decisionTokenNote')}</p>
         </BoxRow>
       </Box>
     )
   }
   return (
     <Box as="section" aria-labelledby="decision-doc">
-      <BoxHeader id="decision-doc" title="待决策清单">
-        <Label variant="accent">已配置</Label>
+      <BoxHeader id="decision-doc" title={t('repoDocs.decisionTitle')}>
+        <Label variant="accent">{t('repoDocs.configured')}</Label>
       </BoxHeader>
       <BoxRow className={css.block}>
         <dl className={css.kv}>
-          <dt>站点</dt>
+          <dt>{t('repoDocs.site')}</dt>
           <dd>
             {d.SiteURL ? (
               <a href={d.SiteURL} target="_blank" rel="noreferrer">
@@ -234,7 +247,7 @@ function DecisionBox({ d }: { d: Decision }) {
               <code>{d.BaseURL}</code>
             )}
           </dd>
-          <dt>文档</dt>
+          <dt>{t('repoDocs.doc')}</dt>
           <dd>
             {d.DocURL ? (
               <a href={d.DocURL} target="_blank" rel="noreferrer">
@@ -245,79 +258,71 @@ function DecisionBox({ d }: { d: Decision }) {
             )}
             {d.CollectionID && (
               <div className={css.note}>
-                文档集 <code>{d.CollectionID}</code>
+                <Trans id="repoDocs.collectionNote" params={{ id: d.CollectionID }} tags={settingsTags} />
               </div>
             )}
           </dd>
-          <dt>篇幅</dt>
+          <dt>{t('repoDocs.size')}</dt>
           <dd>
             {d.ObservedUnits != null ? (
               <>
-                {d.ObservedUnits} 个字符（UTF-16 code unit）
+                {t('repoDocs.units', { count: d.ObservedUnits })}
                 {d.WarningCode === 'doc_near_limit' && (
                   <>
                     {' '}
-                    <Label variant="attention">接近推荐篇幅</Label>
+                    <Label variant="attention">{t('repoDocs.nearLimit')}</Label>
                   </>
                 )}
               </>
             ) : (
-              <span className={settingsCss.muted}>还没有量过</span>
+              <span className={settingsCss.muted}>{t('repoDocs.notMeasured')}</span>
             )}
           </dd>
-          <dt>配置</dt>
+          <dt>{t('repoDocs.config')}</dt>
           <dd>
-            <Ago t={d.UpdatedAt} /> 更新{d.UpdatedBy && `，由 ${d.UpdatedBy}`}
-            {d.CreatedBy && (
-              <div className={css.note}>
-                创建者 {d.CreatedBy}
-              </div>
+            {d.UpdatedBy ? (
+              <Trans id="repoDocs.updatedBy" params={{ login: d.UpdatedBy }} tags={withAgo(d.UpdatedAt)} />
+            ) : (
+              <Trans id="repoDocs.updatedAt" tags={withAgo(d.UpdatedAt)} />
             )}
+            {d.CreatedBy && <div className={css.note}>{t('repoDocs.createdByOnly', { login: d.CreatedBy })}</div>}
           </dd>
         </dl>
-        <p className={settingsCss.muted}>
-          这里不显示写 token，也不访问 Outline。读取验证只检查只读绑定，不测试这篇文档的写权限。
-        </p>
+        <p className={settingsCss.muted}>{t('repoDocs.decisionNote')}</p>
       </BoxRow>
     </Box>
   )
 }
 
 function SettingsRepoDocs({ data }: PageProps<Data>) {
+  const t = useT()
   useLive(true)
   return (
     <SettingsLayout section={data.Section}>
       <Subhead
         actions={
           data.Binding && (
-            <Form action="/settings/repos/docs/verify" aria-label="验证文档读取">
+            <Form action="/settings/repos/docs/verify" aria-label={t('repoDocs.verifyLabel')}>
               <input type="hidden" name="repo" value={data.Repo} />
-              <SubmitButton>验证读取</SubmitButton>
+              <SubmitButton>{t('repoDocs.verify')}</SubmitButton>
             </Form>
           )
         }
-        description={
-          <>
-            绑定只保存配置，不访问 Outline；普通页面加载和自动刷新都不会读取远端。只有管理员点“验证读取”时才做一次只读检查。
-          </>
-        }
+        description={t('repoDocs.description')}
       >
-        <Crumbs items={[{ label: '仓库', href: '/settings/repos' }]} current={`${data.Repo} · 外部文档`} />
+        <Crumbs items={[{ label: t('settingsNav.repos'), href: '/settings/repos' }]} current={t('repoDocs.crumb', { repo: data.Repo })} />
       </Subhead>
 
       {!data.Active && (
-        <Callout tone="warning" title="已停用的仓库">
-          这个仓库已停用，不能再修改绑定；仍然可以查看历史配置和做只读验证。
+        <Callout tone="warning" title={t('repoDocs.inactiveTitle')}>
+          {t('repoDocs.inactiveText')}
         </Callout>
       )}
 
       <BindingBox repo={data.Repo} b={data.Binding} />
       <DecisionBox d={data.Decision} />
 
-      <p className={settingsCss.muted}>
-        页面展示的是仓库当前的配置。AI 工作项和任务使用的是冻结时的快照，重绑或修改 Outline
-        不会改变已有工作项的历史依据；历史依据在对应的 AI 工作项、请求和任务页面上查看。
-      </p>
+      <p className={settingsCss.muted}>{t('repoDocs.snapshotNote')}</p>
     </SettingsLayout>
   )
 }

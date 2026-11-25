@@ -1,6 +1,8 @@
 {
  "Page": "settings_members",
- "Title": "成员",
+ "Title": {
+  "id": "settings.titleMembers"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {
@@ -20,7 +22,9 @@
     "Login": "octocat",
     "Role": "admin",
     "Bound": true,
-    "Source": "绑定的 GitHub 账号",
+    "Source": {
+     "id": "members.sourceBound"
+    },
     "LastLogin": "2026-11-05T04:52:46-08:00",
     "Me": true
    },

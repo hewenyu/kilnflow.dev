@@ -1,6 +1,8 @@
 {
  "Page": "settings_env_new",
- "Title": "设置 · 新建 environment",
+ "Title": {
+  "id": "settings.titleEnvNew"
+ },
  "Nav": "settings",
  "Status": 422,
  "Session": {
@@ -28,7 +30,12 @@
     "allowed_publish_repos": ""
    },
    "Errors": {
-    "name": "environment release 已存在于这个作用域，请在它的配置页修改"
+    "name": {
+     "id": "settingsEnv.errExists",
+     "params": {
+      "name": "release"
+     }
+    }
    },
    "Failed": true
   }

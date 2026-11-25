@@ -1,6 +1,8 @@
 {
  "Page": "settings_account",
- "Title": "登录与身份",
+ "Title": {
+  "id": "settings.titleAccount"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

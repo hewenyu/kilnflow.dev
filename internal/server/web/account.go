@@ -73,17 +73,17 @@ func (d *Dashboard) pageAccount(w http.ResponseWriter, r *http.Request, se *sess
 		d.serverError(w, r, fmt.Errorf("读取登录与身份：%w", err))
 		return
 	}
-	d.render(w, r, "settings_account", "登录与身份", &accountPage{
+	d.renderPage(w, r, "settings_account", message(msgSetTitleAccount), &accountPage{
 		Section: sectionAccount, Binding: bind, OAuth: d.oauthEnabled(),
 		SignedInAsBound: se.Via == viaGitHub && se.Bound,
 		GitHubLogin:     githubLoginURL(accountURL),
-	})
+	}, http.StatusOK)
 }
 
 // postBindStart 开始绑定：跳转到 GitHub 授权页，state 关联当前会话。授权完成后在 finishBind 中绑定。
 func (d *Dashboard) postBindStart(w http.ResponseWriter, r *http.Request, se *session) {
 	if !d.oauthEnabled() {
-		d.flashBack(w, r, accountURL, "没有绑定：这个 Server 没有配置 GitHub 登录（KILN_GITHUB_CLIENT_ID、KILN_GITHUB_CLIENT_SECRET），先在 Server 配置中设置。")
+		d.flashMsg(w, r, accountURL, message(msgAccountBindNoOAuth))
 		return
 	}
 	d.redirect(w, r, d.authorizeURL(d.oauthState(bindPurposePrefix+d.bindFingerprint(se), accountURL)))
@@ -114,11 +114,11 @@ func (d *Dashboard) finishBind(w http.ResponseWriter, r *http.Request, fingerpri
 // postUnbind 解除绑定，同时恢复 admin token 登录。当前会话是绑定账号且不在 KILN_ADMINS 中时，随即失去管理员权限。
 func (d *Dashboard) postUnbind(w http.ResponseWriter, r *http.Request, se *session) {
 	if r.PostFormValue("confirm") != "1" {
-		d.flashBack(w, r, accountURL, "没有解除绑定：请勾选确认。")
+		d.flashMsg(w, r, accountURL, message(msgAccountUnbindUnconfirmed))
 		return
 	}
 	if err := d.admin.UnbindAdmin(r.Context(), se.Login); err != nil {
-		d.preconditionOrError(w, r, accountURL, "没有解除绑定", err)
+		d.preconditionOrError(w, r, accountURL, msgAccountUnbindFailed, err)
 		return
 	}
 	d.flashMsg(w, r, accountURL, message(msgAccountUnbound))
@@ -128,18 +128,18 @@ func (d *Dashboard) postUnbind(w http.ResponseWriter, r *http.Request, se *sessi
 func (d *Dashboard) postTokenLogin(w http.ResponseWriter, r *http.Request, se *session) {
 	enable := r.PostFormValue("enabled") == "1"
 	if !enable && (se.Via != viaGitHub || !se.Bound) {
-		d.flashBack(w, r, accountURL, "没有关闭：先用绑定的 GitHub 账号通过 GitHub 登录，确认 GitHub 登录可用后再关闭 admin token 登录。")
+		d.flashMsg(w, r, accountURL, message(msgAccountTokenNeedGitHub))
 		return
 	}
 	if err := d.admin.SetTokenLogin(r.Context(), enable, se.Login); err != nil {
-		d.preconditionOrError(w, r, accountURL, "没有修改", err)
+		d.preconditionOrError(w, r, accountURL, msgAccountTokenFailed, err)
 		return
 	}
-	msg := "已关闭 admin token 登录：Dashboard 只能用 GitHub 登录，已用 admin token 登录的会话随即失效。CLI 不受影响。"
+	msg := message(msgAccountTokenDisabled)
 	if enable {
-		msg = "已开启 admin token 登录。"
+		msg = message(msgAccountTokenEnabled)
 	}
-	d.flashBack(w, r, accountURL, msg)
+	d.flashMsg(w, r, accountURL, msg)
 }
 
 // member 是成员分区中的一个人。
@@ -149,8 +149,8 @@ type member struct {
 	Role  string
 	// Bound 表示这是管理员绑定的账号。
 	Bound bool
-	// Source 说明权限来自哪里（绑定、KILN_ADMINS、KILN_USERS）。
-	Source string
+	// Source 说明权限来自哪里：绑定（消息），或者名单的环境变量名（KILN_ADMINS、KILN_USERS，原样显示）。
+	Source uiText
 	// LastLogin 是最近一次登录 Dashboard 的时间（审计日志），从未登录时为零值。
 	LastLogin time.Time
 	// Me 表示是当前登录的用户。
@@ -180,7 +180,7 @@ func (d *Dashboard) pageMembers(w http.ResponseWriter, r *http.Request, se *sess
 	}
 	p := &membersPage{Section: sectionMembers, Bound: bind != nil}
 	seen := map[string]bool{}
-	add := func(login, role, source string, bound bool) {
+	add := func(login, role string, source uiText, bound bool) {
 		key := strings.ToLower(login)
 		if seen[key] {
 			return
@@ -197,15 +197,15 @@ func (d *Dashboard) pageMembers(w http.ResponseWriter, r *http.Request, se *sess
 		}
 	}
 	if bind != nil {
-		add(bind.GitHubLogin, roleAdmin, "绑定的 GitHub 账号", true)
+		add(bind.GitHubLogin, roleAdmin, message(msgMemberSourceBound), true)
 	}
 	for _, l := range sortedKeys(d.cfg.Admins) {
-		add(l, roleAdmin, "KILN_ADMINS", false)
+		add(l, roleAdmin, rawText("KILN_ADMINS"), false)
 	}
 	for _, l := range sortedKeys(d.cfg.Users) {
-		add(l, roleUser, "KILN_USERS", false)
+		add(l, roleUser, rawText("KILN_USERS"), false)
 	}
-	d.render(w, r, "settings_members", "成员", p)
+	d.renderPage(w, r, "settings_members", message(msgSetTitleMembers), p, http.StatusOK)
 }
 
 func sortedKeys(m map[string]bool) []string {
@@ -301,123 +301,21 @@ func (d *Dashboard) pageActivity(w http.ResponseWriter, r *http.Request, _ *sess
 		d.serverError(w, r, fmt.Errorf("读取活动：%w", err))
 		return
 	}
-	d.render(w, r, "settings_activity", "活动", p)
+	d.renderPage(w, r, "settings_activity", message(msgSetTitleActivity), p, http.StatusOK)
 }
 
-// preconditionOrError 把操作的前提不满足（FailedPrecondition，例如还没有绑定）显示为回到 to 的提示，其他错误显示错误页。
-func (d *Dashboard) preconditionOrError(w http.ResponseWriter, r *http.Request, to, what string, err error) {
+// preconditionOrError 把操作的前提不满足（FailedPrecondition，例如还没有绑定）显示为回到 to 的提示，其他错误显示错误页：
+// 已知的前提错误（admin.ErrNotBound、admin.ErrAlreadyUnbound）是对应的消息，其余是 failed（参数是服务给出的说明）。
+func (d *Dashboard) preconditionOrError(w http.ResponseWriter, r *http.Request, to string, failed msgID, err error) {
 	if ce, ok := errors.AsType[*connect.Error](err); ok && ce.Code() == connect.CodeFailedPrecondition {
-		d.flashBack(w, r, to, what+"："+ce.Message())
+		msg := settingsErrText(err)
+		if msg.IsZero() {
+			msg = message(failed, strArg(argReason, flashArgText(ce.Message())))
+		}
+		d.flashMsg(w, r, to, msg)
 		return
 	}
 	d.serverError(w, r, err)
-}
-
-// aiText 返回 AI 请求的活动的说明（PLAN #30.9）；不是 AI 请求的活动时返回 false。
-func (e activityEntry) aiText() (string, bool) {
-	str := func(k string) string { return fmt.Sprint(e.Detail[k]) }
-	num := func(k string) string {
-		v, _ := e.Detail[k].(float64)
-		return strconv.FormatInt(int64(v), 10)
-	}
-	switch e.Action {
-	case "ai_review.trigger":
-		return fmt.Sprintf("手动启动了 AI 审计请求 #%s（%s %s）", num("ai_request_id"), str("repo"), str("ref")), true
-	case "ai_request.cancel":
-		return "取消了 AI 请求 #" + num("ai_request_id"), true
-	case "ai_request.rerun":
-		return fmt.Sprintf("重跑了 AI 审计请求 #%s，新的请求 #%s", num("ai_request_id"), num("rerun")), true
-	}
-	return "", false
-}
-
-// Text 返回这条活动的中文说明（不含操作者），Link 返回相关页面的地址（没有时为空）。
-func (e activityEntry) Text() string {
-	if t, ok := e.aiText(); ok {
-		return t
-	}
-	return e.text()
-}
-
-// text 返回 AI 请求之外的活动的说明。
-func (e activityEntry) text() string {
-	str := func(k string) string {
-		if v, ok := e.Detail[k]; ok && v != nil {
-			return fmt.Sprint(v)
-		}
-		return ""
-	}
-	num := func(k string) string {
-		if v, ok := e.Detail[k].(float64); ok {
-			return strconv.FormatInt(int64(v), 10)
-		}
-		return str(k)
-	}
-	switch e.Action {
-	case "login":
-		if str("via") == viaToken {
-			return "用 admin token 登录了 Dashboard"
-		}
-		return "用 GitHub 登录了 Dashboard"
-	case "run.dispatch":
-		return "手动启动了 run #" + num("run_id")
-	case "run.cancel":
-		return "取消了 run #" + num("run_id")
-	case "run.rerun":
-		if j := num("job_id"); j != "" && j != "0" {
-			return fmt.Sprintf("重跑了 run #%s 中的 job #%s（%s）", num("run_id"), j, rerunLabel(atoiOr0(num("rerun"))))
-		}
-		return fmt.Sprintf("重跑了 run #%s（%s）", num("run_id"), rerunLabel(atoiOr0(num("rerun"))))
-	case "runner.drain":
-		return "暂停了 Runner " + str("name") + " 接单"
-	case "runner.undrain":
-		return "恢复了 Runner " + str("name") + " 接单"
-	case "runner.revoke":
-		return "吊销了 Runner " + str("name")
-	case "runner.delete":
-		return "删除了已吊销的 Runner " + str("name")
-	case "runner.token_create":
-		return "生成了 pool " + str("pool") + " 的 Runner 注册令牌"
-	case "runner.enroll":
-		return "用注册令牌注册到 pool " + str("pool")
-	case "repos.sync":
-		return "刷新了仓库列表"
-	case "repo.reconcile":
-		return "对 " + str("repo") + " 补对账"
-	case "cache.bump_salt":
-		return "让 " + str("repo") + " 的缓存全部失效"
-	case "outbox.retry":
-		return "重试了 outbox #" + num("id")
-	case "admin.bind":
-		if p := str("previous"); p != "" {
-			return "把管理员绑定的 GitHub 账号从 " + p + " 换成了 " + str("github_login")
-		}
-		return "把管理员绑定到 GitHub 账号 " + str("github_login")
-	case "admin.unbind":
-		return "解除了管理员绑定的 GitHub 账号 " + str("github_login")
-	case "admin.token_login.disable":
-		return "关闭了 Dashboard 的 admin token 登录"
-	case "admin.token_login.enable":
-		return "开启了 Dashboard 的 admin token 登录"
-	}
-	if op, ok := strings.CutPrefix(e.Action, "config."); ok {
-		what := map[string]string{ //nolint:gosec // 审计操作的中文说明，不是凭据
-			"variable.set": "设置了变量", "variable.delete": "删除了变量", "secret.set": "设置了 secret", "secret.delete": "删除了 secret",
-			"environment.upsert": "保存了 environment", "environment.delete": "删除了 environment",
-		}[op]
-		if what == "" {
-			what = "修改了配置 " + op
-		}
-		name := str("name")
-		if name == "" {
-			name = str("environment")
-		}
-		if s := str("scope"); s != "" {
-			return strings.TrimSpace(what + " " + name + "（" + s + "）")
-		}
-		return strings.TrimSpace(what + " " + name)
-	}
-	return e.Action
 }
 
 // Link 返回活动相关页面的地址（run、AI 请求、Runner），没有时为空。
@@ -437,9 +335,4 @@ func (e activityEntry) Link() string {
 		return "/runners"
 	}
 	return ""
-}
-
-func atoiOr0(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
 }

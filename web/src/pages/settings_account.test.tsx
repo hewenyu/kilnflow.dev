@@ -5,7 +5,7 @@ import fixture from '../../dev/fixtures/settings_account.json'
 import doneFixture from '../../dev/fixtures/settings_account.done.json'
 import tokenFixture from '../../dev/fixtures/settings_account.token.json'
 import unboundFixture from '../../dev/fixtures/settings_account.unbound.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, tFor, withData } from '../test/render'
 
 let posts: { url: string; body: string }[] = []
 
@@ -76,5 +76,25 @@ describe('管理员账号', () => {
     expect(posts).toHaveLength(1)
     expect(posts[0]?.url).toBe('/settings/account/unbind')
     expect(new URLSearchParams(posts[0]?.body).get('confirm')).toBe('1')
+  })
+  it('解除绑定的确认框打开时切换语言：确认框保持打开，标题和说明随之切换', async () => {
+    const en = tFor('en')
+    renderPage(envelope(fixture), '/settings/account')
+    await userEvent.click(screen.getByRole('button', { name: '解除绑定' }))
+    await screen.findByRole('alertdialog', { name: '解除 octocat 的绑定？' })
+    await switchLocale('English')
+    const dialog = await screen.findByRole('alertdialog', { name: en('accountPage.unbindConfirmTitle', { login: 'octocat' }) })
+    expect(dialog).toHaveTextContent('I confirm unlinking octocat.')
+    expect(posts).toHaveLength(0)
+    await userEvent.click(within(dialog).getByRole('button', { name: en('accountPage.unbindButton') }))
+    expect(posts).toHaveLength(1)
+    expect(posts[0]?.url).toBe('/settings/account/unbind')
+  })
+
+  it('英文界面：三个步骤和已解除绑定的提示', () => {
+    const en = tFor('en')
+    renderPage(envelope(fixture, { Flash: { id: 'settingsErr.alreadyUnbound' } }), '/settings/account', { locale: 'en' })
+    expect(screen.getByRole('list', { name: en('accountPage.stepsLabel') })).toBeInTheDocument()
+    expect(screen.getByText(en('settingsErr.alreadyUnbound'))).toBeInTheDocument()
   })
 })

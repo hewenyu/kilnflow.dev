@@ -20,7 +20,6 @@
   "Env": "",
   "Label": "acme/kilnflow.dev",
   "Kind": "repo",
-  "KindLabel": "仓库级",
   "Environment": null,
   "Vars": [
    {
@@ -47,7 +46,6 @@
    "Errors": {},
    "Failed": false
   },
-  "CrumbLabel": "变量与密钥",
   "CrumbURL": "/settings/variables",
   "URL": "/settings/scope?repo=acme%2Fkilnflow.dev",
   "Query": "repo=acme%2Fkilnflow.dev"

@@ -579,6 +579,9 @@ func TestService_ReconcileRepoErrors(t *testing.T) {
 
 	_, err := e.svc.ReconcileRepo(e.ctx, "tester/nope", testActor)
 	wantCode(t, "仓库不存在", err, connect.CodeInvalidArgument)
+	if rn, ok := errors.AsType[*store.RepoNotFoundError](err); !ok || rn.Name != "tester/nope" {
+		t.Errorf("仓库不存在应是 *store.RepoNotFoundError：%#v", err)
+	}
 	if len(e.audits("repo.reconcile")) != 0 {
 		t.Errorf("仓库不存在时不应写审计日志")
 	}
@@ -589,6 +592,14 @@ func TestService_ReconcileRepoErrors(t *testing.T) {
 	wantCode(t, "限流", err, connect.CodeResourceExhausted)
 	if !strings.Contains(err.Error(), "被 GitHub 限流") {
 		t.Errorf("限流的错误应说明原因：%v", err)
+	}
+	// Dashboard 取出可以再试的时间（按浏览器的时区和语言显示）；CLI 的说明按 Server 的时区写出同一个时间
+	rl, ok := errors.AsType[*RateLimitedError](err)
+	if !ok || rl.Until.Before(time.Now().Add(30*time.Minute)) {
+		t.Fatalf("应是带可以再试时间的 *RateLimitedError：%#v", err)
+	}
+	if want := rl.Until.Local().Format(time.DateTime); !strings.Contains(err.Error(), want) || !strings.Contains(rl.Error(), "已经补上的 run 不会重复") {
+		t.Errorf("CLI 的说明 %q 应包含时间 %s", err, want)
 	}
 	if a := e.wantAudit("repo.reconcile", testActor, map[string]any{"repo": testRepo}); a.Detail["error"] == nil {
 		t.Errorf("审计日志应记录失败原因：%v", a.Detail)

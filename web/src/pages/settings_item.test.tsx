@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import created from '../../dev/fixtures/settings_item.json'
 import edit from '../../dev/fixtures/settings_item.edit.json'
 import secret from '../../dev/fixtures/settings_item.secret.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, tFor, withData } from '../test/render'
 import { hidden } from './settings/testing'
 
 describe('变量和 secret 的新建、编辑页', () => {
@@ -53,5 +53,24 @@ describe('变量和 secret 的新建、编辑页', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('新建 secret')
     expect(container.querySelector('input[name="value"]')).toBeRequired()
     expect(screen.getByText('保存后不会再显示。')).toBeInTheDocument()
+  })
+  it('英文界面：新建 secret 校验失败，名称保留，值不回填；切换语言后错误随之切换', async () => {
+    const en = tFor('en')
+    const env = withData(envelope(secret), {
+      Name: '',
+      Secret: null,
+      Form: { Values: { name: 'deploy key', value: 'sup3r-s3cret-value' }, Errors: { name: { id: 'settingsErr.nameInvalid', params: { name: 'deploy key' } } }, Failed: true },
+    })
+    const { container } = renderPage(env, '/settings/secrets/new?account=acme&env=release')
+    expect(container.querySelector('input[name="name"]')).toHaveValue('deploy key')
+    const value = container.querySelector('input[name="value"]')
+    expect(value).toHaveAttribute('type', 'password')
+    expect(value).toHaveValue('')
+    expect(container.innerHTML).not.toContain('sup3r-s3cret-value')
+    expect(screen.getByText('名称 deploy key 只能包含字母、数字和 _')).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText(en('settingsErr.nameInvalid', { name: 'deploy key' }))).toBeInTheDocument()
+    expect(container.querySelector('input[name="name"]')).toHaveValue('deploy key')
+    expect(container.querySelector('input[name="value"]')).toHaveValue('')
   })
 })

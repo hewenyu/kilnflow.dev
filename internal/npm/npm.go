@@ -110,19 +110,73 @@ func Uncertain(err error) bool {
 	return errors.Is(err, ErrNoResponse)
 }
 
+// ScopeError 是 scope 不合格的错误：Scope 是原样的 scope；Part 是 @ 之后部分的问题，为 nil 表示没有以 @ 开头。
+// Dashboard 按 Part 的原因码显示当前语言的说明，CLI 和日志用 Error()。
+type ScopeError struct {
+	Scope string
+	Part  *PartError
+}
+
+func (e *ScopeError) Error() string {
+	if e.Part == nil {
+		return fmt.Sprintf("scope %q 必须以 @ 开头", e.Scope)
+	}
+	return fmt.Sprintf("scope %q 无效：%s", e.Scope, e.Part)
+}
+
+func (e *ScopeError) Unwrap() error {
+	if e.Part == nil {
+		return nil
+	}
+	return e.Part
+}
+
+// PartProblem 是 scope 或包名的一部分不合格的原因码（不随语言变化）。
+type PartProblem string
+
+const (
+	// PartEmpty：为空。
+	PartEmpty PartProblem = "empty"
+	// PartLeadingDot：以 . 或 _ 开头。
+	PartLeadingDot PartProblem = "leading_dot"
+	// PartUppercase：有大写字母。
+	PartUppercase PartProblem = "uppercase"
+	// PartBadChar：有不允许的字符（Char）。
+	PartBadChar PartProblem = "bad_char"
+)
+
+// PartError 是 scope 或包名的一部分（不含 @ 和 /）不合格的错误；Char 是不允许的字符（只用于 PartBadChar）。
+type PartError struct {
+	Problem PartProblem
+	Char    rune
+}
+
+func (e *PartError) Error() string {
+	switch e.Problem {
+	case PartEmpty:
+		return "不能为空"
+	case PartLeadingDot:
+		return "不能以 . 或 _ 开头"
+	case PartUppercase:
+		return "不能有大写字母"
+	}
+	return fmt.Sprintf("不能包含字符 %q（只能用小写字母、数字、-、.、_）", e.Char)
+}
+
 // ValidScope 检查 scope（形如 @acme）：以 @ 开头，其余部分只含小写字母、数字、-、.、_，不以 . 或 _ 开头。
+// 不合格时返回 *ScopeError。
 func ValidScope(scope string) error {
 	rest, ok := strings.CutPrefix(scope, "@")
 	if !ok {
-		return fmt.Errorf("scope %q 必须以 @ 开头", scope)
+		return &ScopeError{Scope: scope}
 	}
-	if err := validPart(rest); err != nil {
-		return fmt.Errorf("scope %q 无效：%w", scope, err)
+	if pe := partProblem(rest); pe != nil {
+		return &ScopeError{Scope: scope, Part: pe}
 	}
 	return nil
 }
 
-// NormalizeScope 给不带 @ 的 scope 补上 @，再按 ValidScope 检查。
+// NormalizeScope 给不带 @ 的 scope 补上 @，再按 ValidScope 检查（不合格时返回 *ScopeError）。
 func NormalizeScope(scope string) (string, error) {
 	if !strings.HasPrefix(scope, "@") {
 		scope = "@" + scope
@@ -185,20 +239,28 @@ func validShortName(name string) error {
 	return nil
 }
 
-// validPart 检查 scope 或 name 部分（不含 @ 和 /）。
+// validPart 检查 scope 或 name 部分（不含 @ 和 /），不合格时返回 *PartError。
 func validPart(s string) error {
+	if pe := partProblem(s); pe != nil {
+		return pe
+	}
+	return nil
+}
+
+// partProblem 返回 scope 或 name 部分的问题，合格时返回 nil。
+func partProblem(s string) *PartError {
 	switch {
 	case s == "":
-		return errors.New("不能为空")
+		return &PartError{Problem: PartEmpty}
 	case s[0] == '.' || s[0] == '_':
-		return errors.New("不能以 . 或 _ 开头")
+		return &PartError{Problem: PartLeadingDot}
 	}
 	for _, r := range s {
 		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '.' && r != '_' {
 			if r >= 'A' && r <= 'Z' {
-				return errors.New("不能有大写字母")
+				return &PartError{Problem: PartUppercase}
 			}
-			return fmt.Errorf("不能包含字符 %q（只能用小写字母、数字、-、.、_）", r)
+			return &PartError{Problem: PartBadChar, Char: r}
 		}
 	}
 	return nil
@@ -236,7 +298,7 @@ func Shasum(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// CheckRegistry 检查 registry 地址：必须是 https（主机为本机地址时可以用 http），不能带查询参数、fragment 或用户信息。
+// CheckRegistry 检查 registry 地址（不合格时返回 *endpoint.Error）：必须是 https（主机为本机地址时可以用 http），不能带查询参数、fragment 或用户信息。
 // 可以带路径前缀（如私有 registry 的 https://host/api/npm/repo/）。
 func CheckRegistry(raw string) error { return endpoint.Check(raw, "npm registry 地址") }
 

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/settings_upgrade.json'
 import invalid from '../../dev/fixtures/settings_upgrade.invalid.json'
-import { envelope, renderPage } from '../test/render'
+import { envelope, renderPage, switchLocale, tFor } from '../test/render'
 import { stubSubmit } from './settings/testing'
 
 afterEach(() => {
@@ -66,7 +66,29 @@ describe('设置 · Runner 升级', () => {
     const input = within(form).getByRole('textbox', { name: /registry 地址/ })
     expect(input).toHaveValue('http://npm.example.com/')
     expect(input).toHaveAttribute('aria-invalid', 'true')
-    expect(within(form).getByText('registry 必须是 https 地址（本机地址除外）')).toBeInTheDocument()
+    expect(within(form).getByText('地址 http://npm.example.com/ 必须是 https（只有本机地址可以用 http）')).toBeInTheDocument()
     expect(screen.getByText(/当前使用/)).toHaveTextContent('当前使用：https://registry.npmjs.org/（官方）')
+  })
+
+  it('字段错误按语言显示：英文界面是英文，中途切换语言随之切换', async () => {
+    const zh = '地址 http://npm.example.com/ 必须是 https（只有本机地址可以用 http）'
+    const en = tFor('en')('settingsErr.urlScheme', { value: 'http://npm.example.com/' })
+    renderPage(envelope(invalid), '/settings/runner-upgrade', { locale: 'en' })
+    expect(screen.getByText(en)).toBeInTheDocument()
+    expect(screen.queryByText(zh)).not.toBeInTheDocument()
+    await switchLocale('简体中文')
+    expect(screen.getByText(zh)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText(en)).toBeInTheDocument()
+    expect(screen.queryByText(zh)).not.toBeInTheDocument()
+  })
+  it('全部检查更新的结果：等待时长按语言格式化', async () => {
+    const flash = { id: 'settingsUpgrade.checkRequested', params: { count: 2, poll: 20 } }
+    renderPage(envelope(fixture, { Flash: flash }), '/settings/runner-upgrade')
+    expect(screen.getByText('已请求 2 台 Runner 查询最新版本：在线的 Runner 下一次连接 Server 时查询（最长约 20 秒）。')).toBeInTheDocument()
+    await switchLocale('English')
+    const text = tFor('en')('settingsUpgrade.checkRequested', { count: 2, poll: 20 })
+    expect(text).toContain('20')
+    expect(screen.getByText(text)).toBeInTheDocument()
   })
 })

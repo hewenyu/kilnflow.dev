@@ -9,8 +9,9 @@ import { Callout } from '../components/Callout'
 import { ConfirmForm, Form, SubmitButton } from '../components/Form'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { Subhead } from '../components/Subhead'
-import { Ago } from '../components/Time'
+import { Trans, useT } from '../i18n/locale'
 import type { Session } from '../lib/envelope'
+import { settingsTags, withAgo } from './settings/common'
 import css from './settings_people.module.css'
 
 // 登录与身份（PLAN #16.5）：管理员绑定 GitHub 账号 → 用 GitHub 登录 → 关闭 admin token 登录。
@@ -42,23 +43,24 @@ const schema = z.object({
 type Data = z.infer<typeof schema>
 
 function Who({ session }: { session: Session }) {
+  const t = useT()
   return (
     <Box as="section" aria-labelledby="who-h" className={css.block}>
       <BoxRow className={css.who}>
         <Avatar login={session.Login} size={48} />
         <div>
           <h2 id="who-h" className={css.whoName}>
-            <span className="visually-hidden">当前登录：</span>
+            <span className="visually-hidden">{t('accountPage.currentLogin')}</span>
             {session.Login}
             {session.ViaToken ? <Label>admin token</Label> : <Label variant="accent">GitHub</Label>}
-            {session.Bound && <Label variant="accent">绑定的管理员账号</Label>}
+            {session.Bound && <Label variant="accent">{t('accountPage.boundLabel')}</Label>}
           </h2>
           <p className={css.muted}>
             {session.ViaToken
-              ? '用 admin token 登录，拥有全部管理员权限。'
+              ? t('accountPage.viaToken')
               : session.Bound
-                ? '用绑定的 GitHub 账号登录。'
-                : '用 GitHub 登录（KILN_ADMINS 中的管理员）。'}
+                ? t('accountPage.viaBound')
+                : t('accountPage.viaGitHub')}
           </p>
         </div>
       </BoxRow>
@@ -68,6 +70,7 @@ function Who({ session }: { session: Session }) {
 
 /** Step 是三步中的一步：完成的显示对勾，当前的突出显示，之后的变灰。 */
 function Step({ n, step, done, title, children }: { n: number; step: number; done: boolean; title: string; children: ReactNode }) {
+  const t = useT()
   const state = done ? 'done' : step === n ? 'current' : 'todo'
   return (
     <BoxRow as="li" className={`${css.step} ${css[state] ?? ''}`} aria-current={state === 'current' ? 'step' : undefined}>
@@ -77,7 +80,7 @@ function Step({ n, step, done, title, children }: { n: number; step: number; don
       <div className={css.stepBody}>
         <h3 className={css.stepTitle}>
           {title}
-          {done && <span className="visually-hidden">（已完成）</span>}
+          {done && <span className="visually-hidden">{t('accountPage.done')}</span>}
         </h3>
         {children}
       </div>
@@ -86,6 +89,7 @@ function Step({ n, step, done, title, children }: { n: number; step: number; don
 }
 
 function BindStep({ data, b }: { data: Data; b: Binding | null }) {
+  const t = useT()
   if (b) {
     return (
       <>
@@ -96,14 +100,14 @@ function BindStep({ data, b }: { data: Data; b: Binding | null }) {
               <b>{b.GitHubLogin}</b> <span className={css.muted}>GitHub ID {b.GitHubID}</span>
             </p>
             <p className={css.muted}>
-              <Ago t={b.BoundAt} /> 由 {b.BoundBy} 绑定。用这个账号通过 GitHub 登录即为管理员，不需要写进 KILN_ADMINS。
+              <Trans id="accountPage.boundAt" params={{ by: b.BoundBy }} tags={withAgo(b.BoundAt)} />
             </p>
           </div>
         </div>
-        <p className={css.p}>更换：用另一个 GitHub 账号完成授权，绑定随之换成那个账号，admin token 登录的开关不变。</p>
+        <p className={css.p}>{t('accountPage.changeHint')}</p>
         <Form action="/settings/account/bind">
           <SubmitButton size="small" leadingVisual={MarkGithubIcon}>
-            用另一个 GitHub 账号重新绑定
+            {t('accountPage.rebind')}
           </SubmitButton>
         </Form>
       </>
@@ -111,22 +115,19 @@ function BindStep({ data, b }: { data: Data; b: Binding | null }) {
   }
   return (
     <>
-      <p className={css.p}>
-        在 GitHub 上授权一次，Kiln 记下你的账号。之后你用 GitHub 登录就是管理员，admin token 登录和 CLI 的身份也都是这个账号。
-      </p>
+      <p className={css.p}>{t('accountPage.bindIntro')}</p>
       {data.OAuth ? (
         <>
           <Form action="/settings/account/bind">
             <SubmitButton variant="primary" leadingVisual={MarkGithubIcon}>
-              绑定 GitHub 账号
+              {t('accountPage.bind')}
             </SubmitButton>
           </Form>
-          <p className={css.hint}>会跳转到 GitHub 授权页，完成后回到这里。只读取账号的登录名和 ID。</p>
+          <p className={css.hint}>{t('accountPage.bindHint')}</p>
         </>
       ) : (
-        <Callout tone="warning" title="需要先配置 GitHub 登录">
-          在 Server 配置中设置 <code>KILN_GITHUB_CLIENT_ID</code> 和 <code>KILN_GITHUB_CLIENT_SECRET</code>（GitHub App 的用户授权凭据，回调地址{' '}
-          <code>/auth/github/callback</code>），重启后再回到这里绑定。
+        <Callout tone="warning" title={t('accountPage.needOAuthTitle')}>
+          <Trans id="accountPage.needOAuth" tags={settingsTags} />
         </Callout>
       )}
     </>
@@ -134,39 +135,39 @@ function BindStep({ data, b }: { data: Data; b: Binding | null }) {
 }
 
 function LoginStep({ data, b, session }: { data: Data; b: Binding | null; session: Session }) {
+  const t = useT()
   const step = data.Step
-  if (step > 2 && b) return <p className={css.p}>当前就是用 {b.GitHubLogin} 通过 GitHub 登录的，GitHub 登录可用。</p>
+  if (step > 2 && b) return <p className={css.p}>{t('accountPage.loginDone', { login: b.GitHubLogin })}</p>
   if (step === 2 && b && session.ViaToken) {
     return (
       <>
-        <p className={css.p}>用 {b.GitHubLogin} 通过 GitHub 登录一次，确认 GitHub 登录可用。会替换当前的登录，完成后回到这里。</p>
+        <p className={css.p}>{t('accountPage.loginNeeded', { login: b.GitHubLogin })}</p>
         <LinkButton href={data.GitHubLogin} variant="primary" leadingVisual={MarkGithubIcon}>
-          用 GitHub 登录
+          {t('accountPage.loginButton')}
         </LinkButton>
       </>
     )
   }
   if (step === 2 && b) {
     return (
-      <p className={css.p}>
-        当前登录的 {session.Login} 不是绑定的账号。后面的步骤需要 {b.GitHubLogin} 本人用 GitHub 登录后完成。
-      </p>
+      <p className={css.p}>{t('accountPage.notBoundUser', { current: session.Login, login: b.GitHubLogin })}</p>
     )
   }
-  return <p className={css.muted}>绑定后，用绑定的账号通过 GitHub 登录一次。</p>
+  return <p className={css.muted}>{t('accountPage.loginAfterBind')}</p>
 }
 
 function TokenStep({ data, b }: { data: Data; b: Binding | null }) {
+  const t = useT()
   if (data.Step === 4) {
     return (
       <>
-        <p className={css.p}>已关闭：Dashboard 只能用 GitHub 登录。admin token 仍然可以用于 CLI。</p>
+        <p className={css.p}>{t('accountPage.tokenOff')}</p>
         <p className={css.hint}>
-          GitHub 登录出问题时，在能访问 Server 的机器上执行 <code>kiln admin token-login on</code> 恢复。
+          <Trans id="accountPage.tokenRecover" tags={settingsTags} />
         </p>
         <Form action="/settings/account/token-login" className={css.gapTop}>
           <input type="hidden" name="enabled" value="1" />
-          <SubmitButton size="small">重新开启 admin token 登录</SubmitButton>
+          <SubmitButton size="small">{t('accountPage.tokenReenable')}</SubmitButton>
         </Form>
       </>
     )
@@ -174,71 +175,69 @@ function TokenStep({ data, b }: { data: Data; b: Binding | null }) {
   if (data.Step === 3) {
     return (
       <>
-        <p className={css.p}>关闭后，登录页不再提供 admin token 入口，已经用 admin token 登录的会话随即失效。CLI 仍用 admin token，不受影响。</p>
+        <p className={css.p}>{t('accountPage.tokenOffIntro')}</p>
         <Form action="/settings/account/token-login">
           <input type="hidden" name="enabled" value="0" />
-          <SubmitButton variant="primary">关闭 admin token 登录</SubmitButton>
+          <SubmitButton variant="primary">{t('accountPage.tokenDisable')}</SubmitButton>
         </Form>
         <p className={css.hint}>
-          之后需要恢复时执行 <code>kiln admin token-login on</code>。
+          <Trans id="accountPage.tokenRecoverLater" tags={settingsTags} />
         </p>
       </>
     )
   }
   return (
     <p className={css.muted}>
-      {b && !b.TokenLogin ? 'admin token 登录已经关闭。' : '先完成前两步：只有用绑定的账号通过 GitHub 登录后才能关闭，避免把自己锁在外面。'}
+      {b && !b.TokenLogin ? t('accountPage.tokenAlreadyOff') : t('accountPage.tokenFirst')}
     </p>
   )
 }
 
 function Account({ data, env }: PageProps<Data>) {
+  const t = useT()
   const b = data.Binding
   const step = data.Step
   const session = env.Session
   return (
     <SettingsLayout section={data.Section}>
-      <Subhead description="Kiln 的管理员就是你的 GitHub 账号。绑定后用 GitHub 登录即为管理员，CLI 的操作也记在这个账号名下；确认 GitHub 登录可用后，可以关闭 admin token 登录。">
-        登录与身份
-      </Subhead>
+      <Subhead description={t('accountPage.description')}>{t('settingsNav.account')}</Subhead>
       {session && <Who session={session} />}
       <Subhead level={2} spaced>
-        三步完成
+        {t('accountPage.threeSteps')}
       </Subhead>
-      <Box as="ul" className={css.steps} aria-label="绑定 GitHub 账号的三个步骤">
-        <Step n={1} step={step} done={step > 1} title="绑定你的 GitHub 账号">
+      <Box as="ul" className={css.steps} aria-label={t('accountPage.stepsLabel')}>
+        <Step n={1} step={step} done={step > 1} title={t('accountPage.step1')}>
           <BindStep data={data} b={b} />
         </Step>
-        <Step n={2} step={step} done={step > 2} title="用 GitHub 登录">
+        <Step n={2} step={step} done={step > 2} title={t('accountPage.step2')}>
           {session && <LoginStep data={data} b={b} session={session} />}
         </Step>
-        <Step n={3} step={step} done={step === 4} title="关闭 admin token 登录">
+        <Step n={3} step={step} done={step === 4} title={t('accountPage.step3')}>
           <TokenStep data={data} b={b} />
         </Step>
       </Box>
       {b && (
         <>
           <Subhead level={2} spaced danger>
-            危险操作
+            {t('settingsCommon.dangerZone')}
           </Subhead>
           <Box danger>
             <BoxRow className={css.danger}>
               <div>
-                <h3 className={css.stepTitle}>解除绑定</h3>
+                <h3 className={css.stepTitle}>{t('accountPage.unbindTitle')}</h3>
                 <p className={css.muted}>
-                  {b.GitHubLogin} 不再因为绑定而是管理员（在 KILN_ADMINS / KILN_USERS 中时按名单）；admin token 登录随即恢复。CLI 之后的操作记为{' '}
-                  <code>admin</code>。
+                  <Trans id="accountPage.unbindText" params={{ login: b.GitHubLogin }} tags={settingsTags} />
                 </p>
               </div>
               <ConfirmForm
                 action="/settings/account/unbind"
                 fields={{ confirm: '1' }}
-                button="解除绑定"
-                title={`解除 ${b.GitHubLogin} 的绑定？`}
-                confirmLabel="解除绑定"
+                button={t('accountPage.unbindButton')}
+                title={t('accountPage.unbindConfirmTitle', { login: b.GitHubLogin })}
+                confirmLabel={t('accountPage.unbindButton')}
               >
                 <p className={css.p0}>
-                  我确认解除 {b.GitHubLogin} 的绑定。admin token 登录随即恢复，CLI 之后的操作记为 <code>admin</code>。
+                  <Trans id="accountPage.unbindConfirm" params={{ login: b.GitHubLogin }} tags={settingsTags} />
                 </p>
               </ConfirmForm>
             </BoxRow>

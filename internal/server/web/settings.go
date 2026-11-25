@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -198,7 +197,7 @@ func (d *Dashboard) pageSettings(w http.ResponseWriter, r *http.Request, _ *sess
 		}
 		p.Npm = append(p.Npm, n)
 	}
-	d.render(w, r, "settings", "设置 · 连接与发布凭据", p)
+	d.renderPage(w, r, "settings", message(msgSetTitleConn), p, http.StatusOK)
 }
 
 // repoSearch 是一页仓库搜索结果（服务端搜索、分页），仓库分区和"启动构建"的仓库选择器共用。
@@ -300,7 +299,7 @@ func (d *Dashboard) pageRepos(w http.ResponseWriter, r *http.Request, _ *session
 		d.serverError(w, r, err)
 		return
 	}
-	d.render(w, r, "settings_repos", "设置 · 仓库", p)
+	d.renderPage(w, r, "settings_repos", message(msgSetTitleRepos), p, http.StatusOK)
 }
 
 // scopeCount 是"变量与密钥"分区中的一个作用域及其中的变量数和 secret 数。
@@ -368,7 +367,7 @@ func (d *Dashboard) pageVarsIndex(w http.ResponseWriter, r *http.Request, _ *ses
 		}
 		p.Envs = append(p.Envs, scopeCount{Name: owner + " / " + e.Name, URL: e.URL, Docker: e.Docker})
 	}
-	d.render(w, r, "settings_vars", "设置 · 变量与密钥", p)
+	d.renderPage(w, r, "settings_vars", message(msgSetTitleVars), p, http.StatusOK)
 }
 
 // envsPage 是环境分区的数据。
@@ -383,7 +382,7 @@ func (d *Dashboard) pageEnvs(w http.ResponseWriter, r *http.Request, _ *session)
 		d.serverError(w, r, err)
 		return
 	}
-	d.render(w, r, "settings_envs", "设置 · 环境", &envsPage{Section: sectionEnvs, Envs: envViews(envs)})
+	d.renderPage(w, r, "settings_envs", message(msgSetTitleEnvs), &envsPage{Section: sectionEnvs, Envs: envViews(envs)}, http.StatusOK)
 }
 
 // envNewPage 是新建 environment 页的数据。
@@ -415,7 +414,7 @@ func (d *Dashboard) renderEnvNew(w http.ResponseWriter, r *http.Request, repo st
 		return
 	}
 	p := &envNewPage{Section: sectionEnvs, Accounts: accounts, Repo: repo, Form: f}
-	d.renderStatus(w, r, "settings_env_new", "设置 · 新建 environment", p, status)
+	d.renderPage(w, r, "settings_env_new", message(msgSetTitleEnvNew), p, status)
 }
 
 // opsPage 是运维分区的数据。
@@ -431,10 +430,10 @@ func (d *Dashboard) pageOps(w http.ResponseWriter, r *http.Request, _ *session) 
 		d.serverError(w, r, err)
 		return
 	}
-	d.render(w, r, "settings_ops", "设置 · 运维", &opsPage{
+	d.renderPage(w, r, "settings_ops", message(msgSetTitleOps), &opsPage{
 		Section: sectionOps,
 		App:     d.appSlug(), PublicURL: d.cfg.PublicURL, Version: buildinfo.Version(), Outbox: outbox,
-	})
+	}, http.StatusOK)
 }
 
 // envFormValues 把 environment 的配置填进表单（编辑页的初始值）。
@@ -451,7 +450,7 @@ func readEnvForm(r *http.Request, f *formState) *apiv1.Environment {
 	publish := splitList(f.Values["allowed_publish_repos"])
 	for _, p := range publish {
 		if !admin.ValidRepoFullName(p) {
-			f.fail("allowed_publish_repos", "每个仓库都应写成 owner/name："+p)
+			f.failText("allowed_publish_repos", message(msgSetErrPublishRepo, strArg(argRepo, p)))
 		}
 	}
 	return &apiv1.Environment{
@@ -474,14 +473,14 @@ func (d *Dashboard) postEnvironment(w http.ResponseWriter, r *http.Request, se *
 	e.Name, e.Account, e.Repo = sc.Environment, sc.Account, sc.Repo
 	if !f.Failed() {
 		if err := d.admin.UpsertEnvironment(ctx, e, se.Login); err != nil {
-			f.fail(formGeneral, "保存 environment 失败："+d.failure(r, err))
+			f.failText(formGeneral, d.settingsFormFailure(r, err, msgEnvSaveFailed))
 		}
 	}
 	if f.Failed() {
 		d.renderScope(w, r, &scopeArgs{Account: sc.Account, Repo: sc.Repo, Env: sc.Environment, EnvForm: f}, http.StatusUnprocessableEntity)
 		return
 	}
-	d.flashBack(w, r, scopeBack(sc), "已保存 environment "+sc.Environment+" 的保护规则")
+	d.flashMsg(w, r, scopeBack(sc), message(msgEnvSaved, strArg(argName, sc.Environment)))
 }
 
 func (d *Dashboard) createEnvironment(w http.ResponseWriter, r *http.Request, se *session) {
@@ -497,11 +496,11 @@ func (d *Dashboard) createEnvironment(w http.ResponseWriter, r *http.Request, se
 	case "repo":
 		sc.Repo = target
 	default:
-		f.fail("scope", "请选择 environment 的作用域")
+		f.failText("scope", message(msgEnvErrScope))
 	}
 	sc.Environment = f.Values["name"]
 	if sc.Environment == "" {
-		f.fail("name", "请填写 environment 名称")
+		f.failText("name", message(msgEnvErrName))
 	}
 	e := readEnvForm(r, f)
 	e.Name, e.Account, e.Repo = sc.Environment, sc.Account, sc.Repo
@@ -509,29 +508,29 @@ func (d *Dashboard) createEnvironment(w http.ResponseWriter, r *http.Request, se
 		_, err := store.ResolveScope(ctx, d.db, sc.Account, sc.Repo, sc.Environment)
 		switch {
 		case err == nil:
-			f.fail("name", fmt.Sprintf("environment %s 已存在于这个作用域，请在它的配置页修改", sc.Environment))
+			f.failText("name", message(msgEnvErrExists, strArg(argName, sc.Environment)))
 		case errors.Is(err, store.ErrEnvironmentNotFound):
 			// 账号或仓库存在、environment 还没有：创建
 			if err := d.admin.UpsertEnvironment(ctx, e, se.Login); err != nil {
-				f.fail(formGeneral, "创建 environment 失败："+d.failure(r, err))
+				f.failText(formGeneral, d.settingsFormFailure(r, err, msgEnvCreateFailed))
 			}
 		default:
 			// 账号或仓库无效（ResolveScope 的说明可以直接显示，与 UpsertEnvironment 报告的相同）
-			f.fail(formGeneral, "创建 environment 失败："+d.failure(r, err))
+			f.failText(formGeneral, d.settingsFormFailure(r, err, msgEnvCreateFailed))
 		}
 	}
 	if f.Failed() {
 		d.renderEnvNew(w, r, sc.Repo, f, http.StatusUnprocessableEntity)
 		return
 	}
-	d.flashBack(w, r, scopeBack(&sc), "已创建 environment "+sc.Environment)
+	d.flashMsg(w, r, scopeBack(&sc), message(msgEnvCreated, strArg(argName, sc.Environment)))
 }
 
 func (d *Dashboard) postEnvironmentDelete(w http.ResponseWriter, r *http.Request, se *session) {
 	sc := formScope(r)
 	if err := d.admin.DeleteEnvironment(r.Context(), sc, se.Login); err != nil {
-		d.flashBack(w, r, scopeBack(sc), "删除 environment 失败："+d.failure(r, err))
+		d.flashMsg(w, r, scopeBack(sc), d.settingsFailureFlash(r, err, msgEnvDeleteFailed, msgEnvDeleteFailedRef, strArg(argName, sc.Environment)))
 		return
 	}
-	d.flashBack(w, r, "/settings/environments", fmt.Sprintf("已删除 environment %s 及其中的变量和 secret", sc.Environment))
+	d.flashMsg(w, r, "/settings/environments", message(msgEnvDeleted, strArg(argName, sc.Environment)))
 }
