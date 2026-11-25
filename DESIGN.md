@@ -190,6 +190,11 @@ components:
 - **≤767px**：设置侧栏收进 ActionMenu；运行行的 ref 和时间、Runner 行的操作移到内容下方；表格改为每行一块，列名取自 `data-label`。
 - **≤543px**：运行筛选两列；设置页键值上下排列。
 
+两种语言都按上面的断点排版，英文文案通常更长，排版不能靠文字的长度：
+- 标题（PageHeader、RunHeader、Subhead）可以在任意位置折行（`overflow-wrap: anywhere`），Crumbs 的分隔符前后可以换行，长的仓库名、作用域名、英文位置不会撑出页面。
+- 页头（PageHeader、RunHeader、Subhead）的操作区 `flex-wrap`，放不下时换到下一行；BoxRow 中上下排列的段落、列表和表格用 `display: block`，不挤在一行。
+- 表格比内容区宽时（设置页侧栏旁的列表、较长的英文日期和状态）在 Box 内横向滚动（`role="region"`，可键盘聚焦），不撑出页面；≤767px 时改为每行一块。
+
 ### Named Rules
 **The Sidebar-Becomes-Menu Rule.** 窄屏侧栏不堆到正文上方，而是收进整宽 ActionMenu 按钮，标题留在第一屏。
 
@@ -239,7 +244,7 @@ run / job / attempt 状态都用它，同 Actions、不自创：成功绿勾、�
 - **RefLabel**：Primer `BranchName` + 12px 分支 / tag / PR 图标，`title` 为完整 ref。
 
 ### Feedback
-- **Notice**（顶栏下通知条）：`info` 操作结果（重定向带的 `?flash=`，可关闭）、`warn` admin token 提醒和登录已过期、`error` 请求失败（可关闭）。
+- **Notice**（顶栏下通知条）：`info` 操作结果（重定向带的 `?flash=`，只能是服务端登记的消息，可关闭）、`warn` admin token 提醒和登录已过期、`error` 请求失败（可关闭）。
 - **Callout**：页内提示，Primer `Banner` compact，`info / warning / critical / success`，必有 `title`（可 `hideTitle`）。
 - **EmptyState**：Primer `Blankslate` 窄版：图标 + 标题（无句号）+ 一句说明 + 下一步；页头已有同一主要操作时不放按钮，"清空筛选"用次要链接；整页列表 medium，总览分区 small。Box 内某一小节为空只用一行灰字 BoxRow。
 - **表单错误**：顶部 critical Callout"没有保存。"，字段下 Validation，焦点移到第一个出错字段，已填的值由服务端回填。
@@ -264,7 +269,7 @@ run / job / attempt 状态都用它，同 Actions、不自创：成功绿勾、�
 - `prefers-reduced-motion: reduce`：动画和过渡压到 0.01ms、只播一次；状态仍靠图标形状和颜色表达。
 
 ### Copy
-- 界面支持简体中文（`zh-CN`，默认）和英文（`en`）：按用户手动选择、浏览器语言、`zh-CN` 的顺序决定，头像菜单和未登录页面右上角可以切换，切换立即生效、不重新加载页面。所有给人看的文字（含 `aria-label`、`title`、`placeholder`、表格的 `data-label`、确认对话框）都从词典取，不在组件中写死；服务端给消息键和原始参数，不拼文案。词典、写法和迁移步骤见 [docs/I18N.md](docs/I18N.md)。
+- 界面支持简体中文（`zh-CN`，默认）和英文（`en`）：按用户手动选择、浏览器语言、`zh-CN` 的顺序决定，头像菜单和未登录页面右上角可以切换，切换立即生效、不重新加载页面。所有给人看的文字（含 `aria-label`、`title`、`placeholder`、表格的 `data-label`、确认对话框）都从词典取，不在组件中写死；服务端给消息键和原始参数，不拼文案；`make lint` 中的 ESLint 规则 `kiln/no-hardcoded-ui-text` 拦截写死的中文和英文界面文字。词典、写法和检查见 [docs/I18N.md](docs/I18N.md)。
 - 中文文案：Actions 术语保留英文（run、job、workflow、Runner、environment、secret、tag、pool、executor），Re-run 译"重跑"；中文与英文 / 数字间留空格（"6 个 job"）。英文文案用 GitHub 的说法（"Re-run"、"In progress"、"Queued"），句首大写，按钮用动词开头。
 - 原始内容不翻译：日志、仓库名、分支 / tag / commit 标题、job 名、产物名、AI 报告和外部文档正文。
 - 相对时间（"13 分钟前" / "13 minutes ago"，悬停显示具体时间），耗时"3 分 30 秒" / "3m 30s"；日期时间按浏览器的时区和语言格式化；长版本号和 SHA 缩短，完整值放 `title` 或复制按钮。

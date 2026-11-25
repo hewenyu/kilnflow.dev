@@ -18,7 +18,7 @@ import (
 //   - 服务端不按语言拼文案，只给出消息（msgID 加参数），前端按当前语言从词典（web/src/i18n/locales/*.json）取文案，
 //     切换语言时立即更新；时间、数量等参数传原始值（Unix 秒、数字），由前端按语言格式化。
 //   - 仓库名、登录名、对象名等原始内容作为参数或原样显示的文字（rawText）传递，不当作消息键。
-//   - 还没有迁移的页面照常传字符串：uiText 的原样文字编码为 JSON 字符串，与原来的页面数据相同。
+//   - 原样显示的文字编码为 JSON 字符串，消息编码为 {id, params}；前端按类型区分。
 // 消息键和参数必须在 messages 中登记：契约测试（text_test.go）检查每条消息在两种语言的词典中都有、参数名和格式一致；
 // 跳转后的提示（?flash=）只接受登记为 flash 的消息和参数。
 
@@ -1306,7 +1306,7 @@ func message(id msgID, args ...msgArg) uiText {
 	return t
 }
 
-// rawText 返回原样显示的文字（对象名、原始的说明，以及还没有迁移成消息的文案）。
+// rawText 返回原样显示的文字（对象名、标识符、错误原文、升级前记下的说明等，不随语言变化）。
 func rawText(s string) uiText { return uiText{raw: s} }
 
 // IsZero 表示没有文字。
@@ -1345,8 +1345,6 @@ const (
 	maxFlashBytes = 1024
 	// maxFlashArgRunes 是 flash 中一个文字参数的最大字符数。
 	maxFlashArgRunes = 200
-	// maxLegacyFlashBytes 是还没有迁移的整句提示的最大长度（字节，截断显示）。
-	maxLegacyFlashBytes = 600
 )
 
 // errFlash 表示地址中的提示不合格（不认识的消息、多余或缺少的参数、类型不对）。
@@ -1367,18 +1365,13 @@ func flashValue(t uiText) (string, error) {
 	return string(b), nil
 }
 
-// parseFlash 校验地址中的提示（?flash= 的值）并返回要显示的文字：
-//   - 消息（JSON）：只接受登记为 flash 的消息，参数名、类型、长度都要符合，否则不显示（返回零值）；
-//   - 其他是还没有迁移的整句提示：原样显示，过长时截断（迁移完成后不再产生）。
+// parseFlash 校验地址中的提示（?flash= 的值）并返回要显示的消息：只接受登记为 flash 的消息（JSON 对象），
+// 参数名、类型、长度都要符合；其他任何值（纯文字、不认识或不合格的消息）都不显示（返回零值）。
 //
-// 地址可以被任何人构造：提示只是纯文字，前端不把参数当作标签或 HTML。
+// 地址可以被任何人构造：不接受任意文字，提示只能是登记过的消息；参数只是纯文字，前端不把它当作标签或 HTML。
 func parseFlash(v string) uiText {
-	if v == "" || len(v) > maxFlashBytes || !utf8.ValidString(v) {
+	if v == "" || len(v) > maxFlashBytes || !utf8.ValidString(v) || !strings.HasPrefix(v, "{") {
 		return uiText{}
-	}
-	// 消息是 JSON 对象；其他的是旧的整句提示
-	if !strings.HasPrefix(v, "{") {
-		return rawText(shorten.Text(v, maxLegacyFlashBytes))
 	}
 	var m textJSON
 	dec := json.NewDecoder(strings.NewReader(v))

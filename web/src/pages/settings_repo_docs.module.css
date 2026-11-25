@@ -1,4 +1,9 @@
 /* 设置 · 仓库 · 外部文档（settings_repo_docs.tsx）。 */
+/* 放在 BoxRow（flex 行）上：其中的段落、列表、表格、代码块上下排列，不挤在一行 */
+.block {
+  display: block;
+}
+
 .block > * + * {
   margin-top: 8px;
 }

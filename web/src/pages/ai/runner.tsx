@@ -99,7 +99,7 @@ export function AIRunnerFacts({ runner: r }: { runner: AIRunner }) {
         {r.OrcaVersion && (
           <>
             {' '}
-            <span className="mono" title={r.OrcaRuntimeID ? `runtime ${r.OrcaRuntimeID}` : undefined}>
+            <span className="mono" title={r.OrcaRuntimeID ? t('aiRunner.orcaRuntime', { id: r.OrcaRuntimeID }) : undefined}>
               {shortVersion(r.OrcaVersion)}
             </span>
           </>

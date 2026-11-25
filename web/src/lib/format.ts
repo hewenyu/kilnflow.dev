@@ -3,7 +3,7 @@ import { defaultLocale, type Locale } from '../i18n/locale-id'
 import { isMsgKey, msg, translate, type MsgKey, type Params } from '../i18n/messages'
 
 // 时间、摘要、状态和事件的说明（从 Go 模板函数移植，规则与服务端一致）。
-// 需要文字的函数都显式接收语言 locale（React 组件经 useLocale 取得）；不传时为默认语言 zh-CN（还没有迁移的页面）。
+// 需要文字的函数都显式接收语言 locale（React 组件经 useLocale 取得）；不传时为默认语言 zh-CN。
 
 const tr = (locale: Locale, id: MsgKey, params?: Params) => translate(locale, msg(id, params))
 

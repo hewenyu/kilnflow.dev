@@ -56,62 +56,64 @@ function Ops({ data }: PageProps<Data>) {
         {t('ops.outbox')}
       </Subhead>
       <Box>
-        <table className={css.table} aria-labelledby="outbox-title">
-          <thead>
-            <tr>
-              <th scope="col">#</th>
-              <th scope="col">key</th>
-              <th scope="col">{t('ops.state')}</th>
-              <th scope="col">{t('ops.attempts')}</th>
-              <th scope="col">{t('ops.error')}</th>
-              <th scope="col">{t('ops.updated')}</th>
-              <th scope="col">
-                <span className="visually-hidden">{t('ops.actions')}</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.Outbox.length > 0 ? (
-              data.Outbox.map((o) => (
-                <tr key={o.ID}>
-                  <td data-label="#" className="num">
-                    {o.ID}
-                  </td>
-                  <td data-label="key" className={`${css.mono ?? ''} ${css.key ?? ''}`}>
-                    {o.DedupeKey}
-                  </td>
-                  <td data-label={t('ops.state')}>
-                    <Label variant={labelVariant(stateTone(o.State))} title={o.State}>
-                      {outboxState(o.State, locale)}
-                    </Label>
-                  </td>
-                  <td data-label={t('ops.attempts')} className="num">
-                    {o.Attempts}
-                  </td>
-                  <td data-label={t('ops.error')} className={css.err}>
-                    {o.LastError}
-                  </td>
-                  <td data-label={t('ops.updated')} className={css.nowrap}>
-                    <Ago t={o.UpdatedAt} />
-                  </td>
-                  <td>
-                    {o.State === 'dead' && (
-                      <Form action={`/outbox/${o.ID}/retry`} aria-label={t('ops.retryLabel', { id: o.ID })}>
-                        <SubmitButton size="small">{t('ops.retry')}</SubmitButton>
-                      </Form>
-                    )}
+        <div className={css.scroll} role="region" aria-labelledby="outbox-title" tabIndex={0}>
+          <table className={css.table} aria-labelledby="outbox-title">
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">{t('ops.key')}</th>
+                <th scope="col">{t('ops.state')}</th>
+                <th scope="col">{t('ops.attempts')}</th>
+                <th scope="col">{t('ops.error')}</th>
+                <th scope="col">{t('ops.updated')}</th>
+                <th scope="col">
+                  <span className="visually-hidden">{t('ops.actions')}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.Outbox.length > 0 ? (
+                data.Outbox.map((o) => (
+                  <tr key={o.ID}>
+                    <td data-label="#" className="num">
+                      {o.ID}
+                    </td>
+                    <td data-label={t('ops.key')} className={`${css.mono ?? ''} ${css.key ?? ''}`}>
+                      {o.DedupeKey}
+                    </td>
+                    <td data-label={t('ops.state')}>
+                      <Label variant={labelVariant(stateTone(o.State))} title={o.State}>
+                        {outboxState(o.State, locale)}
+                      </Label>
+                    </td>
+                    <td data-label={t('ops.attempts')} className="num">
+                      {o.Attempts}
+                    </td>
+                    <td data-label={t('ops.error')} className={css.err}>
+                      {o.LastError}
+                    </td>
+                    <td data-label={t('ops.updated')} className={css.nowrap}>
+                      <Ago t={o.UpdatedAt} />
+                    </td>
+                    <td>
+                      {o.State === 'dead' && (
+                        <Form action={`/outbox/${o.ID}/retry`} aria-label={t('ops.retryLabel', { id: o.ID })}>
+                          <SubmitButton size="small">{t('ops.retry')}</SubmitButton>
+                        </Form>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className={css.emptyCell}>
+                    {t('ops.allDelivered')}
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={7} className={css.emptyCell}>
-                  {t('ops.allDelivered')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Box>
     </SettingsLayout>
   )

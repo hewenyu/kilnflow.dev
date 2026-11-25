@@ -40,7 +40,9 @@
   color: var(--fgColor-accent);
 }
 
+/* inline-block：分隔符前后可以换行（英文的位置与链接之间没有空格，窄屏时整串不会撑出页面） */
 .crumbSep {
+  display: inline-block;
   margin: 0 6px;
   color: var(--fgColor-muted);
 }

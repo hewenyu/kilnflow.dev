@@ -149,7 +149,7 @@ function RepoPicker({ data, picker: s }: { data: Data; picker: Picker }) {
                   <span className={css.repoName}>{r.FullName}</span>
                   <span className={css.muted}>
                     {r.DefaultBranch && t('runNew.defaultBranch', { branch: r.DefaultBranch })}
-                    {r.Private ? 'private' : 'public'}
+                    {t(r.Private ? 'repoVisibility.private' : 'repoVisibility.public')}
                   </span>
                 </span>
                 <LinkButton

@@ -40,7 +40,7 @@ export type Params = Readonly<Record<string, ParamValue>>
 
 /**
  * Text 是要显示的一段文字：
- *   - string：原样显示的文字（服务端的对象名、原始错误说明，以及还没有迁移成消息的旧文案）；
+ *   - string：原样显示的文字（服务端的对象名、标识符、原始错误说明、升级前记下的说明等，不随语言变化）；
  *   - { id, params }：消息，显示时按当前语言从词典取文案。
  */
 export type Text = string | MessageRef

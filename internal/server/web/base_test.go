@@ -554,13 +554,13 @@ func TestLayoutShell(t *testing.T) {
 	// 导航高亮页面所属的一项；flash 提示来自地址中的 flash 参数
 	tok := sessionCookieFor(d, session{Login: admin.TokenActor, Via: viaToken, Exp: now.Add(time.Hour).Unix()})
 	for page, nav := range map[string]string{"runner_new": "runners", "job": "runs", "settings_scope": "settings", "overview": "overview"} {
-		r := httptest.NewRequest(http.MethodGet, "https://kiln.example.com/x?flash="+url.QueryEscape("已暂停接单"), nil)
+		r := httptest.NewRequest(http.MethodGet, "https://kiln.example.com/x?flash="+url.QueryEscape(`{"id":"account.unbound"}`), nil)
 		r.Header.Set(uiHeader, "1")
 		r.AddCookie(tok)
 		w := httptest.NewRecorder()
 		d.renderPage(w, r, page, rawText("标题"), struct{}{}, http.StatusOK)
 		pg := parsePage(t, w.Body.String())
-		if pg.Page != page || pg.Nav != nav || textZH(t, pg.Flash) != "已暂停接单" || textZH(t, pg.Title) != "标题" {
+		if pg.Page != page || pg.Nav != nav || textZH(t, pg.Flash) != "已解除绑定，admin token 登录已恢复。" || textZH(t, pg.Title) != "标题" {
 			t.Errorf("页面 %s：Page %q Nav %q Flash %q，导航应为 %q", page, pg.Page, pg.Nav, pg.Flash, nav)
 		}
 		if se := pg.Session; se == nil || !se.Admin || !se.ViaToken || se.Bound {
