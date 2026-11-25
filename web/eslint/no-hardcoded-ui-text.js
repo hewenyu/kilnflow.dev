@@ -3,7 +3,7 @@
 // 按语法树检查，不按正则扫文件：注释、类型、CSS 类名、路由路径、状态值的比较都不是检查对象，天然不会误报。检查的是：
 //   1. JSX 的文字（JSXText）：含中文，或含不在白名单中的英文单词；
 //   2. 用户可见和读屏软件读出的属性（TEXT_ATTRS）的字符串或模板字面量；
-//   3. JSX 子节点中的表达式（{'…'}、{`…`}、{ok ? '…' : '…'}、{x && '…'}、字符串拼接）里的字面量；
+//   3. JSX 子节点中的表达式（{'…'}、{`…`}、{ok ? '…' : '…'}、{x && '…'}、字符串拼接、模板字面量的 ${…}）里的字面量；
 //   4. 其余位置（普通变量、对象、比较）含中文的字符串和模板字面量：中文只能在词典中，
 //      也不能用译文做判断（.includes('失败')）。例外是 Error 的说明（编程错误，开发者看，不显示在界面上）。
 //
@@ -29,12 +29,17 @@ const TEXT_ATTRS = new Set([
   'label',
   'caption',
   'description',
+  'subtitle',
   'heading',
   'button',
   'confirmLabel',
   'cancelLabel',
   'confirmTitle',
   'confirmBody',
+  'confirmButtonContent',
+  'cancelButtonContent',
+  'integrityHint',
+  'fallback',
   'emptyText',
   'empty',
   'note',
@@ -141,7 +146,10 @@ function templateText(node) {
   return node.quasis.map((q) => q.value.cooked ?? q.value.raw).join('0')
 }
 
-/** literalLeaves 返回表达式中会作为文字显示的字面量（条件表达式的两个分支、&& || ?? 的两边、字符串拼接）；比较等其余运算不算。 */
+/**
+ * literalLeaves 返回表达式中会作为文字显示的字面量（条件表达式的两个分支、&& || ?? 的两边、字符串拼接、模板字面量本身和 ${…} 中的这些字面量）；
+ * 比较、函数调用等其余运算不算。
+ */
 function literalLeaves(node, out = []) {
   switch (node.type) {
     case 'Literal':
@@ -149,6 +157,7 @@ function literalLeaves(node, out = []) {
       break
     case 'TemplateLiteral':
       out.push(node)
+      for (const expr of node.expressions) literalLeaves(expr, out)
       break
     case 'ConditionalExpression':
       literalLeaves(node.consequent, out)

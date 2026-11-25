@@ -106,6 +106,16 @@ describe('kiln/no-hardcoded-ui-text 报错', () => {
     ['&& 的右边', "const A = ({ ok }: { ok: boolean }) => <p>{ok && 'Saved'}</p>", [['expression', 'Saved']]],
     ['?? 的默认值', "const A = ({ s }: { s?: string }) => <p>{s ?? 'unknown'}</p>", [['expression', 'unknown']]],
     ['字符串拼接', "const A = ({ s }: { s: string }) => <p>{'Hello ' + s}</p>", [['expression', 'Hello']]],
+    ['模板插值中三元表达式的英文分支', "const A = ({ ok }: { ok: boolean }) => <p>{` · ${ok ? 'Active' : 'Idle'}`}</p>", [['expression', 'Active'], ['expression', 'Idle']]],
+    ['模板插值中三元表达式的中文分支', "const A = ({ ok }: { ok: boolean }) => <p>{` · ${ok ? '启用' : '停用'}`}</p>", [['expression', '启用'], ['expression', '停用']]],
+    ['模板插值中 && 的右边', "const A = ({ a }: { a: boolean }) => <p>{`${a && 'Done'}`}</p>", [['expression', 'Done']]],
+    ['模板插值中嵌套的模板字面量', "const A = ({ n }: { n: number }) => <p>{`#${n} ${n > 1 ? `${n} 次` : 'once'}`}</p>", [['expression', '0 次'], ['expression', 'once']]],
+    ['属性的模板插值中的英文', "const A = ({ ok }: { ok: boolean }) => <span title={`${ok ? 'Active' : t('x.idle')}`} />", [['attribute', 'Active']]],
+    ['属性的模板插值中的中文', "const A = ({ ok }: { ok: boolean }) => <span aria-label={`${ok ? '启用' : t('x.idle')}`} />", [['attribute', '启用']]],
+    ['Dialog 的 subtitle', 'const A = () => <Dialog title={t("x.t")} subtitle="Latest revision" />', [['attribute', 'Latest revision']]],
+    ['Ago 的 fallback', 'const A = ({ at }: { at: number }) => <Ago t={at} fallback="从未" />', [['attribute', '从未']]],
+    ['DesignBasis 的 integrityHint', 'const A = () => <DesignBasis integrityHint="Snapshot was frozen" />', [['attribute', 'Snapshot was frozen']]],
+    ['ConfirmationDialog 的按钮文字', 'const A = () => <ConfirmationDialog confirmButtonContent="Remove" cancelButtonContent="取消" />', [['attribute', 'Remove'], ['attribute', '取消']]],
     ['代码元素中的中文', 'const A = () => <code>名称</code>', [['jsxText', '名称']]],
     ['变量中的中文', "const label = '已过期'", [['cjkLiteral', '已过期']]],
     ['用译文做判断', "const bad = (s: string) => s.includes('失败')", [['cjkLiteral', '失败']]],
@@ -131,6 +141,10 @@ describe('kiln/no-hardcoded-ui-text 不误报', () => {
     ['编程错误的说明', "function f() { throw new Error('useRouter 必须在 RouterProvider 内使用') }\nconst e = new TypeError(`参数 ${1} 不对`)"],
     ['类型中的英文', "type Kind = 'Delete item' | 'Loading'\nconst k: Kind = 'Loading'"],
     ['&& 左边的条件', "const A = ({ s }: { s: string }) => <p>{s === 'failed' && t('x.failed')}</p>"],
+    ['模板插值中的白名单、技术标识和词典', "const A = ({ ok, id }: { ok: boolean; id: number }) => <p title={`${ok ? 'Runner' : 'v1'} ${t('x.n', { id })}`}>{` · ${ok ? 'GitHub' : 'ci.yml'}`}{`${ok && t('x.done')} #${id}`}{`${ok ? t('x.a') : t('x.b')}`}</p>"],
+    ['模板插值中比较的状态值', "const A = ({ s }: { s: string }) => <p>{`${s === 'failed' ? t('x.f') : t('x.ok')}`}</p>"],
+    ['符号 fallback 和非文案属性的模板插值', "const A = ({ at, ok }: { at: number; ok: boolean }) => <><Ago t={at} fallback=\"—\" /><a className={`row ${ok ? 'active' : 'idle'}`} /></>"],
+    ['新增文案属性中的词典', "const A = () => <><Dialog subtitle={t('x.s')} /><Ago fallback={t('x.never')} /><DesignBasis integrityHint={t('x.h')} /><ConfirmationDialog confirmButtonContent={t('x.ok')} cancelButtonContent={t('x.cancel')} /></>"],
   ])('%s', (_name, code) => {
     expect(lint(code)).toEqual([])
   })

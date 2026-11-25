@@ -18,7 +18,7 @@ import (
 //   - 服务端不按语言拼文案，只给出消息（msgID 加参数），前端按当前语言从词典（web/src/i18n/locales/*.json）取文案，
 //     切换语言时立即更新；时间、数量等参数传原始值（Unix 秒、数字），由前端按语言格式化。
 //   - 仓库名、登录名、对象名等原始内容作为参数或原样显示的文字（rawText）传递，不当作消息键。
-//   - 还没有迁移的页面照常传字符串：uiText 的原样文字编码为 JSON 字符串，与原来的页面数据相同。
+//   - 原样显示的文字编码为 JSON 字符串，消息编码为 {id, params}；前端按类型区分。
 // 消息键和参数必须在 messages 中登记：契约测试（text_test.go）检查每条消息在两种语言的词典中都有、参数名和格式一致；
 // 跳转后的提示（?flash=）只接受登记为 flash 的消息和参数。
 
@@ -1306,7 +1306,7 @@ func message(id msgID, args ...msgArg) uiText {
 	return t
 }
 
-// rawText 返回原样显示的文字（对象名、原始的说明，以及还没有迁移成消息的文案）。
+// rawText 返回原样显示的文字（对象名、标识符、错误原文、升级前记下的说明等，不随语言变化）。
 func rawText(s string) uiText { return uiText{raw: s} }
 
 // IsZero 表示没有文字。
