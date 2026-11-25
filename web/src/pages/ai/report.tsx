@@ -2,14 +2,15 @@ import { Label } from '@primer/react'
 import { z } from 'zod'
 import { Box, BoxHeader, BoxRow } from '../../components/Box'
 import { Ago } from '../../components/Time'
+import { Trans, useLocale, useT } from '../../i18n/locale'
 import { resolution } from '../../lib/aidev'
 import { list } from '../../lib/envelope'
-import { short } from '../../lib/format'
-import { lookup } from '../../lib/lookup'
+import { enumLabel, short } from '../../lib/format'
 import css from '../ai_dev_item.module.css'
 
 // AI 开发报告（PLAN #26.15）：选题报告和交付报告的数据格式与展示。工作项详情页和 AI 任务详情页共用，
-// 放在 pages/ai/ 下，避免 ai/ 反过来依赖 ai_dev_item.tsx。
+// 放在 pages/ai/ 下，避免 ai/ 反过来依赖 ai_dev_item.tsx。界面文字按语言显示；报告中 Agent 写的内容（计划、理由、摘要、
+// 验收项、命令、决定等）是原文，原样显示，不翻译。
 
 /** 选题报告（devreport.Selection，字段名与报告 JSON 相同）。 */
 export const selectionSchema = z.object({
@@ -92,26 +93,34 @@ export const reportSchema = z.object({
 })
 type Report = z.infer<typeof reportSchema>
 
-/** unknownText 是适用范围拿不到时显示的文字。 */
-export const unknownText = '未知'
-
 /** AgentSays 标明 Agent 自己写的内容（没有经过 Kiln 核实）。 */
 export function AgentSays() {
+  const t = useT()
   return (
-    <Label variant="attention" title="这部分内容由 Agent 写在报告中，Kiln 没有核实">
-      Agent 自报
+    <Label variant="attention" title={t('devReport.agentSaysTitle')}>
+      {t('devReport.agentSays')}
     </Label>
   )
 }
 
 /** Scope 显示报告的适用范围：Runner / Agent 版本和模型，拿不到的显示"未知"。 */
 function Scope({ r }: { r: Report }) {
+  const t = useT()
+  const unknown = t('devReport.unknown')
   return (
     <p className={css.meta}>
-      Runner {r.RunnerVersion || unknownText} · Agent 版本 {r.AgentVersion || unknownText} · 模型 {r.Model || unknownText} ·{' '}
-      <a href={r.TaskURL}>AI 任务 #{r.TaskID}</a> · <Ago t={r.Created} />
+      <Trans
+        id="devReport.scope"
+        params={{ runner: r.RunnerVersion || unknown, agent: r.AgentVersion || unknown, model: r.Model || unknown, task: r.TaskID }}
+        tags={{ link: (c) => <a href={r.TaskURL}>{c}</a>, ago: () => <Ago t={r.Created} /> }}
+      />
     </p>
   )
+}
+
+/** issueRefs 返回 Issue 编号的列表，例如"#1、#2"。 */
+function issueRefs(ns: readonly number[], sep: string): string {
+  return ns.map((n) => `#${n}`).join(sep)
 }
 
 /** Text 显示 Agent 写的一段文字（保留换行）；为空时不显示。 */
@@ -126,27 +135,30 @@ function Text({ k, v }: { k: string; v: string }) {
 }
 
 function SelectionBody({ s }: { s: Selection }) {
+  const t = useT()
+  const sep = t('list.enum')
+  const colon = t('list.colon')
   return (
     <>
-      <p className={css.p}>选中：{s.selected.length > 0 ? s.selected.map((n) => `#${n}`).join('、') : '没有选'}</p>
+      <p className={css.p}>{t('devReport.selected', { list: s.selected.length > 0 ? issueRefs(s.selected, sep) : t('devReport.selectedNone') })}</p>
       {s.design_first != null && (
-        <p className={css.p}>方式：{s.design_first ? '先交付设计 PR，合并后再实现' : '一个 PR 完成（先设计再开发）'}</p>
+        <p className={css.p}>{t('devReport.mode', { mode: t(s.design_first ? 'devReport.modeDesignFirst' : 'workItemMode.onePR') })}</p>
       )}
-      {s.design_reason && <Text k="方式的理由" v={s.design_reason} />}
-      <Text k="合批理由" v={s.batch_reason} />
-      <Text k="计划" v={s.plan} />
+      {s.design_reason && <Text k={t('devReport.modeReason')} v={s.design_reason} />}
+      <Text k={t('devReport.batchReason')} v={s.batch_reason} />
+      <Text k={t('devReport.plan')} v={s.plan} />
       {s.skipped.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>没有选的 Issue</h4>
+          <h4 className={css.h}>{t('devReport.skipped')}</h4>
           <ul className={css.list}>
             {s.skipped.map((sk) => (
               <li key={sk.number}>
-                #{sk.number}：{sk.reason}
-                {sk.later && <span className={css.muted}>（留到之后的选题）</span>}
-                {sk.wait_for && sk.wait_for.length > 0 && (
-                  <span className={css.muted}>（等 {sk.wait_for.map((n) => `#${n}`).join('、')} 关闭后再选）</span>
-                )}
-                {sk.reconsider && <span className={css.muted}>（什么情况下再考虑：{sk.reconsider}）</span>}
+                #{sk.number}
+                {colon}
+                {sk.reason}
+                {sk.later && <span className={css.muted}>{t('devReport.later')}</span>}
+                {sk.wait_for && sk.wait_for.length > 0 && <span className={css.muted}>{t('devReport.waitFor', { list: issueRefs(sk.wait_for, sep) })}</span>}
+                {sk.reconsider && <span className={css.muted}>{t('devReport.reconsider', { text: sk.reconsider })}</span>}
               </li>
             ))}
           </ul>
@@ -156,32 +168,35 @@ function SelectionBody({ s }: { s: Selection }) {
   )
 }
 
-const deliveryStatus: Record<string, string> = { delivered: '已交付', no_change: '不需要改代码', blocked: '受阻' }
-const outcomes: Record<string, string> = { passed: '通过', failed: '失败', not_run: '没有运行' }
-const actions: Record<string, string> = { fixed: '已修复', rejected: '不采纳', duplicate: '重复', unable: '无法处理' }
-
 function DeliveryBody({ d }: { d: Delivery }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const colon = t('list.colon')
   const h = d.handoff
   return (
     <>
       <p className={css.p}>
-        结论：{lookup(deliveryStatus, d.status) ?? d.status}
-        {d.pr_title && ` · PR 标题：${d.pr_title}`}
+        {t('devReport.outcomeLine', { status: enumLabel(locale, 'devReport.status', d.status) })}
+        {d.pr_title && t('devReport.prTitle', { title: d.pr_title })}
       </p>
-      <Text k="摘要" v={d.summary} />
+      <Text k={t('devReport.summary')} v={d.summary} />
       {d.issues.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>Issue 完成情况</h4>
+          <h4 className={css.h}>{t('devReport.issues')}</h4>
           <ul className={css.list}>
             {d.issues.map((is) => (
               <li key={is.number}>
-                #{is.number}：{resolution(is.resolution)}
+                #{is.number}
+                {colon}
+                {resolution(is.resolution, locale)}
                 {is.acceptance.length > 0 && (
                   <ul className={css.list}>
                     {is.acceptance.map((a, i) => (
                       <li key={i}>
-                        {a.done ? '已完成' : '未完成'}：{a.item}
-                        {a.evidence && <span className={css.muted}>（依据：{a.evidence}）</span>}
+                        {t(a.done ? 'devReport.done' : 'devReport.notDone')}
+                        {colon}
+                        {a.item}
+                        {a.evidence && <span className={css.muted}>{t('devReport.evidence', { text: a.evidence })}</span>}
                       </li>
                     ))}
                   </ul>
@@ -194,12 +209,14 @@ function DeliveryBody({ d }: { d: Delivery }) {
       )}
       {d.verification.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>验证</h4>
+          <h4 className={css.h}>{t('devReport.verification')}</h4>
           <ul className={css.list}>
             {d.verification.map((v, i) => (
               <li key={i}>
-                <code>{v.command}</code>：{lookup(outcomes, v.outcome) ?? v.outcome}
-                {v.note && <span className={css.muted}>（{v.note}）</span>}
+                <code>{v.command}</code>
+                {colon}
+                {enumLabel(locale, 'devReport.outcome', v.outcome)}
+                {v.note && <span className={css.muted}>{t('devReport.paren', { text: v.note })}</span>}
               </li>
             ))}
           </ul>
@@ -207,18 +224,20 @@ function DeliveryBody({ d }: { d: Delivery }) {
       )}
       {d.dispositions.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>审计问题的处置</h4>
+          <h4 className={css.h}>{t('devReport.dispositions')}</h4>
           <ul className={css.list}>
             {d.dispositions.map((x) => (
               <li key={x.finding}>
-                <code>{x.finding}</code>：{lookup(actions, x.action) ?? x.action}
+                <code>{x.finding}</code>
+                {colon}
+                {enumLabel(locale, 'devReport.action', x.action)}
                 {x.commit && (
                   <>
                     {' '}
-                    （<code>{short(x.commit)}</code>）
+                    <Trans id="devReport.commit" params={{ sha: short(x.commit) }} tags={{ code: (c) => <code>{c}</code> }} />
                   </>
                 )}
-                {x.duplicate_of && `，与 ${x.duplicate_of} 重复`}
+                {x.duplicate_of && t('devReport.duplicateOf', { ref: x.duplicate_of })}
                 {x.reason && <span className={css.muted}> · {x.reason}</span>}
               </li>
             ))}
@@ -228,39 +247,36 @@ function DeliveryBody({ d }: { d: Delivery }) {
       {d.design && <DesignBody g={d.design} />}
       {d.design_deviations && d.design_deviations.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>与已合并设计的出入</h4>
+          <h4 className={css.h}>{t('devReport.deviations')}</h4>
           <ul className={css.list}>
             {d.design_deviations.map((x, i) => (
               <li key={i}>
                 {x.item}
-                {x.reason && <span className={css.muted}>（理由：{x.reason}）</span>}
+                {x.reason && <span className={css.muted}>{t('devReport.reason', { text: x.reason })}</span>}
               </li>
             ))}
           </ul>
         </div>
       )}
-      <Text k="已完成" v={h.done} />
-      <Text k="还剩什么" v={h.remaining} />
-      <Text k="做出的决定" v={h.decisions} />
-      <Text k="下一步" v={h.next} />
+      <Text k={t('devReport.handoffDone')} v={h.done} />
+      <Text k={t('devReport.handoffRemaining')} v={h.remaining} />
+      <Text k={t('devReport.handoffDecisions')} v={h.decisions} />
+      <Text k={t('devReport.handoffNext')} v={h.next} />
     </>
   )
 }
 
-/** 决定的类别（devreport.Decision.Category，与 PR 描述的说法相同）。 */
-const decisionCategories: Record<string, string> = {
-  confirmed_decision: '改已确认的决定（需要人确认）',
-  acceptance: '删减或改变验收项',
-  policy: '预算、范围等取舍',
-  other: '其他',
-}
+// 决定的类别（devreport.Decision.Category，与 PR 描述的说法相同）在词典 devReport.category.* 中。
 
 function DesignBody({ g }: { g: NonNullable<Delivery['design']> }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const colon = t('list.colon')
   return (
     <>
       {g.documents.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>设计文档</h4>
+          <h4 className={css.h}>{t('devReport.documents')}</h4>
           <ul className={css.list}>
             {g.documents.map((doc) => (
               <li key={doc}>
@@ -272,16 +288,18 @@ function DesignBody({ g }: { g: NonNullable<Delivery['design']> }) {
       )}
       {g.decisions.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>决策记录</h4>
+          <h4 className={css.h}>{t('devReport.decisions')}</h4>
           <ul className={css.list}>
             {g.decisions.map((x, i) => (
               <li key={i}>
-                {lookup(decisionCategories, x.category) ?? x.category}
-                {x.ref && `（${x.ref}）`}：{x.choice}
-                {x.context && <p className={css.pre}>依据：{x.context}</p>}
-                {x.options && <p className={css.pre}>考虑过的方案：{x.options}</p>}
-                {x.impact && <p className={css.pre}>影响：{x.impact}</p>}
-                {x.review && <p className={css.pre}>复盘时看：{x.review}</p>}
+                {enumLabel(locale, 'devReport.category', x.category)}
+                {x.ref && t('devReport.paren', { text: x.ref })}
+                {colon}
+                {x.choice}
+                {x.context && <p className={css.pre}>{t('devReport.context', { text: x.context })}</p>}
+                {x.options && <p className={css.pre}>{t('devReport.options', { text: x.options })}</p>}
+                {x.impact && <p className={css.pre}>{t('devReport.impact', { text: x.impact })}</p>}
+                {x.review && <p className={css.pre}>{t('devReport.review', { text: x.review })}</p>}
               </li>
             ))}
           </ul>
@@ -289,13 +307,13 @@ function DesignBody({ g }: { g: NonNullable<Delivery['design']> }) {
       )}
       {g.external_inputs.length > 0 && (
         <div className={css.field}>
-          <h4 className={css.h}>需要人提供的条件</h4>
+          <h4 className={css.h}>{t('devReport.externalInputs')}</h4>
           <ul className={css.list}>
             {g.external_inputs.map((x, i) => (
               <li key={i}>
                 {x.what}
-                {x.blocks && <span className={css.muted}>（阻塞：{x.blocks}）</span>}
-                {x.resume && <span className={css.muted}>（提供后：{x.resume}）</span>}
+                {x.blocks && <span className={css.muted}>{t('devReport.blocks', { text: x.blocks })}</span>}
+                {x.resume && <span className={css.muted}>{t('devReport.resume', { text: x.resume })}</span>}
               </li>
             ))}
           </ul>
@@ -305,9 +323,9 @@ function DesignBody({ g }: { g: NonNullable<Delivery['design']> }) {
   )
 }
 
-const reportTitles: Record<string, string> = { selection: '选题报告', delivery: '交付报告' }
-
 export function ReportBox({ r, n }: { r: Report; n: number }) {
+  const t = useT()
+  const { locale } = useLocale()
   const id = `ai-dev-report-${n}`
   return (
     <Box as="section" aria-labelledby={id}>
@@ -315,7 +333,7 @@ export function ReportBox({ r, n }: { r: Report; n: number }) {
         id={id}
         title={
           <>
-            {lookup(reportTitles, r.Kind) ?? r.Kind} <AgentSays />
+            {enumLabel(locale, 'devReport.kind', r.Kind)} <AgentSays />
           </>
         }
       />
@@ -325,7 +343,7 @@ export function ReportBox({ r, n }: { r: Report; n: number }) {
         {r.Delivery && <DeliveryBody d={r.Delivery} />}
         {r.Raw && (
           <>
-            <p className={css.p}>报告的格式无法识别，下面是原文。</p>
+            <p className={css.p}>{t('devReport.raw')}</p>
             <pre className={css.raw}>{r.Raw}</pre>
           </>
         )}

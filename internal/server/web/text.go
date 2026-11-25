@@ -257,6 +257,117 @@ const (
 	msgCacheNoteUnknown    msgID = "cacheNote.unknown"
 )
 
+// AI 审计请求与任务、AI 开发工作项、设计依据（外部文档）的消息。
+const (
+	msgAIRequestsTitle      msgID = "aiRequests.pageTitle"
+	msgAITypeReview         msgID = "aiType.review"
+	msgAITypeDevelop        msgID = "aiType.develop"
+	msgAIReqStateQueued     msgID = "aiRequestState.queued"
+	msgAIReqStateActive     msgID = "aiRequestState.active"
+	msgAIReqStateSucceeded  msgID = "aiRequestState.succeeded"
+	msgAIReqStateFailed     msgID = "aiRequestState.failed"
+	msgAIReqStateCancelled  msgID = "aiRequestState.cancelled"
+	msgAIReqStateSkipped    msgID = "aiRequestState.skipped"
+	msgAIRequestTitleReview msgID = "aiRequest.pageTitleReview"
+	msgAIRequestTitleDev    msgID = "aiRequest.pageTitleDevelop"
+	msgAIRequestCancelled   msgID = "aiRequest.cancelRequested"
+	msgAIRequestRerun       msgID = "aiRequest.rerunCreated"
+	msgAITaskTitleReview    msgID = "aiTask.pageTitleReview"
+	msgAITaskTitleDev       msgID = "aiTask.pageTitleDevelop"
+	msgAITaskNotFound       msgID = "aiTask.notFound"
+	msgAITaskRerunNotFound  msgID = "aiTask.rerunNotFound"
+	msgAITaskAttemptInvalid msgID = "aiTask.attemptInvalid"
+	msgAITaskAttemptMissing msgID = "aiTask.attemptMissing"
+	msgAITaskLogPurged      msgID = "aiTask.logPurged"
+	msgAITaskLogNoOutput    msgID = "aiTask.logNoOutput"
+	msgAITaskLogReused      msgID = "aiTask.logReused"
+	msgAITaskLogSkipped     msgID = "aiTask.logSkipped"
+	msgAITaskLogNotRun      msgID = "aiTask.logNotRun"
+
+	msgAIDevTitle          msgID = "aiDev.pageTitle"
+	msgAIDevTitleRepo      msgID = "aiDev.pageTitleRepo"
+	msgAIDevRepoNotFound   msgID = "aiDev.repoNotFound"
+	msgAIDevItemTitle      msgID = "aiDevItem.pageTitle"
+	msgAIDevItemNotFound   msgID = "aiDevItem.notFound"
+	msgAIDevSyncNoRepo     msgID = "aiDev.syncNoRepo"
+	msgAIDevSyncFailed     msgID = "aiDev.syncFailed"
+	msgAIDevSyncFailedRef  msgID = "aiDev.syncFailedRef"
+	msgAIDevSynced         msgID = "aiDev.synced"
+	msgAIDevSyncedPartial  msgID = "aiDev.syncedPartial"
+	msgAIDevPauseNoRepo    msgID = "aiDev.pauseNoRepo"
+	msgAIDevResumeNoRepo   msgID = "aiDev.resumeNoRepo"
+	msgAIDevPauseFailed    msgID = "aiDev.pauseFailed"
+	msgAIDevPauseFailedRef msgID = "aiDev.pauseFailedRef"
+	msgAIDevResumeFailed   msgID = "aiDev.resumeFailed"
+	msgAIDevResumeFailRef  msgID = "aiDev.resumeFailedRef"
+	msgAIDevPaused         msgID = "aiDev.paused"
+	msgAIDevResumed        msgID = "aiDev.resumed"
+	msgAIDevStopBadID      msgID = "aiDev.stopBadID"
+	msgAIDevRetryBadID     msgID = "aiDev.retryBadID"
+	msgAIDevStopFailed     msgID = "aiDev.stopFailed"
+	msgAIDevStopFailedRef  msgID = "aiDev.stopFailedRef"
+	msgAIDevRetryFailed    msgID = "aiDev.retryFailed"
+	msgAIDevRetryFailedRef msgID = "aiDev.retryFailedRef"
+	msgAIDevStopped        msgID = "aiDev.stopped"
+	msgAIDevRetried        msgID = "aiDev.retried"
+	msgAIDevItemMissing    msgID = "aiDev.itemMissing"
+	msgAIDevRepoMissing    msgID = "aiDev.repoMissing"
+	msgAIDevNotRetryable   msgID = "aiDev.notRetryable"
+	msgAIDevFinished       msgID = "aiDev.finished"
+
+	msgIntegrityCount     msgID = "docsIntegrity.countMismatch"
+	msgIntegrityDocDigest msgID = "docsIntegrity.docDigestInvalid"
+	msgIntegrityManifest  msgID = "docsIntegrity.manifestInvalid"
+	msgIntegrityMismatch  msgID = "docsIntegrity.manifestMismatch"
+
+	msgIssueSetMissing        msgID = "docsIssue.snapshotSetMissing"
+	msgIssueSetOtherRepo      msgID = "docsIssue.snapshotSetOtherRepo"
+	msgIssueSetDigest         msgID = "docsIssue.snapshotSetDigest"
+	msgIssueReqSetDigest      msgID = "docsIssue.requestSetDigest"
+	msgIssueReqItemSnapshot   msgID = "docsIssue.requestWorkItemSnapshot"
+	msgIssueReqItemDigest     msgID = "docsIssue.requestWorkItemDigest"
+	msgIssueReqSourceUnknown  msgID = "docsIssue.requestSourceUnknown"
+	msgIssueBasisDigest       msgID = "docsIssue.basisDigestInvalid"
+	msgIssueTaskItemMissing   msgID = "docsIssue.taskWorkItemMissing"
+	msgIssueTaskItemOtherRepo msgID = "docsIssue.taskWorkItemOtherRepo"
+	msgIssueTaskItemSnapshot  msgID = "docsIssue.taskWorkItemSnapshot"
+	msgIssueTaskDevRequest    msgID = "docsIssue.taskDevRequestMismatch"
+	msgIssueTaskNoWorkItem    msgID = "docsIssue.taskNoWorkItem"
+	msgIssueTaskClaim         msgID = "docsIssue.taskClaimMismatch"
+	msgIssueTaskSpec          msgID = "docsIssue.taskSpecMismatch"
+	msgIssueTaskSpecDigest    msgID = "docsIssue.taskSpecDigest"
+	msgIssueTaskRefsMismatch  msgID = "docsIssue.taskRefsMismatch"
+	msgIssueTaskRefsExtra     msgID = "docsIssue.taskRefsUnexpected"
+
+	msgNoteBasisConflict      msgID = "docsNote.basisConflict"
+	msgNoteBasisUnverifiable  msgID = "docsNote.basisUnverifiable"
+	msgNoteOtherWorkItem      msgID = "docsNote.otherWorkItem"
+	msgNoteLegacyDigestPinned msgID = "docsNote.legacyDigestPinned"
+	msgNoteLegacyRefsMismatch msgID = "docsNote.legacyRefsMismatch"
+	msgNoteLegacyNoneOK       msgID = "docsNote.legacyNoneConfirmed"
+	msgNoteLegacyNoneRefs     msgID = "docsNote.legacyNoneRefs"
+	msgNoteClaimedDynamic     msgID = "docsNote.claimedDynamic"
+	msgNoteLegacyPinned       msgID = "docsNote.legacyPinned"
+	msgNoteLegacyNoBasis      msgID = "docsNote.legacyNoBasis"
+	msgNoteLegacyInsufficient msgID = "docsNote.legacyInsufficient"
+	msgNoteDeclaredNone       msgID = "docsNote.declaredNone"
+	msgNoteUnknown            msgID = "docsNote.unknown"
+	msgNoteWorkItemNoBasis    msgID = "docsNote.workItemNoBasis"
+	msgNoteNoRefs             msgID = "docsNote.noRefs"
+	msgNoteSameEmpty          msgID = "docsNote.sameEmpty"
+	msgNoteSameBasis          msgID = "docsNote.sameBasis"
+	msgNoteItemEmptyNoDigest  msgID = "docsNote.workItemEmptyNoDigest"
+	msgNoteItemEmptyDigest    msgID = "docsNote.workItemEmptyDigest"
+	msgNoteItemRefsMismatch   msgID = "docsNote.workItemRefsMismatch"
+	msgNoteItemRefsNoDigest   msgID = "docsNote.workItemRefsNoDigest"
+	msgNoteItemDigestMismatch msgID = "docsNote.workItemDigestMismatch"
+	msgNoteSetEmptyNoDigest   msgID = "docsNote.setEmptyNoDigest"
+	msgNoteSetEmptyDigest     msgID = "docsNote.setEmptyDigest"
+	msgNoteSetRefsMismatch    msgID = "docsNote.setRefsMismatch"
+	msgNoteSetRefsNoDigest    msgID = "docsNote.setRefsNoDigest"
+	msgNoteSetDigestMismatch  msgID = "docsNote.setDigestMismatch"
+)
+
 // 消息的参数名（同一个参数名在各条消息中的含义相同）。
 const (
 	argLogin = "login"
@@ -297,6 +408,19 @@ const (
 	argPoll  = "poll"
 	argLease = "lease"
 	argAt    = "at"
+	// argFrom 是被重跑的 AI 请求；argTask、argRequest、argItem、argSet 是 AI 任务、AI 请求、工作项和文档快照集的编号；
+	// argDoc 是文档的 ID，argActual 是实际的数量（与记录的 argCount 对照）。
+	argFrom    = "from"
+	argTask    = "task"
+	argRequest = "request"
+	argItem    = "item"
+	argSet     = "set"
+	argDoc     = "doc"
+	argActual  = "actual"
+	// argLabel 是 GitHub 的 label；argChanged、argCandidates 是同步任务池时变化的和可选的 Issue 数。
+	argLabel      = "label"
+	argChanged    = "changed"
+	argCandidates = "candidates"
 )
 
 // messages 是服务端给出的全部消息（只读）。
@@ -452,6 +576,80 @@ var messages = map[msgID]msgSpec{
 	msgCacheNoteBusy:       {params: map[string]paramKind{argName: paramString, argCount: paramInt}},
 	msgCacheNoteSharedKept: {},
 	msgCacheNoteUnknown:    {params: map[string]paramKind{argCode: paramString}},
+
+	msgAIRequestsTitle: {}, msgAITypeReview: {}, msgAITypeDevelop: {},
+	msgAIReqStateQueued: {}, msgAIReqStateActive: {}, msgAIReqStateSucceeded: {}, msgAIReqStateFailed: {},
+	msgAIReqStateCancelled: {}, msgAIReqStateSkipped: {},
+	msgAIRequestTitleReview: {params: map[string]paramKind{argID: paramInt}},
+	msgAIRequestTitleDev:    {params: map[string]paramKind{argID: paramInt}},
+	msgAIRequestCancelled:   {flash: true},
+	msgAIRequestRerun:       {params: map[string]paramKind{argID: paramInt, argFrom: paramInt}, flash: true},
+	msgAITaskTitleReview:    {params: map[string]paramKind{argName: paramString, argID: paramInt}},
+	msgAITaskTitleDev:       {params: map[string]paramKind{argName: paramString, argID: paramInt}},
+	msgAITaskNotFound:       {params: map[string]paramKind{argValue: paramString}},
+	msgAITaskRerunNotFound:  {params: map[string]paramKind{argID: paramInt}},
+	msgAITaskAttemptInvalid: {params: map[string]paramKind{argValue: paramString}},
+	msgAITaskAttemptMissing: {params: map[string]paramKind{argAttempt: paramInt}},
+	msgAITaskLogPurged:      {}, msgAITaskLogNoOutput: {}, msgAITaskLogSkipped: {}, msgAITaskLogNotRun: {},
+	msgAITaskLogReused: {params: map[string]paramKind{argTask: paramInt}},
+
+	msgAIDevTitle:          {},
+	msgAIDevTitleRepo:      {params: map[string]paramKind{argRepo: paramString}},
+	msgAIDevRepoNotFound:   {params: map[string]paramKind{argRepo: paramString}},
+	msgAIDevItemTitle:      {params: map[string]paramKind{argID: paramInt, argRepo: paramString}},
+	msgAIDevItemNotFound:   {params: map[string]paramKind{argID: paramInt}},
+	msgAIDevSyncNoRepo:     {flash: true},
+	msgAIDevSyncFailed:     {params: map[string]paramKind{argRepo: paramString, argReason: paramString}, flash: true},
+	msgAIDevSyncFailedRef:  {params: map[string]paramKind{argRepo: paramString, argRef: paramString}, flash: true},
+	msgAIDevSynced:         {params: map[string]paramKind{argRepo: paramString, argCount: paramInt, argLabel: paramString, argChanged: paramInt, argCandidates: paramInt}, flash: true},
+	msgAIDevSyncedPartial:  {params: map[string]paramKind{argRepo: paramString, argCount: paramInt, argLabel: paramString, argChanged: paramInt, argCandidates: paramInt}, flash: true},
+	msgAIDevPauseNoRepo:    {flash: true},
+	msgAIDevResumeNoRepo:   {flash: true},
+	msgAIDevPauseFailed:    {params: map[string]paramKind{argRepo: paramString, argReason: paramString}, flash: true},
+	msgAIDevPauseFailedRef: {params: map[string]paramKind{argRepo: paramString, argRef: paramString}, flash: true},
+	msgAIDevResumeFailed:   {params: map[string]paramKind{argRepo: paramString, argReason: paramString}, flash: true},
+	msgAIDevResumeFailRef:  {params: map[string]paramKind{argRepo: paramString, argRef: paramString}, flash: true},
+	msgAIDevPaused:         {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgAIDevResumed:        {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgAIDevStopBadID:      {flash: true},
+	msgAIDevRetryBadID:     {flash: true},
+	msgAIDevStopFailed:     {params: map[string]paramKind{argID: paramInt, argReason: paramString}, flash: true},
+	msgAIDevStopFailedRef:  {params: map[string]paramKind{argID: paramInt, argRef: paramString}, flash: true},
+	msgAIDevRetryFailed:    {params: map[string]paramKind{argID: paramInt, argReason: paramString}, flash: true},
+	msgAIDevRetryFailedRef: {params: map[string]paramKind{argID: paramInt, argRef: paramString}, flash: true},
+	msgAIDevStopped:        {params: map[string]paramKind{argID: paramInt}, flash: true},
+	msgAIDevRetried:        {params: map[string]paramKind{argID: paramInt}, flash: true},
+	msgAIDevItemMissing:    {params: map[string]paramKind{argID: paramInt}, flash: true},
+	msgAIDevRepoMissing:    {params: map[string]paramKind{argRepo: paramString}, flash: true},
+	msgAIDevNotRetryable:   {params: map[string]paramKind{argID: paramInt}, flash: true},
+	msgAIDevFinished:       {params: map[string]paramKind{argID: paramInt}, flash: true},
+
+	msgIntegrityCount:     {params: map[string]paramKind{argCount: paramInt, argActual: paramInt}},
+	msgIntegrityDocDigest: {params: map[string]paramKind{argDoc: paramString}},
+	msgIntegrityManifest:  {}, msgIntegrityMismatch: {},
+
+	msgIssueSetMissing:   {params: map[string]paramKind{argSet: paramInt}},
+	msgIssueSetOtherRepo: {params: map[string]paramKind{argSet: paramInt}},
+	msgIssueSetDigest:    {}, msgIssueReqSetDigest: {}, msgIssueReqItemSnapshot: {}, msgIssueReqItemDigest: {},
+	msgIssueReqSourceUnknown: {}, msgIssueBasisDigest: {},
+	msgIssueTaskItemMissing:   {params: map[string]paramKind{argTask: paramInt, argItem: paramInt}},
+	msgIssueTaskItemOtherRepo: {params: map[string]paramKind{argTask: paramInt, argItem: paramInt}},
+	msgIssueTaskItemSnapshot:  {params: map[string]paramKind{argTask: paramInt}},
+	msgIssueTaskDevRequest:    {params: map[string]paramKind{argTask: paramInt, argRequest: paramInt}},
+	msgIssueTaskNoWorkItem:    {params: map[string]paramKind{argTask: paramInt}},
+	msgIssueTaskClaim:         {params: map[string]paramKind{argTask: paramInt}},
+	msgIssueTaskSpec:          {params: map[string]paramKind{argTask: paramInt}},
+	msgIssueTaskSpecDigest:    {params: map[string]paramKind{argTask: paramInt}},
+	msgIssueTaskRefsMismatch:  {params: map[string]paramKind{argTask: paramInt}},
+	msgIssueTaskRefsExtra:     {params: map[string]paramKind{argTask: paramInt}},
+
+	msgNoteBasisConflict: {}, msgNoteBasisUnverifiable: {}, msgNoteOtherWorkItem: {}, msgNoteLegacyDigestPinned: {},
+	msgNoteLegacyRefsMismatch: {}, msgNoteLegacyNoneOK: {}, msgNoteLegacyNoneRefs: {}, msgNoteClaimedDynamic: {},
+	msgNoteLegacyPinned: {}, msgNoteLegacyNoBasis: {}, msgNoteLegacyInsufficient: {}, msgNoteDeclaredNone: {},
+	msgNoteUnknown: {}, msgNoteWorkItemNoBasis: {}, msgNoteNoRefs: {}, msgNoteSameEmpty: {}, msgNoteSameBasis: {},
+	msgNoteItemEmptyNoDigest: {}, msgNoteItemEmptyDigest: {}, msgNoteItemRefsMismatch: {}, msgNoteItemRefsNoDigest: {},
+	msgNoteItemDigestMismatch: {}, msgNoteSetEmptyNoDigest: {}, msgNoteSetEmptyDigest: {}, msgNoteSetRefsMismatch: {},
+	msgNoteSetRefsNoDigest: {}, msgNoteSetDigestMismatch: {},
 }
 
 // uiText 是页面数据中的一段文字：消息（id 加参数，前端按当前语言显示），或原样显示的文字（raw）。零值是空串。

@@ -138,6 +138,14 @@ func flashZH(t *testing.T, v string) string {
 	return textZH(t, parseFlash(v))
 }
 
+// wantPageZH 检查页面 body 的名称、导航和中文标题。
+func wantPageZH(t *testing.T, body, page, nav, title string) {
+	t.Helper()
+	if pg := parsePage(t, body); pg.Page != page || pg.Nav != nav || textZH(t, pg.Title) != title {
+		t.Fatalf("页面 = %q，导航 = %q，标题 = %q；应为 %q、%q、%q", pg.Page, pg.Nav, textZH(t, pg.Title), page, nav, title)
+	}
+}
+
 // pageTextZH 返回页面上显示的主要文字（中文）：错误页的标题和原因，登录页的说明和表单错误。
 func pageTextZH(t *testing.T, body string) string {
 	t.Helper()

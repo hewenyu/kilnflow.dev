@@ -50,8 +50,56 @@ type SnapshotView struct {
 	// ContentPurgedAt 是整批正文被清理的时间；没有清理时为 nil。
 	ContentPurgedAt *time.Time
 	Docs            []DocMeta
-	// IntegrityError 非空表示记录的元数据与冻结状态不一致（篇数、摘要或文档内容摘要不合法）。
+	// Integrity 非 nil 表示记录的元数据与冻结状态不一致（篇数、摘要或文档内容摘要不合法）：原因码和参数给页面按语言显示；
+	// IntegrityError 是同一个问题的中文说明（CLI、日志用），没有问题时为空。
+	Integrity      *IntegrityIssue
 	IntegrityError string
+}
+
+// IntegrityCode 是快照元数据不一致的原因码（IntegrityIssue.Code）。
+type IntegrityCode string
+
+const (
+	// IntegrityCountMismatch：记录的篇数（Count）与文档行数（Actual）不一致。
+	IntegrityCountMismatch IntegrityCode = "count_mismatch"
+	// IntegrityDocDigestInvalid：文档 DocID 的内容摘要不合法。
+	IntegrityDocDigestInvalid IntegrityCode = "doc_digest_invalid"
+	// IntegrityManifestInvalid：整批摘要缺失或不合法。
+	IntegrityManifestInvalid IntegrityCode = "manifest_invalid"
+	// IntegrityManifestMismatch：整批摘要与记录的元数据不一致。
+	IntegrityManifestMismatch IntegrityCode = "manifest_mismatch"
+)
+
+// IntegrityIssue 是快照元数据的一个完整性问题：原因码加原始参数（只有对应的原因码用到的字段有值）。
+type IntegrityIssue struct {
+	Code IntegrityCode
+	// Count、Actual 是记录的篇数和实际的文档行数（count_mismatch）。
+	Count, Actual int
+	// DocID 是内容摘要不合法的文档（doc_digest_invalid）。
+	DocID string
+}
+
+// String 返回问题的中文说明（CLI、日志用；页面按原因码显示）。
+func (i *IntegrityIssue) String() string {
+	switch i.Code {
+	case IntegrityCountMismatch:
+		return fmt.Sprintf("记录的篇数（%d）与文档行数（%d）不一致", i.Count, i.Actual)
+	case IntegrityDocDigestInvalid:
+		return fmt.Sprintf("文档 %s 的内容摘要不合法", i.DocID)
+	case IntegrityManifestInvalid:
+		return "文档快照的整批摘要缺失或不合法"
+	case IntegrityManifestMismatch:
+		return "文档快照的整批摘要与记录的元数据不一致"
+	}
+	return string(i.Code)
+}
+
+// setIntegrity 记录完整性核对的结果（没有问题时两个字段都为空）。
+func (v *SnapshotView) setIntegrity(i *IntegrityIssue) {
+	v.Integrity = i
+	if i != nil {
+		v.IntegrityError = i.String()
+	}
 }
 
 // WorkItemSnapshotView 返回工作项冻结快照的展示数据；没有冻结时 Source=none、Frozen=false。
@@ -92,7 +140,7 @@ func (s *Service) WorkItemSnapshotView(ctx context.Context, q store.Querier, rep
 	v.CollectionID, v.CollectionName, v.BindingGeneration = deref(collectionID), deref(name), derefInt(generation)
 	v.SourceKnown = v.Provider != "" && v.BaseURL != ""
 	v.ManifestDigest = validDigestOr(deref(stored), v)
-	v.IntegrityError = checkViewIntegrity(SourceWorkItem, count, v)
+	v.setIntegrity(checkViewIntegrity(SourceWorkItem, count, v))
 	return v, nil
 }
 
@@ -133,7 +181,7 @@ func (s *Service) SnapshotSetView(ctx context.Context, q store.Querier, repoID, 
 		BindingGeneration: generation, SourceKnown: provider != "" && baseURL != "", DocCount: count,
 		ManifestDigest: digest, ContentPurgedAt: purged, Docs: docs,
 	}
-	v.IntegrityError = checkViewIntegrity(SourceSnapshotSet, count, v)
+	v.setIntegrity(checkViewIntegrity(SourceSnapshotSet, count, v))
 	return v, nil
 }
 
@@ -208,24 +256,24 @@ func (v *SnapshotView) manifestSource() ManifestSource {
 	}
 }
 
-// checkViewIntegrity 核对记录的篇数、每篇摘要与整批摘要；不一致时返回给人看的说明，绝不自动修复。
+// checkViewIntegrity 核对记录的篇数、每篇摘要与整批摘要；不一致时返回问题（没有问题时为 nil），绝不自动修复。
 // 整批摘要对空集合同样核对：摘要里含来源域和种类，空集合的摘要被改坏同样是记录不一致。
-func checkViewIntegrity(kind string, count int, v *SnapshotView) string {
+func checkViewIntegrity(kind string, count int, v *SnapshotView) *IntegrityIssue {
 	if len(v.Docs) != count {
-		return fmt.Sprintf("记录的篇数（%d）与文档行数（%d）不一致", count, len(v.Docs))
+		return &IntegrityIssue{Code: IntegrityCountMismatch, Count: count, Actual: len(v.Docs)}
 	}
 	for _, d := range v.Docs {
 		if !validDigest(d.SHA256) {
-			return fmt.Sprintf("文档 %s 的内容摘要不合法", d.DocID)
+			return &IntegrityIssue{Code: IntegrityDocDigestInvalid, DocID: d.DocID}
 		}
 	}
 	if !validDigest(v.ManifestDigest) {
-		return "文档快照的整批摘要缺失或不合法"
+		return &IntegrityIssue{Code: IntegrityManifestInvalid}
 	}
 	if want := ManifestDigest(kind, v.manifestSource(), viewSnapshots(v.Docs)); want != v.ManifestDigest {
-		return "文档快照的整批摘要与记录的元数据不一致"
+		return &IntegrityIssue{Code: IntegrityManifestMismatch}
 	}
-	return ""
+	return nil
 }
 
 // viewSnapshots 把展示元数据换成摘要计算用的快照（不含正文）。

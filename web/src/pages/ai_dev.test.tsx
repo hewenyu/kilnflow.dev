@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/ai_dev.json'
 import emptyFixture from '../../dev/fixtures/ai_dev.empty.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, envelope, rawStrings, renderPage, switchLocale, withData } from '../test/render'
 
 let requests: { url: string; method: string; body: string }[] = []
 
@@ -155,17 +155,18 @@ describe('AI 开发', () => {
   })
 
   it('只看一个仓库：显示仓库占用（占用者、原因、排在后面的工作项）', () => {
-    const occ = { Occupant: 14, Reason: '工作项 #14 进行中（implement / pr_open：PR 已开，等待 CI、AI 审计和合并）', Waiting: [15] }
+    // 占用是结构化的数据：阶段、状态按语言显示，原因（服务端记下的原文）原样显示
+    const occ = { Occupant: 14, Phase: 'implement', State: 'pr_open', Reason: 'PR 已开，等待 CI、AI 审计和合并', Waiting: [15] }
     renderPage(withData(envelope(fixture), { Repo: 'acme/kiln', Items: [], Paused: [], Occupancy: occ }), '/ai-dev?repo=acme/kiln')
     const region = screen.getByRole('region', { name: '仓库占用' })
     expect(within(region).getByRole('link', { name: '工作项 #14' })).toHaveAttribute('href', '/ai-dev/14')
     expect(within(region).getByText(/之后依次是 #15/)).toBeInTheDocument()
-    expect(within(region).getByText(/等待 CI、AI 审计和合并/)).toBeInTheDocument()
+    expect(within(region).getByText('进行中（实现 / PR 已开：PR 已开，等待 CI、AI 审计和合并）；同一个仓库按工作项串行，它合并或终止之后才开始下一项')).toBeInTheDocument()
   })
 
   it('只看一个仓库：没有被占用时说明可以开始下一项；看全部仓库时没有占用', () => {
     renderPage(
-      withData(envelope(fixture), { Repo: 'acme/kiln', Items: [], Paused: [], Occupancy: { Occupant: 0, Reason: '', Waiting: null } }),
+      withData(envelope(fixture), { Repo: 'acme/kiln', Items: [], Paused: [], Occupancy: { Occupant: 0, Phase: '', State: '', Reason: '', Waiting: null } }),
       '/ai-dev?repo=acme/kiln',
     )
     expect(within(screen.getByRole('region', { name: '仓库占用' })).getByText(/没有进行中的工作项/)).toBeInTheDocument()
@@ -226,5 +227,62 @@ describe('AI 开发', () => {
     expect(screen.getByText('还没有工作项')).toBeInTheDocument()
     expect(screen.getByText(/webhook 丢失时可以在上面全量同步任务池/)).toHaveTextContent('给 Issue 加上 label kiln:ready')
     expect(screen.queryByRole('region', { name: '暂停了新领取的仓库' })).not.toBeInTheDocument()
+  })
+})
+
+describe('AI 开发（英文与切换语言）', () => {
+  const rawZH = rawStrings(fixture.Data)
+
+  it('英文：工作项的状态、阶段、轮次、表单和说明按英文显示；Issue 标题和原因原样显示', () => {
+    const base = fixture.Data.Items[0]
+    if (!base) throw new Error('fixture 没有工作项')
+    const items = [{ ...base, FixRounds: 1, ConflictRounds: 2, DesignFirst: true, ImplRound: 2 }, ...fixture.Data.Items.slice(1)]
+    renderPage(withData(envelope(fixture), { Items: items }), '/ai-dev', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI development')
+    const list = screen.getByRole('list', { name: 'Work item' })
+    expect(within(list).getByRole('link', { name: 'Work item #14' })).toBeInTheDocument()
+    expect(within(list).getByText('Blocked')).toBeInTheDocument()
+    expect(within(list).getByText('Implementation round 2')).toBeInTheDocument()
+    expect(within(list).getByText(/Fix rounds 1 \/ 2 · Conflict fix rounds 2 \/ 2/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Run another fix round' })).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Sync task pool' })).toBeInTheDocument()
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('英文：只看一个仓库时任务池、占用和暂停按英文显示，占用的阶段和状态按语言组合', () => {
+    const occ = { Occupant: 14, Phase: 'implement', State: 'pr_open', Reason: 'PR 已开，等待 CI、AI 审计和合并', Waiting: [15] }
+    const pool = {
+      Issues: [{ Number: 3, Title: '新需求', URL: '', Status: 'waiting', WorkItem: null, Reason: '等 #2 关闭', WaitingOn: [2], ReadyAt: '2026-11-10T08:00:00Z' }],
+      SyncedAt: null,
+    }
+    renderPage(withData(envelope(fixture), { Repo: 'acme/kiln', Items: [], Paused: [], Occupancy: occ, Pool: pool }), '/ai-dev?repo=acme/kiln', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI development for acme/kiln')
+    const region = screen.getByRole('region', { name: 'Repository occupancy' })
+    expect(within(region).getByRole('link', { name: 'Work item #14' })).toHaveAttribute('href', '/ai-dev/14')
+    expect(within(region).getByText(/occupies this repository, followed by #15/)).toBeInTheDocument()
+    expect(within(region).getByText(/^In progress \(Implementation \/ PR open: PR 已开，等待 CI、AI 审计和合并\)/)).toBeInTheDocument()
+    const poolBox = screen.getByRole('region', { name: /Task pool/ })
+    expect(within(poolBox).getByText('Waiting on dependencies')).toBeInTheDocument()
+    expect(within(poolBox).getByText(/Never fully synced/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause pickup' })).toBeInTheDocument()
+    expect(chineseLeft(document.body, [...rawZH, occ.Reason, '新需求', '等 #2 关闭'])).toEqual([])
+  })
+
+  it('英文：没有工作项时说明怎样开始', () => {
+    renderPage(envelope(emptyFixture), '/ai-dev', { locale: 'en' })
+    expect(screen.getByText('No work items yet')).toBeInTheDocument()
+    expect(chineseLeft(document.body, rawStrings(emptyFixture.Data))).toEqual([])
+  })
+
+  it('终止的确认对话框打开时切换语言：对话框保持打开，文字立即切换', async () => {
+    renderPage(envelope(fixture), '/ai-dev')
+    await userEvent.click(within(rows().blocked).getByRole('button', { name: '终止' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('终止工作项 #14？')).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('alertdialog')).toBe(dialog)
+    expect(within(dialog).getByText('Stop work item #14?')).toBeInTheDocument()
+    expect(within(dialog).getByText(/label them kiln:ready again/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Stop work item' })).toBeInTheDocument()
   })
 })

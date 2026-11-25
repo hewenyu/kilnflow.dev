@@ -1,8 +1,11 @@
 import { z } from 'zod'
-import { list } from '../../lib/envelope'
+import { defaultLocale, type Locale } from '../../i18n/messages'
+import { list, textSchema } from '../../lib/envelope'
+import { enumLabel } from '../../lib/format'
 
 // 设计依据的页面数据（internal/server/web/docs.go）：只有元数据，正文经单独的接口按需读取。
-// 这些数据在每次页面刷新时都会重新取，不包含正文，也不访问外部文档系统。
+// 这些数据在每次页面刷新时都会重新取，不包含正文，也不访问外部文档系统。文档的标题、文档集名称和正文是外部文档的原文，
+// 原样显示；记录不一致、完整性问题和依据关系的说明是服务端按原因码给的消息（不认识的原因码原样显示领域层的说明）。
 
 /** docMetaSchema 是一篇冻结文档的元数据。URL 已经过服务端校验，为空时不渲染链接。 */
 export const docMetaSchema = z.object({
@@ -32,7 +35,8 @@ export const designBasisSchema = z.object({
   ManifestDigest: z.string(),
   ContentPurgedAt: z.string().nullable(),
   Docs: list(docMetaSchema),
-  IntegrityError: z.string(),
+  /** 快照的元数据不一致的原因（服务端给的消息）；没有问题时为空。 */
+  IntegrityError: textSchema,
 })
 export type DesignBasisData = z.infer<typeof designBasisSchema>
 
@@ -47,7 +51,8 @@ export const requestDocsSchema = z.object({
   WorkItemURL: z.string(),
   SnapshotSetID: z.number(),
   Basis: designBasisSchema.nullable(),
-  Error: z.string(),
+  /** 记录不一致的原因（服务端给的消息）；没有问题时为空。 */
+  Error: textSchema,
 })
 export type RequestDocsView = z.infer<typeof requestDocsSchema>
 
@@ -60,7 +65,8 @@ export const taskDocsSchema = z.object({
   BasisSource: z.string(),
   RequestURL: z.string(),
   Basis: designBasisSchema.nullable(),
-  Error: z.string(),
+  /** 记录不一致或依据无法解析的原因（服务端给的消息）；没有问题时为空。 */
+  Error: textSchema,
 })
 export type TaskDocsView = z.infer<typeof taskDocsSchema>
 
@@ -72,27 +78,17 @@ export const relatedTaskSchema = z.object({
   Type: z.string(),
   /** 开发方式（select / implement / fix）。 */
   Mode: z.string(),
+  /** 名称见 DesignBasis.tsx 的 relationVariants 与词典 docsRelation.*。 */
   Relation: z.string(),
-  Note: z.string(),
+  /** 关系的说明；NoteDetail 是依据无法解析时的具体原因（都是服务端给的消息，没有时为空）。 */
+  Note: textSchema,
+  NoteDetail: textSchema,
   TaskURL: z.string(),
   RequestURL: z.string(),
 })
 export type RelatedTask = z.infer<typeof relatedTaskSchema>
 
-/** sourceText 返回依据来源的说明。 */
-export function sourceText(source: string): string {
-  switch (source) {
-    case 'work_item':
-      return '工作项冻结快照'
-    case 'snapshot_set':
-      return '独立冻结的快照集'
-    case 'none':
-      return '没有文档依据'
-    case 'unplanned':
-      return '请求时没有文档依据（未计划）'
-    case 'legacy':
-      return '迁移前，没有记录来源'
-    default:
-      return source
-  }
+/** sourceText 返回依据来源（work_item、snapshot_set、none、unplanned、legacy）的说明；未知的原样返回（locale 不传时为 zh-CN）。 */
+export function sourceText(source: string, locale: Locale = defaultLocale): string {
+  return enumLabel(locale, 'docsSource', source)
 }

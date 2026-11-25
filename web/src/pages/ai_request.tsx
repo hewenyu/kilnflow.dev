@@ -8,6 +8,7 @@ import { Callout } from '../components/Callout'
 import { PageHeader } from '../components/PageHeader'
 import { StatusIcon } from '../components/StatusIcon'
 import { Ago } from '../components/Time'
+import { Trans, useLocale, useT } from '../i18n/locale'
 import { list } from '../lib/envelope'
 import { CancelRequest, RequestFacts, requestState, requestTitle, RerunRequest, TasksTable } from './ai/parts'
 import { RequestDesignBasis } from './ai/DesignBasis'
@@ -35,18 +36,20 @@ const schema = z.object({
 type Data = z.infer<typeof schema>
 
 function Family({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
   if (data.Family.length === 0) return null
   return (
     <Box as="section" aria-labelledby="family-h">
-      <BoxHeader title="同一个请求的重跑" id="family-h" />
+      <BoxHeader title={t('aiRequest.family')} id="family-h" />
       <BoxRow className={css.block}>
         <ul className={css.nav}>
           {data.Family.map((f) => (
             <li key={f.ID} aria-current={f.ID === data.Request.ID ? 'page' : undefined}>
-              <StatusIcon state={f.State} size={14} label={requestState(f.State)} />
+              <StatusIcon state={f.State} size={14} label={requestState(f.State, locale)} />
               {f.ID === data.Request.ID ? <span>#{f.ID}</span> : <a href={aiRequestURL(f.ID)}>#{f.ID}</a>}
               <span className={css.muted}>
-                {requestState(f.State)}，<Ago t={f.Created} />
+                <Trans id="aiRequest.familyMeta" params={{ state: requestState(f.State, locale) }} tags={{ ago: () => <Ago t={f.Created} /> }} />
               </span>
             </li>
           ))}
@@ -57,17 +60,19 @@ function Family({ data }: { data: Data }) {
 }
 
 function AIRequestPage({ data }: PageProps<Data>) {
+  const t = useT()
+  const { locale } = useLocale()
   const r = data.Request
   useLive(!data.Terminal)
   return (
     <div className={css.page}>
       <PageHeader
-        title={requestTitle(r)}
-        description={`${r.Repo} · ${r.Type === 'develop' ? '从 Issue 选题、开发并交付为 PR' : '审计代码改动，结论发布为 PR review'}`}
+        title={requestTitle(r, locale)}
+        description={t(r.Type === 'develop' ? 'aiRequest.descDevelop' : 'aiRequest.descReview', { repo: r.Repo })}
         actions={
           <>
             <LinkButton href="/ai/requests" leadingVisual={ArrowLeftIcon}>
-              AI 请求
+              {t('aiRequests.pageTitle')}
             </LinkButton>
             {!data.Terminal && <CancelRequest r={r} />}
             {data.CanRerun && <RerunRequest r={r} hasFailed={data.HasFailed} />}
@@ -75,28 +80,28 @@ function AIRequestPage({ data }: PageProps<Data>) {
         }
       />
       {r.ConfigError && (
-        <Callout tone="critical" title="配置错误">
+        <Callout tone="critical" title={t('aiRequest.configError')}>
           <pre className={css.pre}>{r.ConfigError}</pre>
         </Callout>
       )}
       {r.Warnings && (
-        <Callout tone="warning" title="配置警告">
+        <Callout tone="warning" title={t('aiRequest.configWarnings')}>
           <pre className={css.pre}>{r.Warnings}</pre>
         </Callout>
       )}
       <Box as="section" aria-labelledby="summary-h">
-        <BoxHeader title="概要" id="summary-h" />
+        <BoxHeader title={t('run.summary')} id="summary-h" />
         <BoxRow className={css.block}>
           <RequestFacts r={r} prURL={data.PRURL} />
         </BoxRow>
       </Box>
       {data.DesignBasis && <RequestDesignBasis view={data.DesignBasis} />}
       <Box as="section" aria-labelledby="tasks-h">
-        <BoxHeader title="AI 任务" id="tasks-h" />
+        <BoxHeader title={t('aiTasks.label')} id="tasks-h" />
         {data.Tasks.length > 0 ? (
           <TasksTable tasks={data.Tasks} />
         ) : (
-          <BoxRow className={css.muted}>这个请求没有任务（配置错误或被跳过时不会创建任务）。</BoxRow>
+          <BoxRow className={css.muted}>{t('aiRequest.noTasks')}</BoxRow>
         )}
       </Box>
       <Family data={data} />

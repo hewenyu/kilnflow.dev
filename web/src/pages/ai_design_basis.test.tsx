@@ -5,7 +5,7 @@ import requestFixture from '../../dev/fixtures/ai_request.json'
 import taskFixture from '../../dev/fixtures/ai_task.json'
 import workItemFixture from '../../dev/fixtures/ai_dev_item.json'
 import { json, stubFetch } from '../test/fetch'
-import { deferred, envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, deferred, envelope, rawStrings, renderPage, switchLocale, withData } from '../test/render'
 
 // 设计依据：冻结元数据、清理状态、按需读取正文、历史来源和关联任务关系。
 // 页面数据本身不含正文；只有点“查看正文”才请求那一篇，且关闭再打开不重复读取。
@@ -155,7 +155,8 @@ describe('AI 任务的设计依据', () => {
     renderPage(envelope(taskFixture), '/ai/tasks/520')
     const basis = screen.getByRole('region', { name: '设计依据' })
     await userEvent.click(nth(within(basis).getAllByRole('button', { name: '查看正文' }), 0))
-    await waitFor(() => expect(screen.getByText('设计依据的记录与实际快照不一致')).toBeInTheDocument())
+    // 认识的错误码按词典显示，不显示服务端的说明原文
+    await waitFor(() => expect(screen.getByText('设计依据的记录与实际快照不一致，无法确认这篇文档属于它。')).toBeInTheDocument())
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
 
@@ -291,5 +292,92 @@ describe('AI 工作项的设计依据', () => {
     if (!row) throw new Error('应有任务行')
     // 关系 Label 的文字、类型和方式三处都按未知值原样显示
     expect(within(row).getAllByText(key)).toHaveLength(3)
+  })
+})
+
+describe('设计依据（英文与切换语言）', () => {
+  /** textLog 是日志等其他请求的响应（不参与正文请求的计数）。 */
+  const textLog = () => new Response('', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+
+  /** openFirst 在 AI 任务页打开第一篇文档的正文对话框，返回对话框和正文请求的记录。 */
+  async function openFirst(respond: () => Response, locale: 'zh-CN' | 'en' = 'zh-CN') {
+    const calls = stubFetch((c) => (c.url.includes('/docs/content') ? respond() : textLog()))
+    renderPage(envelope(taskFixture), '/ai/tasks/520', { locale })
+    const basis = screen.getByRole('region', { name: locale === 'en' ? 'Design basis' : '设计依据' })
+    await userEvent.click(nth(within(basis).getAllByRole('button', { name: locale === 'en' ? 'View content' : '查看正文' }), 0))
+    const dialog = await screen.findByRole('dialog')
+    return { dialog, contentCalls: () => calls.filter((c) => c.url.includes('/docs/content')) }
+  }
+
+  it('英文：依据的元数据、来源与文档表格按英文显示；文档标题和文档集名称原样显示', () => {
+    renderPage(envelope(requestFixture), '/ai/requests/88', { locale: 'en' })
+    const basis = screen.getByRole('region', { name: 'Design basis' })
+    expect(within(basis).getByText('Standalone frozen snapshot set')).toBeInTheDocument()
+    expect(within(basis).getByText('Runner 升级协议')).toBeInTheDocument()
+    expect(within(basis).getByText('Removed under the retention policy')).toBeInTheDocument()
+    expect(within(basis).getAllByTitle('Open this document in Outline')[0]).toHaveAttribute('href', 'https://outline.example.com/doc/doc-api')
+    expect(within(basis).getByRole('table', { name: 'Frozen design documents' })).toBeInTheDocument()
+    expect(chineseLeft(basis, rawStrings(requestFixture.Data))).toEqual([])
+  })
+
+  it('英文：记录不一致与快照完整性问题是服务端给的消息，按英文显示', () => {
+    const view = {
+      ...requestFixture.Data.DesignBasis,
+      Error: { id: 'docsIssue.snapshotSetMissing', params: { set: 412 } },
+      Basis: { ...requestFixture.Data.DesignBasis.Basis, IntegrityError: { id: 'docsIntegrity.countMismatch', params: { count: 3, actual: 2 } } },
+    }
+    renderPage(withData(envelope(requestFixture), { DesignBasis: view }), '/ai/requests/88', { locale: 'en' })
+    const basis = screen.getByRole('region', { name: 'Design basis' })
+    expect(within(basis).getByText(/Document snapshot set #412 doesn't exist/)).toBeInTheDocument()
+    expect(within(basis).getByText(/The recorded document count \(3\) doesn't match the number of document rows \(2\)/)).toBeInTheDocument()
+    expect(chineseLeft(basis, rawStrings(requestFixture.Data))).toEqual([])
+  })
+
+  it('正文对话框打开时切换语言：对话框保持打开，说明立即切换，不重新读取正文', async () => {
+    const { dialog, contentCalls } = await openFirst(() => json(content('doc-api', '# 升级协议')))
+    await waitFor(() => expect(within(dialog).getByText(/# 升级协议/)).toBeInTheDocument())
+    expect(within(dialog).getByText(/按纯文本显示/)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('dialog', { hidden: true })).toBe(dialog)
+    expect(within(dialog).getByText('Revision r4 · content saved at freeze time')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Shown as plain text/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/# 升级协议/)).toBeInTheDocument()
+    // Primer 的对话框右上角也有一个 Close
+    expect(within(dialog).getAllByRole('button', { name: 'Close' }).length).toBeGreaterThan(0)
+    expect(contentCalls()).toHaveLength(1)
+  })
+
+  it('依据不一致（409）的对话框打开时切换语言：按错误码立即换成英文说明，仍可重试，不重新读取', async () => {
+    const { dialog, contentCalls } = await openFirst(() => json({ code: 'basis_conflict', message: '服务端的说明' }, 409))
+    await waitFor(() => expect(within(dialog).getByText('设计依据的记录与实际快照不一致，无法确认这篇文档属于它。')).toBeInTheDocument())
+    expect(within(dialog).queryByText('服务端的说明')).not.toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('dialog', { hidden: true })).toBe(dialog)
+    expect(within(dialog).getByText("Couldn't load the content")).toBeInTheDocument()
+    expect(within(dialog).getByText(/The design basis record doesn't match the actual snapshot, so this document/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(contentCalls()).toHaveLength(1)
+    expect(chineseLeft(dialog, ['Runner 升级协议'])).toEqual([])
+  })
+
+  it('登录过期（401）的对话框打开时切换语言：重新登录的提示立即切换，不重新读取', async () => {
+    const { dialog, contentCalls } = await openFirst(() => json({ code: 'unauthorized', message: '登录已过期' }, 401))
+    await waitFor(() => expect(within(dialog).getByText('登录已过期，请重新登录后再查看。')).toBeInTheDocument())
+    await switchLocale('English')
+    expect(screen.getByRole('dialog', { hidden: true })).toBe(dialog)
+    expect(within(dialog).getByText(/Your session has expired/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', `/login?next=${encodeURIComponent('/ai/tasks/520')}`)
+    expect(within(dialog).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(contentCalls()).toHaveLength(1)
+  })
+
+  it('不认识的错误码显示服务端的说明（版本差异）', async () => {
+    const { dialog } = await openFirst(() => json({ code: 'future_code', message: '新版本的说明' }, 409), 'en')
+    await waitFor(() => expect(within(dialog).getByText('新版本的说明')).toBeInTheDocument())
+  })
+
+  it('没有错误码也没有说明时按当前语言说明 HTTP 状态', async () => {
+    const { dialog } = await openFirst(() => json({}, 503), 'en')
+    await waitFor(() => expect(within(dialog).getByText("Couldn't load it (HTTP 503).")).toBeInTheDocument())
   })
 })

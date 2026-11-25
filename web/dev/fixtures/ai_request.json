@@ -1,6 +1,11 @@
 {
   "Page": "ai_request",
-  "Title": "AI 审计请求 #88",
+  "Title": {
+    "id": "aiRequest.pageTitleReview",
+    "params": {
+      "id": 88
+    }
+  },
   "Nav": "ai_requests",
   "Status": 200,
   "Session": {
@@ -17,7 +22,6 @@
     "Request": {
       "ID": 88,
       "Type": "review",
-      "TypeLabel": "AI 审计",
       "Repo": "acme/kiln",
       "Event": "pull_request",
       "Ref": "refs/pull/74/head",
@@ -49,7 +53,6 @@
         "Platform": "darwin/arm64",
         "Agent": "codex",
         "State": "failed",
-        "StateTitle": "失败",
         "Reason": "审计发现问题：2 个",
         "ReusedFrom": 0,
         "AttemptCount": 1,
@@ -71,7 +74,6 @@
         "Platform": "linux/amd64",
         "Agent": "codex",
         "State": "succeeded",
-        "StateTitle": "成功",
         "Reason": "",
         "ReusedFrom": 0,
         "AttemptCount": 1,

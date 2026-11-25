@@ -9,16 +9,19 @@ import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { StatusIcon } from '../components/StatusIcon'
 import { Ago } from '../components/Time'
-import { list } from '../lib/envelope'
+import { Trans, useLocale, useT, useText } from '../i18n/locale'
+import type { Text } from '../i18n/messages'
+import { list, textSchema } from '../lib/envelope'
 import { refName, short } from '../lib/format'
-import { requestState } from './ai/parts'
+import { requestState, requestTitle } from './ai/parts'
 import { aiRequestSchema, aiRequestURL, type AIRequest } from './ai/schema'
 import css from './ai/ai.module.css'
 import table from './settings_people.module.css'
 
 // AI 请求列表（PLAN #30.9）：AI 审计和 AI 开发的请求，与 CI 的运行分开。按仓库、类型、状态筛选；有进行中的请求时自动刷新。
 
-const optionSchema = z.object({ Value: z.string(), Label: z.string() })
+/** 筛选的选项：Label 是服务端给的消息。 */
+const optionSchema = z.object({ Value: z.string(), Label: textSchema })
 
 const schema = z.object({
   Requests: list(aiRequestSchema),
@@ -57,14 +60,16 @@ function FilterMenu({
   label: string
   all: string
   value: string
-  options: { Value: string; Label: string }[]
+  options: { Value: string; Label: Text }[]
   set: (v: string) => Filter
 }) {
+  const t = useT()
+  const text = useText()
   const cur = options.find((o) => o.Value === value)
   return (
     <ActionMenu>
       <ActionMenu.Button size="small" leadingVisual={FilterIcon}>
-        {label}：{cur ? cur.Label : all}
+        {t('aiRequests.filterLabel', { label, value: cur ? text(cur.Label) : all })}
       </ActionMenu.Button>
       <ActionMenu.Overlay width="small">
         <ActionList selectionVariant="single">
@@ -73,7 +78,7 @@ function FilterMenu({
           </ActionList.LinkItem>
           {options.map((o) => (
             <ActionList.LinkItem key={o.Value} href={aiRequestsURL(set(o.Value))} active={value === o.Value} aria-checked={value === o.Value}>
-              {o.Label}
+              {text(o.Label)}
             </ActionList.LinkItem>
           ))}
         </ActionList>
@@ -84,33 +89,44 @@ function FilterMenu({
 
 /** subject 返回请求的对象：PR、工作项或 ref。 */
 function Subject({ r }: { r: AIRequest }) {
+  const t = useT()
   if (r.PRNumber) return <>PR #{r.PRNumber}</>
-  if (r.WorkItemURL) return <a href={r.WorkItemURL}>工作项 #{r.WorkItemID}</a>
+  if (r.WorkItemURL) return <a href={r.WorkItemURL}>{t('workItem.ref', { id: r.WorkItemID })}</a>
   return <span className="mono">{refName(r.Ref)}</span>
 }
 
 function AIRequests({ data }: PageProps<Data>) {
+  const t = useT()
+  const { locale } = useLocale()
   const f = data.Filter
+  const col = {
+    request: t('aiRequests.colRequest'),
+    state: t('aiRequests.colState'),
+    repo: t('aiRequests.colRepo'),
+    subject: t('aiRequests.colSubject'),
+    created: t('aiRequests.colCreated'),
+  }
   useLive(data.Requests.some((r) => r.State === 'queued' || r.State === 'active'))
   return (
     <div className={css.page}>
       <PageHeader
-        title="AI 请求"
+        title={t('aiRequests.pageTitle')}
         description={
-          <>
-            AI 审计和 AI 开发的请求，每个请求按平台分为 AI 任务，由 <a href="/ai/runners">AI 执行节点</a> 执行。CI 的构建在 <a href="/runs">运行</a> 中。
-          </>
+          <Trans
+            id="aiRequests.description"
+            tags={{ runners: (c) => <a href="/ai/runners">{c}</a>, runs: (c) => <a href="/runs">{c}</a> }}
+          />
         }
       />
       <Box>
-        <h2 className="visually-hidden">AI 请求列表</h2>
+        <h2 className="visually-hidden">{t('aiRequests.listHeading')}</h2>
         <div className={`${boxCss.header ?? ''} ${css.filters}`}>
-          <FilterMenu label="类型" all="全部类型" value={f.Type} options={data.Types} set={(v) => ({ ...f, Type: v })} />
-          <FilterMenu label="状态" all="全部状态" value={f.State} options={data.States} set={(v) => ({ ...f, State: v })} />
+          <FilterMenu label={t('aiRequests.type')} all={t('aiRequests.allTypes')} value={f.Type} options={data.Types} set={(v) => ({ ...f, Type: v })} />
+          <FilterMenu label={t('aiRequests.state')} all={t('aiRequests.allStates')} value={f.State} options={data.States} set={(v) => ({ ...f, State: v })} />
           {data.Repos.length > 0 && (
             <FilterMenu
-              label="仓库"
-              all="全部仓库"
+              label={t('aiRequests.repo')}
+              all={t('aiRequests.allRepos')}
               value={f.Repo}
               options={data.Repos.map((r) => ({ Value: r, Label: r }))}
               set={(v) => ({ ...f, Repo: v })}
@@ -120,46 +136,46 @@ function AIRequests({ data }: PageProps<Data>) {
         {filtered(f) && (
           <BoxRow>
             <span>
-              已筛选{f.PR !== 0 && `，PR #${f.PR}`}；显示 {data.Requests.length} 个。
+              {f.PR !== 0
+                ? t('aiRequests.filteredPR', { pr: f.PR, count: data.Requests.length })
+                : t('aiRequests.filtered', { count: data.Requests.length })}
             </span>{' '}
-            <a href="/ai/requests">清空筛选</a>
+            <a href="/ai/requests">{t('aiRequests.clear')}</a>
           </BoxRow>
         )}
         {data.Requests.length > 0 ? (
-          <table className={table.table} aria-label="AI 请求">
+          <table className={table.table} aria-label={t('aiRequests.pageTitle')}>
             <thead>
               <tr>
-                <th scope="col">请求</th>
-                <th scope="col">状态</th>
-                <th scope="col">仓库</th>
-                <th scope="col">对象</th>
+                <th scope="col">{col.request}</th>
+                <th scope="col">{col.state}</th>
+                <th scope="col">{col.repo}</th>
+                <th scope="col">{col.subject}</th>
                 <th scope="col">commit</th>
-                <th scope="col">创建</th>
+                <th scope="col">{col.created}</th>
               </tr>
             </thead>
             <tbody>
               {data.Requests.map((r) => (
                 <tr key={r.ID}>
-                  <td data-label="请求">
-                    <a href={aiRequestURL(r.ID)}>
-                      {r.TypeLabel}请求 #{r.ID}
-                    </a>
-                    {r.RerunOf !== 0 && <span className={css.muted}>（重跑 #{r.RerunOf}）</span>}
+                  <td data-label={col.request}>
+                    <a href={aiRequestURL(r.ID)}>{requestTitle(r, locale)}</a>
+                    {r.RerunOf !== 0 && <span className={css.muted}>{t('aiRequests.rerunOf', { id: r.RerunOf })}</span>}
                   </td>
-                  <td data-label="状态">
+                  <td data-label={col.state}>
                     <span className={css.state}>
                       <StatusIcon state={r.State} size={14} />
-                      {requestState(r.State)}
+                      {requestState(r.State, locale)}
                     </span>
                   </td>
-                  <td data-label="仓库">{r.Repo}</td>
-                  <td data-label="对象">
+                  <td data-label={col.repo}>{r.Repo}</td>
+                  <td data-label={col.subject}>
                     <Subject r={r} />
                   </td>
                   <td data-label="commit" className={table.mono}>
                     {short(r.SHA)}
                   </td>
-                  <td data-label="创建" className={table.nowrap}>
+                  <td data-label={col.created} className={table.nowrap}>
                     <Ago t={r.Created} />
                   </td>
                 </tr>
@@ -167,13 +183,13 @@ function AIRequests({ data }: PageProps<Data>) {
             </tbody>
           </table>
         ) : filtered(f) ? (
-          <EmptyState icon={SearchIcon} title="没有符合筛选条件的 AI 请求" secondary={{ label: '清空筛选', href: '/ai/requests' }} />
+          <EmptyState icon={SearchIcon} title={t('aiRequests.noMatch')} secondary={{ label: t('aiRequests.clear'), href: '/ai/requests' }} />
         ) : (
-          <EmptyState icon={CodeReviewIcon} title="还没有 AI 请求">
-            仓库配置了 <code>.kiln/agent/config.yml</code> 后，PR 会触发 AI 审计；加了 <code>kiln:ready</code> 的 Issue 会触发 AI 开发。
+          <EmptyState icon={CodeReviewIcon} title={t('aiRequests.empty')}>
+            <Trans id="aiRequests.emptyBody" tags={{ code: (c) => <code>{c}</code> }} />
           </EmptyState>
         )}
-        {data.Requests.length >= data.Limit && <BoxFooter>只列出最近的 {data.Limit} 个，更早的请用筛选条件查找。</BoxFooter>}
+        {data.Requests.length >= data.Limit && <BoxFooter>{t('aiRequests.limit', { limit: data.Limit })}</BoxFooter>}
       </Box>
     </div>
   )

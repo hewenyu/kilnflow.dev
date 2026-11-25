@@ -1,6 +1,12 @@
 {
  "Page": "ai_dev_item",
- "Title": "工作项 #14 · acme/kiln",
+ "Title": {
+  "id": "aiDevItem.pageTitle",
+  "params": {
+   "id": 14,
+   "repo": "acme/kiln"
+  }
+ },
  "Nav": "ai_dev",
  "Status": 200,
  "Session": {
@@ -260,9 +266,12 @@
     "Type": "develop",
     "Mode": "select",
     "Relation": "claimed_dynamic",
-    "Note": "任务没有在 spec 中固定文档；领取后按工作项冻结快照解析",
+    "Note": {
+     "id": "docsNote.claimedDynamic"
+    },
     "TaskURL": "/ai/tasks/210",
-    "RequestURL": "/ai/requests/140"
+    "RequestURL": "/ai/requests/140",
+    "NoteDetail": ""
    },
    {
     "TaskID": 211,
@@ -270,9 +279,12 @@
     "Type": "develop",
     "Mode": "implement",
     "Relation": "refs_match",
-    "Note": "任务记录的文档引用与当前工作项的冻结依据逐篇一致；任务没有记录整批摘要",
+    "Note": {
+     "id": "docsNote.workItemRefsNoDigest"
+    },
     "TaskURL": "/ai/tasks/211",
-    "RequestURL": "/ai/requests/140"
+    "RequestURL": "/ai/requests/140",
+    "NoteDetail": ""
    },
    {
     "TaskID": 212,
@@ -280,9 +292,12 @@
     "Type": "develop",
     "Mode": "fix",
     "Relation": "mismatch",
-    "Note": "任务记录中的文档引用与当前工作项的冻结依据不一致",
+    "Note": {
+     "id": "docsNote.workItemRefsMismatch"
+    },
     "TaskURL": "/ai/tasks/212",
-    "RequestURL": "/ai/requests/141"
+    "RequestURL": "/ai/requests/141",
+    "NoteDetail": ""
    },
    {
     "TaskID": 213,
@@ -290,9 +305,12 @@
     "Type": "review",
     "Mode": "",
     "Relation": "legacy_pinned",
-    "Note": "迁移前没有记录依据；重跑时按任务记录中的引用核对了工作项冻结快照，逐篇一致",
+    "Note": {
+     "id": "docsNote.legacyPinned"
+    },
     "TaskURL": "/ai/tasks/213",
-    "RequestURL": "/ai/requests/142"
+    "RequestURL": "/ai/requests/142",
+    "NoteDetail": ""
    }
   ]
  }

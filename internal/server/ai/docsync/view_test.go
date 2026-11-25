@@ -2,6 +2,7 @@ package docsync
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -204,8 +205,11 @@ func TestWorkItemSnapshotViewIntegrity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.IntegrityError == "" {
-		t.Fatal("篇数不一致应标记完整性问题")
+	if i := v.Integrity; i == nil || i.Code != IntegrityCountMismatch || i.Count != 5 || i.Actual != len(v.Docs) {
+		t.Fatalf("篇数不一致应标记完整性问题（原因码和两个篇数）：%+v", v.Integrity)
+	}
+	if want := fmt.Sprintf("记录的篇数（5）与文档行数（%d）不一致", len(v.Docs)); v.IntegrityError != want {
+		t.Errorf("中文说明 = %q，应为 %q", v.IntegrityError, want)
 	}
 }
 
@@ -250,7 +254,7 @@ func TestSnapshotSetViewEmptySetIntegrity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(v.IntegrityError, "整批摘要") {
+	if v.Integrity == nil || v.Integrity.Code != IntegrityManifestMismatch || !strings.Contains(v.IntegrityError, "整批摘要") {
 		t.Fatalf("空集合的摘要被改坏时应标记整批摘要的问题：%+v", v)
 	}
 }
@@ -284,5 +288,45 @@ func TestWorkItemSnapshotViewEmptySetIntegrity(t *testing.T) {
 	}
 	if v.ManifestDigest == "" || v.IntegrityError != "" {
 		t.Fatalf("工作项旧记录（没有摘要）按历史元数据计算，不算完整性问题：%+v", v)
+	}
+}
+
+// TestCheckViewIntegrity：每种完整性问题给出自己的原因码和参数（页面按原因码显示），中文说明（CLI、日志）与原因码一致。
+func TestCheckViewIntegrity(t *testing.T) {
+	t.Parallel()
+	good := &SnapshotView{
+		Provider: "outline", BaseURL: "https://outline.example.com", CollectionID: "c", SourceKnown: true,
+		Docs: []DocMeta{{DocID: "d1", Title: "甲", Revision: 1, SHA256: docprovider.Sum("正文")}},
+	}
+	good.ManifestDigest = ManifestDigest(SourceSnapshotSet, good.manifestSource(), viewSnapshots(good.Docs))
+	if i := checkViewIntegrity(SourceSnapshotSet, 1, good); i != nil {
+		t.Fatalf("一致的快照不应有问题：%+v", i)
+	}
+	badDoc := *good
+	badDoc.Docs = []DocMeta{{DocID: "d1", SHA256: "x"}}
+	noManifest := *good
+	noManifest.ManifestDigest = ""
+	otherManifest := *good
+	otherManifest.ManifestDigest = strings.Repeat("0", 64)
+	cases := []struct {
+		v     *SnapshotView
+		count int
+		want  IntegrityIssue
+		zh    string
+	}{
+		{good, 3, IntegrityIssue{Code: IntegrityCountMismatch, Count: 3, Actual: 1}, "记录的篇数（3）与文档行数（1）不一致"},
+		{&badDoc, 1, IntegrityIssue{Code: IntegrityDocDigestInvalid, DocID: "d1"}, "文档 d1 的内容摘要不合法"},
+		{&noManifest, 1, IntegrityIssue{Code: IntegrityManifestInvalid}, "文档快照的整批摘要缺失或不合法"},
+		{&otherManifest, 1, IntegrityIssue{Code: IntegrityManifestMismatch}, "文档快照的整批摘要与记录的元数据不一致"},
+	}
+	for _, c := range cases {
+		got := checkViewIntegrity(SourceSnapshotSet, c.count, c.v)
+		if got == nil || *got != c.want {
+			t.Errorf("%s：问题 = %+v，应为 %+v", c.want.Code, got, c.want)
+			continue
+		}
+		if got.String() != c.zh {
+			t.Errorf("%s：中文说明 = %q，应为 %q", c.want.Code, got.String(), c.zh)
+		}
 	}
 }

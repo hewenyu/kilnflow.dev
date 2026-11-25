@@ -20,7 +20,7 @@ import (
 
 func testAIRequestView(now time.Time) aiRequestView {
 	return aiRequestView{
-		ID: 12, Type: agentcfg.TaskReview, TypeLabel: "AI 审计", Repo: testRepo, Event: "pull_request", Ref: "refs/pull/5/head", SHA: "abc",
+		ID: 12, Type: agentcfg.TaskReview, Repo: testRepo, Event: "pull_request", Ref: "refs/pull/5/head", SHA: "abc",
 		Trigger: "pull_request", Sender: "alice", State: string(ai.RequestFailed), PRNumber: 5, RerunOf: 11, Created: now, Finished: &now,
 	}
 }
@@ -28,14 +28,14 @@ func testAIRequestView(now time.Time) aiRequestView {
 func testAITaskView(now time.Time) aiTaskView {
 	return aiTaskView{
 		ID: 30, RequestID: 12, Key: "review-macos-arm64", DisplayName: "codex · macos-arm64", Platforms: []string{"darwin/arm64"}, Platform: "darwin/arm64", Agent: "codex",
-		State: string(ai.TaskFailed), StateTitle: "失败", Reason: "AI 审计发现 1 个问题", AttemptCount: 1, Runner: "mini", Created: now, Started: &now, Finished: &now,
+		State: string(ai.TaskFailed), Reason: "AI 审计发现 1 个问题", AttemptCount: 1, Runner: "mini", Created: now, Started: &now, Finished: &now,
 	}
 }
 
 func testAIRequestsPage(now time.Time) *aiRequestsPage {
 	return &aiRequestsPage{
 		Requests: []aiRequestView{testAIRequestView(now)}, Filter: aiRequestFilter{Repo: testRepo, PR: 5}, Repos: []string{testRepo},
-		Types: aiTypeOptions, States: aiRequestStateOptions, Limit: aiRequestsLimit,
+		Types: aiTypeOptions(), States: aiRequestStateOptions(), Limit: aiRequestsLimit,
 	}
 }
 
@@ -50,7 +50,7 @@ func testAITaskPage(now time.Time) *aiTaskPage {
 	a := aiAttemptView{ID: 40, Epoch: 1, N: 1, Runner: "mini", Platform: "darwin/arm64", Outcome: "failed", ErrorClass: "ai.findings", Started: now.Unix(), Finished: now.Unix(), Current: true}
 	return &aiTaskPage{
 		Task: testAITaskView(now), Request: testAIRequestView(now), Tasks: []aiTaskView{testAITaskView(now)}, Attempts: []aiAttemptView{a},
-		Attempt: 40, Terminal: true, RequestTerminal: true, CanRerun: true, LogEmpty: "这次 attempt 没有输出日志。", AttemptKey: "current", Spec: "{}",
+		Attempt: 40, Terminal: true, RequestTerminal: true, CanRerun: true, LogEmpty: message(msgAITaskLogNoOutput), AttemptKey: "current", Spec: "{}",
 		Review: &aiReviewView{
 			Agent: "codex", Verdict: aireport.VerdictIssuesFound, PRNumber: 5, HeadSHA: "abc", BaseSHA: "def", ReviewState: "published", Created: now,
 			Report: &aireport.Report{Verdict: aireport.VerdictIssuesFound, Summary: "有问题", Findings: []aireport.Finding{{Title: "空指针", Body: "x"}}},
@@ -249,11 +249,19 @@ func TestPageAIRequests(t *testing.T) {
 	if got := aiRequestIDs(p.Requests); !sameIDs(got, []int64{dev, manual, pr7}) {
 		t.Errorf("列表 = %v", got)
 	}
-	if v := p.Requests[2]; v.PRNumber != 7 || v.Repo != testRepo || v.TypeLabel != "AI 审计" || v.State != string(ai.RequestFailed) {
+	if v := p.Requests[2]; v.PRNumber != 7 || v.Repo != testRepo || v.Type != agentcfg.TaskReview || v.State != string(ai.RequestFailed) {
 		t.Errorf("PR 审计 = %+v", v)
 	}
-	if v := p.Requests[0]; v.TypeLabel != "AI 开发" || v.DevMode != "select" {
+	if v := p.Requests[0]; v.Type != agentcfg.TaskDevelop || v.DevMode != "select" {
 		t.Errorf("开发请求 = %+v", v)
+	}
+	wantPageZH(t, w.Body.String(), "ai_requests", "ai_requests", "AI 请求")
+	// 筛选项的名称是消息（前端按语言显示），取值与 ai.RequestState 一致
+	if got := textsZH(t, []uiText{p.Types[0].Label, p.Types[1].Label}); got[0] != "AI 审计" || got[1] != "AI 开发" {
+		t.Errorf("类型选项 = %v", got)
+	}
+	if len(p.States) != 6 || p.States[1].Value != string(ai.RequestActive) || textZH(t, p.States[1].Label) != "进行中" {
+		t.Errorf("状态选项 = %+v", p.States)
 	}
 	if len(p.Repos) != 1 || p.Repos[0] != testRepo {
 		t.Errorf("仓库选项 = %v", p.Repos)
@@ -289,14 +297,12 @@ func TestPageAIRequest(t *testing.T) {
 
 	w := e.get(e.bob, aiRequestURL(id))
 	wantStatus(t, "AI 请求详情", w, http.StatusOK)
-	if pg := parsePage(t, w.Body.String()); pg.Page != "ai_request" || pg.Nav != "ai_requests" || textZH(t, pg.Title) != "AI 审计请求 #"+strconv.FormatInt(id, 10) {
-		t.Fatalf("页面 = %q，导航 = %q，标题 = %q", pg.Page, pg.Nav, pg.Title)
-	}
+	wantPageZH(t, w.Body.String(), "ai_request", "ai_requests", "AI 审计请求 #"+strconv.FormatInt(id, 10))
 	p := pageData[aiRequestPage](t, w.Body.String())
 	if p.Request.ID != id || p.Request.RerunOf != first || !p.Terminal || !p.CanRerun || !p.HasFailed || len(p.Tasks) != 2 {
 		t.Fatalf("详情 = %+v", p)
 	}
-	if p.Tasks[0].ID != ok || p.Tasks[1].ID != bad || p.Tasks[1].Runner != "mini" || p.Tasks[1].StateTitle != "失败" {
+	if p.Tasks[0].ID != ok || p.Tasks[1].ID != bad || p.Tasks[1].Runner != "mini" || p.Tasks[1].State != string(ai.TaskFailed) {
 		t.Errorf("任务 = %+v", p.Tasks)
 	}
 	// 一组平台的任务：可以执行的平台和实际执行的平台（attempt 记下的）；还没有领取的任务没有执行的平台
@@ -362,14 +368,41 @@ func TestPageAITask(t *testing.T) {
 	if p.Attempt != first || !p.Explicit || p.Viewing == nil || p.Viewing.ID != first || p.AttemptKey != strconv.FormatInt(first, 10) {
 		t.Errorf("指定 attempt = %+v", p)
 	}
-	wantStatus(t, "别的 attempt", e.get(e.bob, aiTaskURL(task)+"?attempt=999999"), http.StatusNotFound)
-	wantStatus(t, "无效的 attempt", e.get(e.bob, aiTaskURL(task)+"?attempt=x"), http.StatusNotFound)
-	wantStatus(t, "不存在的任务", e.get(e.bob, aiTaskURL(task+1000)), http.StatusNotFound)
-
 	// 跳过的任务没有日志
 	skipped := e.addAITask(req, aiTaskOpts{key: "linux-amd64", state: ai.TaskSkipped})
-	if p := pageData[aiTaskPage](t, e.get(e.bob, aiTaskURL(skipped)).Body.String()); !p.NoLog || p.LogEmpty != "这个任务被跳过，没有执行。" || p.Review != nil {
+	if p := pageData[aiTaskPage](t, e.get(e.bob, aiTaskURL(skipped)).Body.String()); !p.NoLog || textZH(t, p.LogEmpty) != "这个任务被跳过，没有执行。" || p.Review != nil {
 		t.Errorf("跳过的任务 = %+v", p)
+	}
+}
+
+// AI 任务详情页的错误：别的任务的 attempt、无效的 attempt 是页面中的说明（404），不存在的任务、下载日志的参数无效是错误页；
+// 说明都是消息。
+func TestPageAITaskErrors(t *testing.T) {
+	t.Parallel()
+	e := newWebEnv(t)
+	req := e.addAIRequest(aiRequestOpts{pr: 5, state: ai.RequestFailed})
+	task := e.addAITask(req, aiTaskOpts{state: ai.TaskFailed})
+	e.addAIAttempt(task, 0, "mini", store.OutcomeFailed)
+
+	w := e.get(e.bob, aiTaskURL(task)+"?attempt=999999")
+	wantStatus(t, "别的 attempt", w, http.StatusNotFound)
+	if got := textZH(t, pageData[aiTaskPage](t, w.Body.String()).AttemptErr); got != "这个任务没有 attempt #999999（可能属于别的任务，或编号写错了）。" {
+		t.Errorf("别的 attempt 的说明 = %q", got)
+	}
+	w = e.get(e.bob, aiTaskURL(task)+"?attempt=x")
+	wantStatus(t, "无效的 attempt", w, http.StatusNotFound)
+	if got := textZH(t, pageData[aiTaskPage](t, w.Body.String()).AttemptErr); got != `地址中的 attempt 参数无效（"x"），应为这个任务的某次 attempt 的编号。` {
+		t.Errorf("无效的 attempt 的说明 = %q", got)
+	}
+	w = e.get(e.bob, aiTaskURL(task+1000))
+	wantStatus(t, "不存在的任务", w, http.StatusNotFound)
+	if got := pageTextZH(t, w.Body.String()); !strings.Contains(got, "没有编号为 "+strconv.FormatInt(task+1000, 10)+" 的 AI 任务") {
+		t.Errorf("不存在的任务的说明 = %q", got)
+	}
+	w = e.get(e.bob, aiTaskURL(task)+"/log/download?attempt=x")
+	wantStatus(t, "下载日志的 attempt 无效", w, http.StatusBadRequest)
+	if got := pageTextZH(t, w.Body.String()); !strings.Contains(got, `attempt 参数无效（"x"）`) {
+		t.Errorf("下载日志的 attempt 无效的说明 = %q", got)
 	}
 }
 
@@ -434,12 +467,12 @@ func TestPostAIRequestActions(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM ai_tasks WHERE id=$1 AND state='cancelled'`, task); n != 0 {
 		t.Fatal("CSRF 不对时不应取消")
 	}
-	flash := wantRedirect(t, "进行中的请求不能重跑", e.post(e.bob, aiRequestURL(id)+"/rerun", url.Values{"mode": {"all"}}), aiRequestURL(id))
-	if !strings.Contains(flash, "重跑失败") {
+	flash := flashZH(t, wantRedirect(t, "进行中的请求不能重跑", e.post(e.bob, aiRequestURL(id)+"/rerun", url.Values{"mode": {"all"}}), aiRequestURL(id)))
+	if !strings.Contains(flash, "重跑失败：") {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "取消", e.post(e.bob, aiRequestURL(id)+"/cancel", nil), aiRequestURL(id))
-	if !strings.Contains(flash, "已请求取消") {
+	flash = flashZH(t, wantRedirect(t, "取消", e.post(e.bob, aiRequestURL(id)+"/cancel", nil), aiRequestURL(id)))
+	if flash != "已请求取消：没有开始的任务立即结束，执行中的任务由 AI 执行节点确认后结束。" {
 		t.Errorf("提示 = %q", flash)
 	}
 	if n := e.count(`SELECT count(*) FROM ai_tasks WHERE id=$1 AND state='cancelled'`, task); n != 1 {
@@ -448,18 +481,22 @@ func TestPostAIRequestActions(t *testing.T) {
 	if a := e.audits("ai_request.cancel"); len(a) != 1 || a[0].Actor != "bob" {
 		t.Errorf("取消的审计日志 = %+v", a)
 	}
-	flash = wantRedirect(t, "取消不存在的请求", e.post(e.bob, aiRequestURL(id+100)+"/cancel", nil), aiRequestURL(id+100))
-	if !strings.Contains(flash, "取消失败") {
+	flash = flashZH(t, wantRedirect(t, "取消不存在的请求", e.post(e.bob, aiRequestURL(id+100)+"/cancel", nil), aiRequestURL(id+100)))
+	if !strings.Contains(flash, "取消失败：") {
 		t.Errorf("提示 = %q", flash)
 	}
 
 	dev := e.addAIRequest(aiRequestOpts{typ: agentcfg.TaskDevelop, devMode: "select", state: ai.RequestFailed})
 	devTask := e.addAITask(dev, aiTaskOpts{state: ai.TaskFailed})
-	flash = wantRedirect(t, "开发任务不能重跑", e.post(e.bob, aiTaskURL(devTask)+"/rerun", nil), aiTaskURL(devTask))
-	if !strings.Contains(flash, "重跑失败") {
+	flash = flashZH(t, wantRedirect(t, "开发任务不能重跑", e.post(e.bob, aiTaskURL(devTask)+"/rerun", nil), aiTaskURL(devTask)))
+	if !strings.Contains(flash, "重跑失败：") {
 		t.Errorf("提示 = %q", flash)
 	}
-	wantStatus(t, "重跑不存在的任务", e.post(e.bob, aiTaskURL(devTask+1000)+"/rerun", nil), http.StatusNotFound)
+	w := e.post(e.bob, aiTaskURL(devTask+1000)+"/rerun", nil)
+	wantStatus(t, "重跑不存在的任务", w, http.StatusNotFound)
+	if got := pageTextZH(t, w.Body.String()); !strings.Contains(got, "没有编号为 "+strconv.FormatInt(devTask+1000, 10)+" 的 AI 任务，没有执行任何操作。") {
+		t.Errorf("重跑不存在的任务的说明 = %q", got)
+	}
 }
 
 // AI 执行节点页面：只列出 AI 执行节点（CI Runner 在 CI 的页面），带角色、Orca Server、Agent、并发上限和正在执行的任务

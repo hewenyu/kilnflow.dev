@@ -1,6 +1,8 @@
 {
   "Page": "ai_requests",
-  "Title": "AI 请求",
+  "Title": {
+    "id": "aiRequests.pageTitle"
+  },
   "Nav": "ai_requests",
   "Status": 200,
   "Session": {
@@ -18,7 +20,6 @@
       {
         "ID": 90,
         "Type": "develop",
-        "TypeLabel": "AI 开发",
         "Repo": "acme/kiln",
         "Event": "issues",
         "Ref": "refs/heads/master",
@@ -41,7 +42,6 @@
       {
         "ID": 91,
         "Type": "review",
-        "TypeLabel": "AI 审计",
         "Repo": "acme/kiln",
         "Event": "pull_request",
         "Ref": "refs/pull/74/head",
@@ -64,7 +64,6 @@
       {
         "ID": 88,
         "Type": "review",
-        "TypeLabel": "AI 审计",
         "Repo": "acme/kiln",
         "Event": "pull_request",
         "Ref": "refs/pull/74/head",
@@ -98,37 +97,53 @@
     "Types": [
       {
         "Value": "review",
-        "Label": "AI 审计"
+        "Label": {
+          "id": "aiType.review"
+        }
       },
       {
         "Value": "develop",
-        "Label": "AI 开发"
+        "Label": {
+          "id": "aiType.develop"
+        }
       }
     ],
     "States": [
       {
         "Value": "queued",
-        "Label": "排队中"
+        "Label": {
+          "id": "aiRequestState.queued"
+        }
       },
       {
         "Value": "active",
-        "Label": "进行中"
+        "Label": {
+          "id": "aiRequestState.active"
+        }
       },
       {
         "Value": "succeeded",
-        "Label": "成功"
+        "Label": {
+          "id": "aiRequestState.succeeded"
+        }
       },
       {
         "Value": "failed",
-        "Label": "失败"
+        "Label": {
+          "id": "aiRequestState.failed"
+        }
       },
       {
         "Value": "cancelled",
-        "Label": "已取消"
+        "Label": {
+          "id": "aiRequestState.cancelled"
+        }
       },
       {
         "Value": "skipped",
-        "Label": "已跳过"
+        "Label": {
+          "id": "aiRequestState.skipped"
+        }
       }
     ],
     "Limit": 100

@@ -115,8 +115,8 @@ export function labelVariant(t: Tone): 'success' | 'danger' | 'attention' | 'sec
   }
 }
 
-/** label 返回 group.value 的说明（例如 runState.queued）；value 为空时用 emptyKey，词典中没有时原样返回 value。 */
-function label(locale: Locale, group: string, value: string, emptyKey?: string): string {
+/** enumLabel 返回 group.value 的说明（例如 runState.queued）；value 为空时用 emptyKey，词典中没有时原样返回 value。 */
+export function enumLabel(locale: Locale, group: string, value: string, emptyKey?: string): string {
   const key = `${group}.${value === '' && emptyKey ? emptyKey : value}`
   return isMsgKey(key) ? tr(locale, key) : value
 }
@@ -148,12 +148,12 @@ export function stateTone(state: string): Tone {
 
 /** runState 返回 run 状态的说明；未知的值原样返回。 */
 export function runState(state: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'runState', state)
+  return enumLabel(locale, 'runState', state)
 }
 
 /** jobState 返回 job 状态的说明；未知的值原样返回。 */
 export function jobState(state: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'jobState', state)
+  return enumLabel(locale, 'jobState', state)
 }
 
 /** jobStatesSummary 返回一组 job 状态的文字说明，例如"4 个 job：成功 1，执行中 2，等待上游 1"。 */
@@ -169,7 +169,7 @@ export function jobStatesSummary(states: readonly string[], locale: Locale = def
 
 /** outcome 返回 attempt 结果（空值表示还在执行）的说明；未知的值原样返回。 */
 export function outcome(o: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'outcome', o, 'running')
+  return enumLabel(locale, 'outcome', o, 'running')
 }
 
 /** outcomeTone 返回 attempt 结果的大类。 */
@@ -190,7 +190,7 @@ export function outcomeTone(o: string): Tone {
 
 /** eventLabel 返回触发事件的说明；未知的值原样返回。 */
 export function eventLabel(event: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'event', event)
+  return enumLabel(locale, 'event', event)
 }
 
 /** refName 返回 ref 的简短名称，例如 refs/heads/main → main、refs/tags/v1.2.0 → v1.2.0。 */
@@ -215,12 +215,12 @@ export function rerunLabel(n: number, locale: Locale = defaultLocale): string {
 
 /** releaseState 返回发布状态的说明；未知的值原样返回。 */
 export function releaseState(state: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'releaseState', state)
+  return enumLabel(locale, 'releaseState', state)
 }
 
 /** targetState 返回发布目标状态的说明；未知的值原样返回。 */
 export function targetState(state: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'targetState', state)
+  return enumLabel(locale, 'targetState', state)
 }
 
 /** targetTone 返回发布目标状态的大类。 */
@@ -239,12 +239,12 @@ export function targetTone(state: string): Tone {
 
 /** targetKind 返回发布目标种类的说明；未知的值原样返回。 */
 export function targetKind(kind: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'targetKind', kind)
+  return enumLabel(locale, 'targetKind', kind)
 }
 
 /** outboxState 返回 outbox 投递状态的说明；未知的值原样返回。 */
 export function outboxState(state: string, locale: Locale = defaultLocale): string {
-  return label(locale, 'outboxState', state)
+  return enumLabel(locale, 'outboxState', state)
 }
 
 /** tokenActor 是还没有绑定 GitHub 账号时 admin token 的操作者（与服务端 admin.TokenActor 相同）。 */

@@ -30,9 +30,6 @@ const (
 	runWorkflowsLimit = 200
 )
 
-// option 是下拉框的一个选项。
-type option struct{ Value, Label string }
-
 // textOption 是下拉框的一个选项，Label 是消息或原样的文字（见 text.go）。
 type textOption struct {
 	Value string

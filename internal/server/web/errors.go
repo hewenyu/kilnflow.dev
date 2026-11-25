@@ -90,12 +90,7 @@ func (d *Dashboard) notFoundText(w http.ResponseWriter, r *http.Request, reason 
 	d.showError(w, r, p)
 }
 
-// badRequest 返回 400 错误页（地址中的参数无效）；reason 原样显示。
-func (d *Dashboard) badRequest(w http.ResponseWriter, r *http.Request, reason string) {
-	d.badRequestText(w, r, rawText(reason))
-}
-
-// badRequestText 与 badRequest 相同，reason 是消息或原样的文字。
+// badRequestText 返回 400 错误页（地址中的参数无效）；reason 是消息或原样的文字。
 func (d *Dashboard) badRequestText(w http.ResponseWriter, r *http.Request, reason uiText) {
 	d.showError(w, r, &errorPage{
 		Status: http.StatusBadRequest, Heading: message(msgErrBadRequestHeading), Reason: reason, Links: []errorLink{listLink()},

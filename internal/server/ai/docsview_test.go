@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -230,6 +231,9 @@ func TestRequestDocsViewSources(t *testing.T) {
 	if v.Error == "" || v.View == nil || v.View.Source != "none" {
 		t.Fatalf("摘要不一致应报错且不展示依据：%+v", v)
 	}
+	if v.Issue == nil || v.Issue.Code != IssueRequestSetDigest || v.Error != "请求记录的摘要与文档快照集不一致" {
+		t.Errorf("摘要不一致的原因码与中文说明：%+v，%q", v.Issue, v.Error)
+	}
 	if _, err := f.core.RequestDocContent(f.ctx, 22, "d1"); !errors.Is(err, ErrDocsBasisConflict) {
 		t.Errorf("摘要不一致时读取正文应返回冲突：%v", err)
 	}
@@ -247,15 +251,19 @@ func TestRequestDocsViewSources(t *testing.T) {
 	if _, err := f.core.RequestDocContent(f.ctx, 23, "d1"); !errors.Is(err, ErrDocsBasisMissing) {
 		t.Errorf("legacy 读取正文应返回没有依据：%v", err)
 	}
+}
 
-	// 4. 开发请求通过工作项快照读取。
+// 开发请求通过工作项快照读取：选题时还没有工作项，返修请求按工作项的冻结快照。
+func TestRequestDocsViewDevelop(t *testing.T) {
+	t.Parallel()
+	f := newDocsFixture(t)
 	f.insertRequest(24, "develop")
 	attempt := f.insertDevTask(24, 24, map[string]any{"mode": "select"})
 	f.insertDevRequest(24, nil)
 	f.insertWorkItem(30, attempt)
 	f.freezeWorkItem(30, []docsync.Snapshot{docSnap("w1", "设计", "工作项正文")})
 	// 开发请求在选题时还没有工作项（work_item_id 为空）：没有依据，不按 claim_attempt 反推。
-	v, err = f.core.RequestDocsView(f.ctx, 24)
+	v, err := f.core.RequestDocsView(f.ctx, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,6 +327,9 @@ func TestTaskDocsView(t *testing.T) {
 	}
 	if v.Error == "" {
 		t.Fatalf("spec 与明细不一致应给出错误：%+v", v)
+	}
+	if v.Issue == nil || v.Issue.Code != IssueTaskSpecMismatch || v.Issue.TaskID != 44 || v.Error != "设计依据记录不一致：AI 任务 #44 的文档依据与请求明细不一致" {
+		t.Errorf("spec 不一致的原因码与中文说明：%+v，%q", v.Issue, v.Error)
 	}
 	if _, err := f.core.TaskDocContent(f.ctx, 44, "r1"); !errors.Is(err, ErrDocsBasisConflict) {
 		t.Errorf("不一致的任务读取正文应返回冲突：%v", err)
@@ -523,6 +534,58 @@ func TestRelatedTasksRelations(t *testing.T) {
 		if got[id] != rel {
 			t.Errorf("任务 #%d 的关系 = %q，期望 %q（全部：%v）", id, got[id], rel, got)
 		}
+	}
+	// 关系说明给出原因码（页面按语言显示），Note 是同一个原因的中文说明；依据记录不一致时带上具体原因。
+	notes := map[int64]RelationNote{
+		50: NoteClaimedDynamic, 51: NoteItemRefsNoDigest, 52: NoteLegacyPinned, 53: NoteItemRefsMismatch,
+		54: NoteSameBasis, 56: NoteBasisConflict, 57: NoteBasisConflict,
+	}
+	for _, v := range list {
+		want, ok := notes[v.TaskID]
+		if !ok {
+			continue
+		}
+		if v.NoteCode != want {
+			t.Errorf("任务 #%d 的说明 = %q，期望 %q", v.TaskID, v.NoteCode, want)
+			continue
+		}
+		if want != NoteBasisConflict {
+			if v.Note != want.String() || v.Issue != nil || v.Detail != "" {
+				t.Errorf("任务 #%d：说明 %q，原因 %+v %q", v.TaskID, v.Note, v.Issue, v.Detail)
+			}
+			continue
+		}
+		if v.Issue == nil || v.Issue.Code != IssueTaskDevRequestMismatch || v.Issue.TaskID != v.TaskID || v.Issue.RequestID != v.RequestID {
+			t.Errorf("任务 #%d 的具体原因 = %+v", v.TaskID, v.Issue)
+		}
+		if v.Detail != v.Issue.Error() || v.Note != want.String()+"："+v.Detail {
+			t.Errorf("任务 #%d：说明 %q，原文 %q", v.TaskID, v.Note, v.Detail)
+		}
+	}
+}
+
+// TestDocsIssueText：每个原因码都有自己的中文说明；作为错误时是 ErrDocsBasisConflict，说明带前缀。
+func TestDocsIssueText(t *testing.T) {
+	t.Parallel()
+	e := &DocsIssue{Code: IssueTaskWorkItemMissing, TaskID: 3, WorkItemID: 9}
+	if e.Detail() != "AI 任务 #3 引用的工作项 #9 不存在" || e.Error() != "设计依据记录不一致：AI 任务 #3 引用的工作项 #9 不存在" {
+		t.Errorf("说明 = %q / %q", e.Detail(), e.Error())
+	}
+	if !errors.Is(fmt.Errorf("包装：%w", e), ErrDocsBasisConflict) {
+		t.Error("应是 ErrDocsBasisConflict")
+	}
+	if got := (&DocsIssue{Code: "future"}).Detail(); got != "future" {
+		t.Errorf("不认识的原因码原样显示：%q", got)
+	}
+	seen := map[string]RelationNote{}
+	for _, n := range RelationNotes() {
+		if n.String() == string(n) {
+			t.Errorf("%s 没有中文说明", n)
+		}
+		if prev, dup := seen[n.String()]; dup {
+			t.Errorf("%s 与 %s 的说明相同：同一条说明只定义一次", n, prev)
+		}
+		seen[n.String()] = n
 	}
 }
 

@@ -6,16 +6,20 @@ import { useRefreshLock } from '../../app/live'
 import { Box, BoxHeader, BoxRow } from '../../components/Box'
 import { Callout } from '../../components/Callout'
 import { Ago } from '../../components/Time'
+import { Msg, Trans, useLocale, useT } from '../../i18n/locale'
+import { isEmpty, msg, translate, type Locale, type MsgKey, type Params, type Text } from '../../i18n/messages'
 import { loginURL } from '../../lib/api'
-import { short } from '../../lib/format'
+import { enumLabel, short } from '../../lib/format'
 import { lookup } from '../../lib/lookup'
 import table from '../settings_people.module.css'
 import { sourceText, type DesignBasisData, type DocMeta, type RelatedTask } from './docs'
+import { devModeText } from './parts'
 import css from './DesignBasis.module.css'
 
 // 设计依据：展示冻结时保存的文档元数据与来源，正文只在点击后单独读取。
 // 页面数据每 5 秒刷新，但不含正文；刷新不会重新扫描 Outline，也不会重新读已经看过的正文。
-// 历史快照没有记录来源时如实标注，绝不用当前仓库绑定补造。
+// 历史快照没有记录来源时如实标注，绝不用当前仓库绑定补造。界面文字按语言显示；文档标题、文档集名称和正文是外部文档的
+// 原文，原样显示。
 
 /** here 是当前页面地址：登录后回到这里。 */
 const here = () => window.location.pathname + window.location.search
@@ -30,12 +34,65 @@ const docContentSchema = z.object({
 })
 type DocContent = z.infer<typeof docContentSchema>
 
+/**
+ * ContentError 是读取正文失败的原因。只保存结构化的信息，显示时按当前语言翻译（contentErrorText）：切换语言时打开的
+ * 对话框立即换成新语言的说明，不关闭、不重新读取。
+ */
+type ContentError = {
+  /** 服务端给的错误码（docs.go 的 docContentError.code）；没有时为空。 */
+  code: string
+  /** 服务端给的说明（docContentError.message）：只在错误码不认识或缺失时显示。 */
+  fallback: string
+  /** 登录已过期：提示重新登录，不提供重试。 */
+  relogin: boolean
+  /** 前端自己发现的错误：badResponse（响应格式不对）、network（连接不上）；服务端给了错误响应时为 null。 */
+  client: 'badResponse' | 'network' | null
+  /** HTTP 状态码（没有响应时为 0）。 */
+  status: number
+}
+
 type View =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'ready'; doc: DocContent }
   | { kind: 'purged' }
-  | { kind: 'error'; message: string; relogin: boolean }
+  | { kind: 'error'; error: ContentError }
+
+/** contentErrorCodes 是正文接口的错误码（docs.go），每个都有词典中的说明 docContentError.<code>。 */
+const contentErrorCodes = new Set(['unauthorized', 'content_purged', 'basis_conflict', 'no_basis', 'not_found', 'doc_not_found', 'invalid_request', 'internal'])
+
+/** contentErrorText 返回读取正文失败的说明：认识的错误码按词典翻译，不认识或没有错误码时显示服务端的说明，都没有时说明 HTTP 状态。 */
+export function contentErrorText(e: ContentError, locale: Locale): string {
+  const t = (id: MsgKey, params?: Params) => translate(locale, msg(id, params))
+  if (e.client === 'network') return t('docContentError.network')
+  if (e.client === 'badResponse') return t('docContentError.badResponse')
+  switch (contentErrorCodes.has(e.code) ? e.code : '') {
+    case 'unauthorized':
+      return t('docContentError.unauthorized')
+    case 'content_purged':
+      return t('docContentError.content_purged')
+    case 'basis_conflict':
+      return t('docContentError.basis_conflict')
+    case 'no_basis':
+      return t('docContentError.no_basis')
+    case 'not_found':
+      return t('docContentError.not_found')
+    case 'doc_not_found':
+      return t('docContentError.doc_not_found')
+    case 'invalid_request':
+      return t('docContentError.invalid_request')
+    case 'internal':
+      return t('docContentError.internal')
+  }
+  return e.fallback || t('docContentError.http', { status: e.status })
+}
+
+/** field 返回响应体中字符串字段 name 的值；没有或不是字符串时为空。 */
+function field(body: unknown, name: string): string {
+  if (body === null || typeof body !== 'object' || !(name in body)) return ''
+  const v: unknown = Reflect.get(body, name)
+  return typeof v === 'string' ? v : ''
+}
 
 /** contentKey 标识一篇文档的一次冻结版本（正文缓存的键）。 */
 function contentKey(base: string, d: DocMeta): string {
@@ -62,6 +119,8 @@ function ContentDialog({
   onPurged: () => void
   onClose: () => void
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   const key = contentKey(base, doc)
   const [attempt, setAttempt] = useState(0)
   const [view, setView] = useState<View>(() =>
@@ -88,7 +147,8 @@ function ContentDialog({
         const body: unknown = await res.json().catch(() => null)
         if (ctrl.signal.aborted) return
         if (res.status === 401) {
-          setView({ kind: 'error', message: '登录已过期，请重新登录后再查看。', relogin: true })
+          const code = field(body, 'code') || 'unauthorized'
+          setView({ kind: 'error', error: { code, fallback: field(body, 'message'), relogin: true, client: null, status: res.status } })
           return
         }
         if (res.status === 410) {
@@ -97,44 +157,40 @@ function ContentDialog({
           return
         }
         if (!res.ok) {
-          const message =
-            body !== null && typeof body === 'object' && 'message' in body && typeof body.message === 'string'
-              ? body.message
-              : `读取失败（HTTP ${res.status}）。`
-          setView({ kind: 'error', message, relogin: false })
+          setView({ kind: 'error', error: { code: field(body, 'code'), fallback: field(body, 'message'), relogin: false, client: null, status: res.status } })
           return
         }
         const parsed = docContentSchema.safeParse(body)
         if (!parsed.success) {
-          setView({ kind: 'error', message: '服务器返回的正文格式不对，请刷新页面重试。', relogin: false })
+          setView({ kind: 'error', error: { code: '', fallback: '', relogin: false, client: 'badResponse', status: res.status } })
           return
         }
         cache.current.set(key, parsed.data)
         setView({ kind: 'ready', doc: parsed.data })
       } catch (err) {
         if (ctrl.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return
-        setView({ kind: 'error', message: '连接不上 Kiln Server。检查网络后重试。', relogin: false })
+        setView({ kind: 'error', error: { code: '', fallback: '', relogin: false, client: 'network', status: 0 } })
       }
     })()
     return () => ctrl.abort()
   }, [base, doc.DocID, key, purged, initial, cache, attempt])
 
   return (
-    <Dialog title={doc.Title} subtitle={`修订 r${doc.Revision} · 冻结时保存的正文`} onClose={onClose} width="large">
+    <Dialog title={doc.Title} subtitle={t('designBasis.dialogSubtitle', { revision: doc.Revision })} onClose={onClose} width="large">
       <div className={css.dialog}>
-        {view.kind === 'loading' && <p className={css.muted}>正在读取冻结的正文…</p>}
+        {view.kind === 'loading' && <p className={css.muted}>{t('designBasis.loading')}</p>}
         {view.kind === 'purged' && (
-          <Callout tone="warning" title="正文已清理">
-            这篇文档的正文已按保留策略清理，只保留了标题、修订号和指纹。页面不会为它恢复旧正文。
+          <Callout tone="warning" title={t('designBasis.purgedTitle')}>
+            {t('designBasis.purgedBody')}
           </Callout>
         )}
         {view.kind === 'error' && (
-          <Callout tone="critical" title="没有读到正文">
-            {view.message}
-            {view.relogin && (
+          <Callout tone="critical" title={t('designBasis.failedTitle')}>
+            {contentErrorText(view.error, locale)}
+            {view.error.relogin && (
               <>
                 {' '}
-                <Link href={loginURL(here())}>重新登录</Link>
+                <Link href={loginURL(here())}>{t('designBasis.relogin')}</Link>
               </>
             )}
           </Callout>
@@ -142,25 +198,28 @@ function ContentDialog({
         {view.kind === 'ready' && (
           <>
             <p className={css.muted}>
-              指纹 <code title={view.doc.sha256}>{short(view.doc.sha256)}</code> · 按纯文本显示，文档中的 Markdown
-              由你自行判断，页面不执行其中的任何标记。
+              <Trans
+                id="designBasis.plain"
+                params={{ digest: short(view.doc.sha256) }}
+                tags={{ code: (c) => <code title={view.doc.sha256}>{c}</code> }}
+              />
             </p>
             <pre className={css.content}>{view.doc.content}</pre>
           </>
         )}
         <div className={css.dialogActions}>
-          {view.kind === 'error' && !view.relogin && (
+          {view.kind === 'error' && !view.error.relogin && (
             <Button
               onClick={() => {
                 setView({ kind: 'loading' })
                 setAttempt((n) => n + 1)
               }}
             >
-              重试
+              {t('designBasis.retry')}
             </Button>
           )}
           <Button variant="primary" onClick={onClose}>
-            关闭
+            {t('designBasis.close')}
           </Button>
         </div>
       </div>
@@ -173,15 +232,17 @@ function DocsTable({ docs, base }: { docs: DocMeta[]; base: string }) {
   const [open, setOpen] = useState<{ doc: DocMeta; initial: DocContent | null } | null>(null)
   const [cleaned, setCleaned] = useState<ReadonlySet<string>>(() => new Set())
   const cache = useRef(new Map<string, DocContent>())
+  const t = useT()
+  const col = { doc: t('designBasis.colDoc'), revision: t('designBasis.colRevision'), digest: t('designBasis.colDigest'), content: t('designBasis.colContent') }
   return (
     <>
-      <table className={table.table} aria-label="冻结的设计文档">
+      <table className={table.table} aria-label={t('designBasis.docsLabel')}>
         <thead>
           <tr>
-            <th scope="col">文档</th>
-            <th scope="col">修订</th>
-            <th scope="col">指纹</th>
-            <th scope="col">正文</th>
+            <th scope="col">{col.doc}</th>
+            <th scope="col">{col.revision}</th>
+            <th scope="col">{col.digest}</th>
+            <th scope="col">{col.content}</th>
           </tr>
         </thead>
         <tbody>
@@ -189,29 +250,29 @@ function DocsTable({ docs, base }: { docs: DocMeta[]; base: string }) {
             const purgedDoc = d.Purged || cleaned.has(contentKey(base, d))
             return (
               <tr key={d.DocID}>
-                <td data-label="文档">
+                <td data-label={col.doc}>
                   <FileIcon className={css.fileIcon} aria-hidden /> {d.Title || d.DocID}
                   {d.URL && (
-                    <a className={css.ext} href={d.URL} target="_blank" rel="noreferrer" title="在 Outline 中打开这篇文档">
-                      <LinkExternalIcon aria-label="在 Outline 中打开" />
+                    <a className={css.ext} href={d.URL} target="_blank" rel="noreferrer" title={t('designBasis.openTitle')}>
+                      <LinkExternalIcon aria-label={t('designBasis.open')} />
                     </a>
                   )}
                   <div className={css.docID}>
                     <code>{d.DocID}</code>
                   </div>
                 </td>
-                <td data-label="修订" className={table.nowrap}>
+                <td data-label={col.revision} className={table.nowrap}>
                   r{d.Revision}
                 </td>
-                <td data-label="指纹" className={table.mono}>
+                <td data-label={col.digest} className={table.mono}>
                   <code title={d.SHA256}>{short(d.SHA256)}</code>
                 </td>
-                <td data-label="正文" className={table.nowrap}>
+                <td data-label={col.content} className={table.nowrap}>
                   {purgedDoc ? (
-                    <span className={css.muted}>已按保留策略清理</span>
+                    <span className={css.muted}>{t('designBasis.docPurged')}</span>
                   ) : (
                     <Button size="small" onClick={() => setOpen({ doc: d, initial: cache.current.get(contentKey(base, d)) ?? null })}>
-                      查看正文
+                      {t('designBasis.view')}
                     </Button>
                   )}
                 </td>
@@ -266,43 +327,47 @@ export function DesignBasis({
   basisSource?: string
   workItemURL?: string
   snapshotSetID?: number
-  error?: string
+  /** 记录不一致的原因（服务端给的消息）。 */
+  error?: Text
   integrityHint?: string
 }) {
+  const t = useT()
+  const { locale } = useLocale()
   const show = basis !== null && basis.Frozen && basis.Source !== 'none'
   const collection = basis && basis.CollectionName ? basis.CollectionName : basis?.CollectionID
+  const unknown = t('designBasis.unknown')
   return (
     <Box as="section" aria-labelledby="design-basis">
-      <BoxHeader id="design-basis" title="设计依据">
-        {basis && <Label variant={show ? 'accent' : 'secondary'}>{show ? sourceText(basis.Source) : '没有依据'}</Label>}
+      <BoxHeader id="design-basis" title={t('designBasis.title')}>
+        {basis && <Label variant={show ? 'accent' : 'secondary'}>{show ? sourceText(basis.Source, locale) : t('designBasis.none')}</Label>}
       </BoxHeader>
       <BoxRow className={css.block}>
-        {error && (
-          <Callout tone="warning" title="设计依据的记录与实际快照不一致">
-            {error} 页面不会把它当作正常依据，也不会用当前绑定补造。
+        {!isEmpty(error) && (
+          <Callout tone="warning" title={t('designBasis.errorTitle')}>
+            <Msg text={error} /> {t('designBasis.errorNote')}
           </Callout>
         )}
         {declaredSource !== undefined && (
           <p className={css.p}>
-            请求记录的来源：{declared ? sourceText(declaredSource) : '迁移前，没有记录'}
+            {t('designBasis.declared', { source: declared ? sourceText(declaredSource, locale) : t('designBasis.notDeclared') })}
             {workItemURL && (
               <>
                 {' '}
-                · <Link href={workItemURL}>关联的工作项</Link>
+                · <Link href={workItemURL}>{t('designBasis.workItem')}</Link>
               </>
             )}
             {snapshotSetID !== undefined && snapshotSetID > 0 && (
               <>
                 {' '}
-                · 快照集 <code>#{snapshotSetID}</code>
+                · {t('designBasis.snapshotSet')} <code>#{snapshotSetID}</code>
               </>
             )}
           </p>
         )}
         {basisSource !== undefined && basisSource !== declaredSource && (
           <p className={css.p}>
-            实际可读的依据：{sourceText(basisSource)}
-            <span className={css.muted}>（请求记录与实际解析不同，下面展示实际保存的快照）</span>
+            {t('designBasis.actual', { source: sourceText(basisSource, locale) })}
+            <span className={css.muted}>{t('designBasis.actualNote')}</span>
           </p>
         )}
         {!show ? (
@@ -310,13 +375,13 @@ export function DesignBasis({
         ) : (
           <>
             <dl className={css.kv}>
-              <dt>冻结时间</dt>
-              <dd>{basis.FrozenAt ? <Ago t={basis.FrozenAt} /> : '未知'}</dd>
-              <dt>来源</dt>
+              <dt>{t('designBasis.frozenAt')}</dt>
+              <dd>{basis.FrozenAt ? <Ago t={basis.FrozenAt} /> : unknown}</dd>
+              <dt>{t('designBasis.source')}</dt>
               <dd>
                 {basis.SourceKnown ? (
                   <>
-                    {basis.Provider || '未知提供方'}
+                    {basis.Provider || t('designBasis.unknownProvider')}
                     {basis.SiteURL ? (
                       <>
                         {' '}
@@ -339,39 +404,39 @@ export function DesignBasis({
                         )}
                       </>
                     )}
-                    {basis.BindingGeneration > 0 && <span className={css.muted}> · 绑定第 {basis.BindingGeneration} 代</span>}
+                    {basis.BindingGeneration > 0 && <span className={css.muted}>{t('designBasis.generation', { n: basis.BindingGeneration })}</span>}
                   </>
                 ) : (
-                  <span className={css.muted}>历史快照没有记录来源；下面是当时保存的文档，不按当前仓库绑定解释</span>
+                  <span className={css.muted}>{t('designBasis.sourceUnknown')}</span>
                 )}
               </dd>
-              <dt>文档数</dt>
+              <dt>{t('designBasis.docCount')}</dt>
               <dd>
                 {basis.DocCount}
-                {basis.DocCount === 0 && <span className={css.muted}>（冻结的是一个空集合，不是读取失败）</span>}
+                {basis.DocCount === 0 && <span className={css.muted}>{t('designBasis.emptySet')}</span>}
               </dd>
-              <dt>摘要</dt>
+              <dt>{t('designBasis.digest')}</dt>
               <dd>
                 <code className={css.digest} title={basis.ManifestDigest}>
-                  {basis.ManifestDigest || '未记录'}
+                  {basis.ManifestDigest || t('designBasis.notRecorded')}
                 </code>
               </dd>
             </dl>
             {integrityHint && <p className={css.muted}>{integrityHint}</p>}
-            {basis.IntegrityError && (
-              <Callout tone="warning" title="快照的元数据不一致">
-                {basis.IntegrityError} 这可能来自清理或人工改库，请以数据库记录为准排查。
+            {!isEmpty(basis.IntegrityError) && (
+              <Callout tone="warning" title={t('designBasis.integrityTitle')}>
+                <Msg text={basis.IntegrityError} /> {t('designBasis.integrityNote')}
               </Callout>
             )}
             {basis.ContentPurgedAt && (basis.DocCount > 0 || basis.Docs.length > 0) && (
               <p className={css.muted}>
-                正文已于 <Ago t={basis.ContentPurgedAt} /> 按保留策略清理；标题、修订号和指纹仍然保留。
+                <Trans id="designBasis.purged" tags={{ ago: () => <Ago t={basis.ContentPurgedAt} /> }} />
               </p>
             )}
             {basis.Docs.length > 0 ? (
               <DocsTable docs={basis.Docs} base={contentBase} />
             ) : (
-              <p className={css.muted}>这个快照是空集合，没有文档。</p>
+              <p className={css.muted}>{t('designBasis.noDocs')}</p>
             )}
           </>
         )}
@@ -382,6 +447,7 @@ export function DesignBasis({
 
 /** RequestDesignBasis 是 AI 请求页面的设计依据。 */
 export function RequestDesignBasis({ view }: { view: RequestDocsViewData }) {
+  const t = useT()
   return (
     <DesignBasis
       basis={view.Basis}
@@ -391,13 +457,14 @@ export function RequestDesignBasis({ view }: { view: RequestDocsViewData }) {
       workItemURL={view.WorkItemURL}
       snapshotSetID={view.SnapshotSetID}
       error={view.Error}
-      emptyText={requestEmptyText(view)}
+      emptyText={t(requestEmptyText(view))}
     />
   )
 }
 
 /** TaskDesignBasis 是 AI 任务页面的设计依据。 */
 export function TaskDesignBasis({ view }: { view: TaskDocsViewData }) {
+  const t = useT()
   return (
     <DesignBasis
       basis={view.Basis}
@@ -405,24 +472,24 @@ export function TaskDesignBasis({ view }: { view: TaskDocsViewData }) {
       declaredSource={view.DeclaredSource}
       basisSource={view.BasisSource}
       error={view.Error}
-      emptyText="这个任务没有可读的设计文档依据：它没有在 spec 中固定文档，所属请求也没有冻结快照。"
+      emptyText={t('designBasis.taskEmpty')}
     />
   )
 }
 
 /** requestEmptyText 按请求记录的来源解释"没有依据"，不把正常状态当成系统错误。 */
-function requestEmptyText(view: RequestDocsViewData): string {
+function requestEmptyText(view: RequestDocsViewData) {
   switch (view.DeclaredSource) {
     case 'snapshot_set':
-      return '请求记录的独立快照集不存在或读不到（见上）。'
+      return 'designBasis.requestEmpty.snapshot_set'
     case 'work_item':
-      return '请求引用的工作项没有冻结设计文档。'
+      return 'designBasis.requestEmpty.work_item'
     case 'legacy':
-      return '迁移前的请求没有记录设计依据；这里不按当前仓库绑定补造。'
+      return 'designBasis.requestEmpty.legacy'
     case 'unplanned':
-      return '请求时没有计划设计文档依据（不表示系统错误）。'
+      return 'designBasis.requestEmpty.unplanned'
     default:
-      return '这个请求没有设计文档依据（不表示系统错误）。'
+      return 'designBasis.requestEmpty.none'
   }
 }
 
@@ -435,73 +502,82 @@ type RequestDocsViewData = {
   WorkItemURL: string
   SnapshotSetID: number
   Basis: DesignBasisData | null
-  Error: string
+  Error: Text
 }
 type TaskDocsViewData = {
   TaskID: number
   DeclaredSource: string
   BasisSource: string
   Basis: DesignBasisData | null
-  Error: string
+  Error: Text
 }
 
-const relationLabels: Record<string, { text: string; variant: 'success' | 'accent' | 'attention' | 'danger' | 'secondary' }> = {
-  same_basis: { text: '同一份依据', variant: 'success' },
-  refs_match: { text: '文档引用一致', variant: 'success' },
-  claimed_dynamic: { text: '领取后关联', variant: 'accent' },
-  legacy_pinned: { text: '迁移前核对一致', variant: 'secondary' },
-  no_basis: { text: '没有依据', variant: 'secondary' },
-  mismatch: { text: '依据不一致', variant: 'danger' },
-  unverifiable: { text: '无法核对', variant: 'attention' },
+/** 依据关系的颜色；名称在词典 docsRelation.* 中，未知的关系原样显示。 */
+const relationVariants: Record<string, 'success' | 'accent' | 'attention' | 'danger' | 'secondary'> = {
+  same_basis: 'success',
+  refs_match: 'success',
+  claimed_dynamic: 'accent',
+  legacy_pinned: 'secondary',
+  no_basis: 'secondary',
+  mismatch: 'danger',
+  unverifiable: 'attention',
 }
-
-const taskTypes: Record<string, string> = { develop: '开发', review: '审计' }
-const taskModes: Record<string, string> = { select: '选题', implement: '实现', fix: '返修' }
 
 /** RelatedTasksTable 是工作项关联的开发 / 审计任务，以及它们与工作项冻结依据的关系。 */
 export function RelatedTasksTable({ tasks }: { tasks: RelatedTask[] }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const title = t('relatedTasks.title')
   if (tasks.length === 0) {
     return (
       <Box as="section" aria-labelledby="related-tasks">
-        <BoxHeader id="related-tasks" title="关联任务与依据" />
+        <BoxHeader id="related-tasks" title={title} />
         <BoxRow>
-          <p className={css.muted}>还没有关联任务。</p>
+          <p className={css.muted}>{t('relatedTasks.empty')}</p>
         </BoxRow>
       </Box>
     )
   }
+  const col = { task: t('relatedTasks.colTask'), type: t('relatedTasks.colType'), mode: t('relatedTasks.colMode'), relation: t('relatedTasks.colRelation') }
   return (
     <Box as="section" aria-labelledby="related-tasks">
-      <BoxHeader id="related-tasks" title="关联任务与依据" />
-      <table className={table.table} aria-label="关联任务与依据">
+      <BoxHeader id="related-tasks" title={title} />
+      <table className={table.table} aria-label={title}>
         <thead>
           <tr>
-            <th scope="col">任务</th>
-            <th scope="col">类型</th>
-            <th scope="col">方式</th>
-            <th scope="col">与冻结依据的关系</th>
+            <th scope="col">{col.task}</th>
+            <th scope="col">{col.type}</th>
+            <th scope="col">{col.mode}</th>
+            <th scope="col">{col.relation}</th>
           </tr>
         </thead>
         <tbody>
-          {tasks.map((t) => {
-            const rel = lookup(relationLabels, t.Relation) ?? { text: t.Relation, variant: 'secondary' as const }
-            return (
-              <tr key={t.TaskID}>
-                <td data-label="任务">
-                  <Link href={t.TaskURL}>#{t.TaskID}</Link>
-                  <div className={css.docID}>
-                    <Link href={t.RequestURL}>请求 #{t.RequestID}</Link>
+          {tasks.map((task) => (
+            <tr key={task.TaskID}>
+              <td data-label={col.task}>
+                <Link href={task.TaskURL}>#{task.TaskID}</Link>
+                <div className={css.docID}>
+                  <Link href={task.RequestURL}>{t('relatedTasks.request', { id: task.RequestID })}</Link>
+                </div>
+              </td>
+              <td data-label={col.type}>{enumLabel(locale, 'relatedTaskType', task.Type)}</td>
+              <td data-label={col.mode}>{task.Mode ? devModeText(task.Mode, locale) : '—'}</td>
+              <td data-label={col.relation}>
+                <Label variant={lookup(relationVariants, task.Relation) ?? 'secondary'}>{enumLabel(locale, 'docsRelation', task.Relation)}</Label>
+                {!isEmpty(task.Note) && (
+                  <div className={css.muted}>
+                    <Msg text={task.Note} />
+                    {!isEmpty(task.NoteDetail) && (
+                      <>
+                        {t('list.colon')}
+                        <Msg text={task.NoteDetail} />
+                      </>
+                    )}
                   </div>
-                </td>
-                <td data-label="类型">{lookup(taskTypes, t.Type) ?? t.Type}</td>
-                <td data-label="方式">{lookup(taskModes, t.Mode) ?? (t.Mode || '—')}</td>
-                <td data-label="与冻结依据的关系">
-                  <Label variant={rel.variant}>{rel.text}</Label>
-                  {t.Note && <div className={css.muted}>{t.Note}</div>}
-                </td>
-              </tr>
-            )
-          })}
+                )}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </Box>

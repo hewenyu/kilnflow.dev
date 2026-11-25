@@ -423,7 +423,7 @@ func TestDocsContentAPI(t *testing.T) {
 	page := pageData[struct {
 		DesignBasis *struct {
 			DeclaredSource string
-			Error          string
+			Error          uiText
 			Basis          *struct {
 				Source   string
 				DocCount int
@@ -463,14 +463,14 @@ func TestDocsContentTaskAndWorkItem(t *testing.T) {
 	page := pageData[struct {
 		DesignBasis *struct {
 			BasisSource string
-			Error       string
+			Error       uiText
 			Basis       *struct {
 				Source   string
 				DocCount int
 			}
 		}
 	}](t, w.Body.String())
-	if page.DesignBasis == nil || page.DesignBasis.Error != "" || page.DesignBasis.Basis == nil || page.DesignBasis.Basis.Source != "snapshot_set" {
+	if page.DesignBasis == nil || !page.DesignBasis.Error.IsZero() || page.DesignBasis.Basis == nil || page.DesignBasis.Basis.Source != "snapshot_set" {
 		t.Fatalf("任务页的设计依据 = %+v", page.DesignBasis)
 	}
 	w = e.get(e.bob, "/ai/tasks/921/docs/content?doc_id=d1")
@@ -573,17 +573,38 @@ func TestDocsContentTaskAndWorkItem(t *testing.T) {
 			}
 		}
 	}
-	w = e.get(e.bob, "/ai/tasks/936")
+	wantDocsConflictTexts(t, e)
+}
+
+// wantDocsConflictTexts 检查依据冲突的任务 #936（见 TestDocsContentTaskAndWorkItem）在任务页和工作项 #933 的页面上的说明：
+// 依据错误是按原因码给出的消息（前端按语言显示），不是领域层拼好的中文；关联任务的关系说明是消息，具体原因单独给出。
+func wantDocsConflictTexts(t *testing.T, e *webEnv) {
+	t.Helper()
+	w := e.get(e.bob, "/ai/tasks/936")
 	if w.Code != http.StatusOK {
 		t.Fatalf("冲突任务页 = %d：%s", w.Code, w.Body.String())
 	}
 	conflict := pageData[struct {
 		DesignBasis *struct {
-			Error string
+			Error uiText
 		}
 	}](t, w.Body.String())
-	if conflict.DesignBasis == nil || conflict.DesignBasis.Error == "" {
+	// 依据错误是按原因码给出的消息（前端按语言显示），不是领域层拼好的中文
+	if conflict.DesignBasis == nil || conflict.DesignBasis.Error.id != msgIssueTaskDevRequest ||
+		textZH(t, conflict.DesignBasis.Error) != "AI 任务 #936 的工作项与开发请求 #935 的记录不一致" {
 		t.Errorf("冲突任务页应展示依据错误：%+v", conflict.DesignBasis)
+	}
+	// 工作项页上的关联任务：关系说明是消息，具体原因单独给出
+	item := pageData[aiDevItemPage](t, e.get(e.bob, "/ai-dev/933").Body.String())
+	var rel *relatedTaskView
+	for i := range item.RelatedTasks {
+		if item.RelatedTasks[i].TaskID == 936 {
+			rel = &item.RelatedTasks[i]
+		}
+	}
+	if rel == nil || rel.Relation != "mismatch" || rel.Note.id != msgNoteBasisConflict || textZH(t, rel.Note) != "任务的文档依据记录与工作项不一致" ||
+		textZH(t, rel.NoteDetail) != "AI 任务 #936 的工作项与开发请求 #935 的记录不一致" {
+		t.Errorf("关联任务 #936 = %+v", rel)
 	}
 }
 
