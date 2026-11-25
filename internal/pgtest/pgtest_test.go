@@ -2,11 +2,13 @@ package pgtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -289,6 +291,30 @@ func TestDDLChangeDiscardsSlot(t *testing.T) {
 			}
 			if accountType != "User" {
 				t.Fatalf("新槽位的 account_type 默认值应为 User，实际 %q", accountType)
+			}
+		})
+	})
+	t.Run("禁用触发器", func(t *testing.T) {
+		resetSlots(t)
+		var damaged string
+		t.Run("破坏", func(t *testing.T) {
+			p := Pool(t)
+			damaged = currentDatabase(t, p)
+			if _, err := p.Exec(t.Context(), `ALTER TABLE runs DISABLE TRIGGER ALL`); err != nil {
+				t.Fatal(err)
+			}
+		})
+		t.Run("新槽位外键生效", func(t *testing.T) {
+			p := Pool(t)
+			if got := currentDatabase(t, p); got == damaged {
+				t.Fatalf("禁用过触发器的槽位应被丢弃，实际复用了 %s", got)
+			}
+			// 插入指向不存在仓库的 runs 记录：外键内部触发器必须生效，返回 SQLSTATE 23503。
+			_, err := p.Exec(t.Context(),
+				`INSERT INTO runs (repo_id, workflow, event, ref, sha, source, dedupe_key, state) VALUES (999999, 'ci.yml', 'push', 'refs/heads/main', 'a', 'push', 'probe', 'queued')`)
+			pgErr, ok := errors.AsType[*pgconn.PgError](err)
+			if !ok || pgErr.Code != "23503" {
+				t.Fatalf("新槽位外键应拒绝非法插入（SQLSTATE 23503），实际 err = %v", err)
 			}
 		})
 	})

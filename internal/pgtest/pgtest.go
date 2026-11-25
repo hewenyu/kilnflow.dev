@@ -662,9 +662,10 @@ func sequenceOwned(ctx context.Context, conn *pgx.Conn, name string) (bool, erro
 	return owned, nil
 }
 
-// schemaSignatureSQL 对 public 中全部普通表 / 分区表、列（含默认值、identity、生成列）、约束、索引、序列、
-// 函数、触发器、视图、自定义类型、RLS 策略、已安装的扩展，以及 public 以外的额外 schema 生成一个确定性签名。
-// 任一结构被测试改动（改列默认值、删约束、建视图等）都会得到不同的签名，从而丢弃该槽位。
+// schemaSignatureSQL 对 public 中全部普通表 / 分区表、列（含默认值、identity、生成列）、约束（含 validated）、
+// 索引（含 valid/ready）、序列、函数、触发器（含内部外键触发器及 tgenabled 状态）、规则、视图、自定义类型、
+// RLS 策略、已安装的扩展、数据库级配置（ALTER DATABASE SET），以及 public 以外的额外 schema 生成一个确定性签名。
+// 任一结构或启用状态被测试改动（改列默认值、禁用触发器、删约束、建视图等）都会得到不同的签名，从而丢弃该槽位。
 // 签名只比较同一个模板库和它的副本：CREATE DATABASE ... TEMPLATE 保留对象 OID，模板与副本上的系统目录一致。
 const schemaSignatureSQL = `
 SELECT md5(coalesce(string_agg(sig, E'\n' ORDER BY sig), ''))
@@ -683,13 +684,13 @@ FROM (
   LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
   WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
   UNION ALL
-  SELECT format('constraint:%s:%s:%s:%s', coalesce(c.relname, ''), con.conname, con.contype::text, pg_get_constraintdef(con.oid))
+  SELECT format('constraint:%s:%s:%s:%s:%s', coalesce(c.relname, ''), con.conname, con.contype::text, con.convalidated, pg_get_constraintdef(con.oid))
   FROM pg_constraint con
   LEFT JOIN pg_class c ON c.oid = con.conrelid
   JOIN pg_namespace n ON n.oid = con.connamespace
   WHERE n.nspname = 'public'
   UNION ALL
-  SELECT format('index:%s:%s', tc.relname, pg_get_indexdef(i.indexrelid))
+  SELECT format('index:%s:%s:%s:%s', tc.relname, i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid))
   FROM pg_index i
   JOIN pg_class tc ON tc.oid = i.indrelid
   JOIN pg_namespace n ON n.oid = tc.relnamespace
@@ -706,11 +707,17 @@ FROM (
   JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public' AND p.prokind IN ('f', 'p')
   UNION ALL
-  SELECT format('trigger:%s:%s:%s', c.relname, t.tgname, pg_get_triggerdef(t.oid))
+  SELECT format('trigger:%s:%s:%s:%s:%s', c.relname, t.tgname, t.tgisinternal, t.tgenabled::text, pg_get_triggerdef(t.oid))
   FROM pg_trigger t
   JOIN pg_class c ON c.oid = t.tgrelid
   JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public' AND NOT t.tgisinternal
+  WHERE n.nspname = 'public'
+  UNION ALL
+  SELECT format('rule:%s:%s:%s:%s', c.relname, r.rulename, r.ev_enabled::text, pg_get_ruledef(r.oid))
+  FROM pg_rewrite r
+  JOIN pg_class c ON c.oid = r.ev_class
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND r.rulename <> '_RETURN'
   UNION ALL
   SELECT format('view:%s:%s:%s', c.relname, c.relkind::text, pg_get_viewdef(c.oid))
   FROM pg_class c
@@ -735,6 +742,11 @@ FROM (
   UNION ALL
   SELECT format('extension:%s:%s', e.extname, e.extversion)
   FROM pg_extension e
+  UNION ALL
+  SELECT format('dbsetting:%s:%s', s.setrole, coalesce(array_to_string(s.setconfig, ','), ''))
+  FROM pg_db_role_setting s
+  JOIN pg_database d ON d.oid = s.setdatabase
+  WHERE d.datname = current_database()
   UNION ALL
   SELECT format('schema:%s', n.nspname)
   FROM pg_namespace n
