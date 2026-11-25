@@ -228,7 +228,12 @@ func RunCounts(ctx context.Context, q store.Querier, since time.Time) (map[store
 
 // RunWorkflows 返回出现过的 workflow 文件名（最多 limit 个，按名称排序）；repoID 非 0 时只看这个仓库。
 func RunWorkflows(ctx context.Context, q store.Querier, repoID int64, limit int) ([]string, error) {
-	rows, err := q.Query(ctx, `SELECT DISTINCT workflow FROM runs WHERE $1=0 OR repo_id=$1 ORDER BY 1 LIMIT $2`, repoID, limit)
+	// 不带 $1=0 OR repo_id=$1：OR 会让规划器放弃 repo_id 的索引扫描；按分支给出精确的 SQL。
+	query, args := `SELECT DISTINCT workflow FROM runs ORDER BY 1 LIMIT $1`, []any{limit}
+	if repoID != 0 {
+		query, args = `SELECT DISTINCT workflow FROM runs WHERE repo_id=$1 ORDER BY 1 LIMIT $2`, []any{repoID, limit}
+	}
+	rows, err := q.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

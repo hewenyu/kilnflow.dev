@@ -20,6 +20,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/fakegithub"
 	"github.com/hewenyu/kilnflow.dev/internal/forge"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/server/mqevents"
 	"github.com/hewenyu/kilnflow.dev/internal/server/outbox"
@@ -29,7 +30,7 @@ import (
 // 自动打 tag 的功能测试（PLAN #29.4 的崩溃点表、T1–T3）：数据库用 pgtest，GitHub 用 fakegithub（本地 git 仓库），
 // 规划用记录请求的 fakePlanner（规划本身按 dedupe_key 幂等，由 planner 的测试覆盖）。
 
-func TestMain(m *testing.M) { pgtest.Main(m) }
+func TestMain(m *testing.M) { pgtest.MainWith(m, gittest.Cleanup) }
 
 var testKey = sync.OnceValue(func() *rsa.PrivateKey {
 	k, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -95,12 +96,11 @@ func newHarness(t *testing.T, mergeYML string) *harness {
 		t.Skip("没有 git")
 	}
 	h := &harness{t: t, ctx: t.Context(), db: store.New(pgtest.Pool(t)), dir: t.TempDir(), planner: &fakePlanner{}}
-	h.git("init", "-q", "-b", "main")
 	files := map[string]string{"README.md": "demo\n"}
 	if mergeYML != "" {
 		files[".kiln/merge.yml"] = mergeYML
 	}
-	h.commit(files, "init")
+	gittest.Init(t, h.dir, "main", files)
 	h.fake = fakegithub.New(testAccount)
 	t.Cleanup(h.fake.Close)
 	h.fake.AddRepo(&fakegithub.Repo{ID: repoID, Owner: testAccount, Name: "demo", Dir: h.dir, Private: true})

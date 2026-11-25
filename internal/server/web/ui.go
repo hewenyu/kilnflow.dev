@@ -2,11 +2,15 @@ package web
 
 import (
 	"bytes"
+	"compress/gzip"
 	"embed"
 	"encoding/json"
+	"io"
 	"io/fs"
+	"math"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -67,8 +71,67 @@ func newUISession(se *session) *uiSession {
 	return &uiSession{Login: se.Login, Admin: se.Admin(), ViaToken: se.ViaToken(), Bound: se.Bound}
 }
 
-// writeJSON 发送 JSON。页面数据随登录身份变化，不缓存。
-func (d *Dashboard) writeJSON(w http.ResponseWriter, status int, v any) {
+const (
+	// jsonGzipMinSize 是启用 gzip 的最小 JSON 长度：更小的响应压缩后（加上 gzip 头）通常反而更大。
+	jsonGzipMinSize = 1024
+	// assetGzipMinSize 是启用 gzip 的最小内嵌资产长度：更小的文件压缩后反而更大，直接发原文。
+	assetGzipMinSize = 1024
+)
+
+// acceptsGzip 判断请求是否接受 gzip：Accept-Encoding 中的 gzip（或 *）且质量因子不为 0。
+// 明确写出 gzip 的项比 * 更具体（RFC 9110），优先于它：gzip;q=0, * 不接受 gzip。
+// Accept-Encoding 可以有多行（RFC 9110 §5.3），每一行都要看：只看第一行会把分处两行的 "*" 与 "gzip;q=0"
+// 或 "br" 与 "gzip" 判断错。
+func acceptsGzip(r *http.Request) bool {
+	var gzipQ float64
+	gzipSeen, wildcard := false, false
+	for _, line := range r.Header.Values("Accept-Encoding") {
+		for part := range strings.SplitSeq(line, ",") {
+			coding, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+			q := 1.0
+			for p := range strings.SplitSeq(params, ";") {
+				k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+				if !ok || !strings.EqualFold(strings.TrimSpace(k), "q") {
+					continue
+				}
+				q = parseQuality(strings.TrimSpace(v))
+			}
+			switch strings.ToLower(strings.TrimSpace(coding)) {
+			case "gzip", "x-gzip":
+				gzipSeen, gzipQ = true, q
+			case "*":
+				wildcard = q > 0
+			}
+		}
+	}
+	if gzipSeen {
+		return gzipQ > 0
+	}
+	return wildcard
+}
+
+// parseQuality 解析质量因子；非法值（无法解析、NaN、无穷、小于 0 或大于 1）按 0 处理。
+// RFC 9110 的 qvalue 只允许 0 到 1，非法值不能误当成默认的 1，否则会发送客户端明确表达不了的数据。
+func parseQuality(v string) float64 {
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f < 0 || f > 1 {
+		return 0
+	}
+	return f
+}
+
+// newGzipWriter 返回用 BestSpeed 压缩的 gzip.Writer（页面数据是高频轮询，压缩速度优先）。BestSpeed 是合法的级别，
+// NewWriterLevel 不会返回错误。
+func newGzipWriter() *gzip.Writer {
+	w, err := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
+	if err != nil {
+		panic(err)
+	}
+	return w
+}
+
+// writeJSON 发送 JSON（r 用来判断客户端是否接受 gzip）。页面数据随登录身份变化，不缓存。
+func (d *Dashboard) writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
@@ -79,17 +142,39 @@ func (d *Dashboard) writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Vary", uiHeader)
+	w.Header().Set("Vary", uiHeader+", Accept-Encoding")
+	body := buf.Bytes()
+	if len(body) >= jsonGzipMinSize && acceptsGzip(r) {
+		body = d.gzipJSON(body)
+		w.Header().Set("Content-Encoding", "gzip")
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(status)
-	if _, err := buf.WriteTo(w); err != nil {
+	if _, err := w.Write(body); err != nil {
 		d.log.Debug("发送页面数据", "err", err)
 	}
+}
+
+// gzipJSON 用 Dashboard 上的 gzip.Writer 池压缩页面数据。
+func (d *Dashboard) gzipJSON(body []byte) []byte {
+	var out bytes.Buffer
+	zw, ok := d.gzipWriters.Get().(*gzip.Writer)
+	if !ok {
+		zw = newGzipWriter()
+	}
+	zw.Reset(&out)
+	_, _ = zw.Write(body)
+	_ = zw.Close()
+	// 归还前解除对本次 bytes.Buffer 的引用，避免池中的 writer 钉住大缓冲区。
+	zw.Reset(io.Discard)
+	d.gzipWriters.Put(zw)
+	return out.Bytes()
 }
 
 // redirect 重定向到 to：前端请求返回 uiRedirect，浏览器请求返回 303。
 func (d *Dashboard) redirect(w http.ResponseWriter, r *http.Request, to string) {
 	if isUI(r) {
-		d.writeJSON(w, http.StatusOK, uiRedirect{Redirect: to})
+		d.writeJSON(w, r, http.StatusOK, uiRedirect{Redirect: to})
 		return
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther) //nolint:gosec // 调用方只传站内路径或 GitHub 授权地址
@@ -118,7 +203,7 @@ func (d *Dashboard) serveIndex(w http.ResponseWriter, status int) { d.serveIndex
 // serveIndexWith 返回内嵌了页面数据 p 的 index.html（p 为 nil 时不内嵌，前端自己取数据）。
 // 页面数据放在 <script id="kiln-page" type="application/json"> 中；json 编码转义了 <、>、&，不会提前结束 script。
 func (d *Dashboard) serveIndexWith(w http.ResponseWriter, status int, p *uiPage) {
-	body, err := uiFS.ReadFile("ui/dist/index.html")
+	body, err := fs.ReadFile(d.uiFiles(), "ui/dist/index.html")
 	if err != nil {
 		body = []byte(indexPlaceholder)
 	}
@@ -150,14 +235,92 @@ func (d *Dashboard) serveIndexWith(w http.ResponseWriter, status int, p *uiPage)
 	}
 }
 
+// compressibleAsset 返回资产压缩后的 Content-Type 和是否可压缩：按扩展名判断文本类资产，未知扩展名按内容嗅探
+// （text/* 也压缩）。压缩后不能用内容嗅探决定类型——gzip 字节会被认成 application/x-gzip。
+func compressibleAsset(name string, body []byte) (string, bool) {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8", true
+	case ".css":
+		return "text/css; charset=utf-8", true
+	case ".svg":
+		return "image/svg+xml", true
+	case ".json", ".map":
+		return "application/json", true
+	case ".html", ".htm":
+		return "text/html; charset=utf-8", true
+	case ".txt":
+		return "text/plain; charset=utf-8", true
+	case ".xml":
+		return "application/xml", true
+	case ".webmanifest":
+		return "application/manifest+json", true
+	}
+	if ct := http.DetectContentType(body); strings.HasPrefix(ct, "text/") {
+		return ct, true
+	}
+	return "", false
+}
+
+// uiFiles 返回前端构建产物：默认是内嵌的 uiFS，测试可以替换为内存文件。
+func (d *Dashboard) uiFiles() fs.FS {
+	if d.ui != nil {
+		return d.ui
+	}
+	return uiFS
+}
+
+// gzipAsset 返回内嵌资产的 gzip 字节：内嵌文件不可变，按文件名懒压缩一次后复用（Dashboard 实例上的缓存，不并发访问模板）。
+func (d *Dashboard) gzipAsset(name string, body []byte) []byte {
+	d.assetsMu.Lock()
+	defer d.assetsMu.Unlock()
+	if gz, ok := d.assetsGz[name]; ok {
+		return gz
+	}
+	var out bytes.Buffer
+	// 静态资产只压缩一次，用最高压缩级别换更小的传输体积（页面数据用 BestSpeed，见 gzipJSON）。
+	zw, err := gzip.NewWriterLevel(&out, gzip.BestCompression)
+	if err != nil {
+		panic(err)
+	}
+	_, _ = zw.Write(body)
+	_ = zw.Close()
+	if d.assetsGz == nil {
+		d.assetsGz = map[string][]byte{}
+	}
+	d.assetsGz[name] = out.Bytes()
+	return out.Bytes()
+}
+
+// gzipLengthWriter 给压缩表示的响应补回 Content-Length：标准库的 ServeContent 在 Content-Encoding 非空时
+// 故意不设置它（它要兼容边压边写的处理器，那里长度不可知），而这里发送的是已知长度的预压缩字节。
+// 只在 200 时补：304 与 412 没有正文，带 Content-Length 会让客户端等待不存在的正文。这两个状态也不该
+// 留下描述 gzip 表示的元数据（304 由 ServeContent 自己清理，412 不会，两边都要和原文表示的行为一致）。
+type gzipLengthWriter struct {
+	http.ResponseWriter
+	length string
+}
+
+func (w gzipLengthWriter) WriteHeader(status int) {
+	if status == http.StatusOK {
+		w.Header().Set("Content-Length", w.length)
+	} else {
+		w.Header().Del("Content-Type")
+		w.Header().Del("Content-Encoding")
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
 // serveAsset 发送前端构建产物（ui/dist/assets/ 下带内容摘要的文件名，长期缓存；以及 ui/dist/ 下的图标）。
+// 文本类资产在客户端接受 gzip 时发送压缩后的字节；带 Range 的请求照常由 ServeContent 处理（不对部分内容压缩）。
+// 压缩表示也经 ServeContent 写出，条件请求（If-None-Match 等）与 HEAD 的处理和原文表示完全一致。
 func (d *Dashboard) serveAsset(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	if name == "index.html" || strings.HasPrefix(name, ".") {
 		d.notFound(w, r, "")
 		return
 	}
-	body, err := fs.ReadFile(uiFS, "ui/dist/"+name)
+	body, err := fs.ReadFile(d.uiFiles(), "ui/dist/"+name)
 	if err != nil {
 		d.notFound(w, r, "")
 		return
@@ -168,5 +331,19 @@ func (d *Dashboard) serveAsset(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if contentType, ok := compressibleAsset(name, body); ok {
+		w.Header().Set("Vary", "Accept-Encoding")
+		if len(body) >= assetGzipMinSize && r.Header.Get("Range") == "" && acceptsGzip(r) {
+			gz := d.gzipAsset(name, body)
+			// 先设好 Content-Type 和 Content-Encoding：ServeContent 会据前者决定不再嗅探
+			// （gzip 字节会被认成 application/x-gzip），后者让客户端按压缩表示解析。
+			w.Header().Set("Content-Type", contentType)
+			w.Header().Set("Content-Encoding", "gzip")
+			http.ServeContent(
+				gzipLengthWriter{ResponseWriter: w, length: strconv.Itoa(len(gz))},
+				r, path.Base(name), time.Time{}, bytes.NewReader(gz))
+			return
+		}
+	}
 	http.ServeContent(w, r, path.Base(name), time.Time{}, bytes.NewReader(body))
 }

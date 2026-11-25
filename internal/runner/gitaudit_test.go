@@ -921,15 +921,18 @@ func TestGitChannelCloseReturnsAtDeadline(t *testing.T) {
 	f := newChannelFixture(t)
 	authing := make(chan struct{})
 	var authOnce sync.Once
+	// releaseAuth 让挂住的认证请求返回：Close 已经按期限返回之后才放行，测试结束时认证随之很快结束（不必等
+	// runnerkit.Client 的认证期限，它有意不继承取消）。
+	releaseAuth := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/proto")
 		w.Header().Set("Content-Length", "1024")
 		w.WriteHeader(http.StatusOK)
 		_ = http.NewResponseController(w).Flush()
 		authOnce.Do(func() { close(authing) })
-		<-r.Context().Done()
+		<-releaseAuth
 	}))
-	// 先于下面放开认证锁的 Cleanup 注册、后于它执行：Close 要等阻塞的认证请求结束
+	// 先于下面放开认证的 Cleanup 注册、后于它执行：Close 要等阻塞的认证请求结束
 	t.Cleanup(srv.Close)
 	_, key, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -940,7 +943,7 @@ func TestGitChannelCloseReturnsAtDeadline(t *testing.T) {
 	authDone := make(chan struct{})
 	go func() { _, _ = client.Authenticate(actx); close(authDone) }()
 	// 测试结束时放开认证锁，留下的签发随之结束
-	t.Cleanup(func() { acancel(); <-authDone })
+	t.Cleanup(func() { close(releaseAuth); acancel(); <-authDone })
 	waitFor(t, authing, "另一个请求持有认证锁")
 	j, ok := f.ch.tokens.(*job)
 	if !ok {

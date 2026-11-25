@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hewenyu/kilnflow.dev/internal/fakegithub"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
 )
 
@@ -174,8 +175,7 @@ func newPortEnv(t *testing.T, config string, opts ...func(*Config)) *portEnv {
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	e := &portEnv{t: t, ctx: t.Context(), s: s, fake: fake, dir: t.TempDir(), url: srv.URL}
-	e.git("init", "-q", "-b", "main")
-	e.base = e.commit("main", map[string]string{"README.md": "demo\n", ".kiln/agent/config.yml": config})
+	e.base = gittest.Init(t, e.dir, "main", map[string]string{"README.md": "demo\n", ".kiln/agent/config.yml": config})
 	fake.AddRepo(&fakegithub.Repo{ID: portRepoID, Owner: portOwner, Name: "demo", Dir: e.dir, Private: true, Installation: fake.InstallationID})
 	if err := store.UpsertInstallation(e.ctx, s.db, store.InstallationMeta{ID: fake.InstallationID, AccountID: fake.AccountID, AccountLogin: portOwner}); err != nil {
 		t.Fatal(err)

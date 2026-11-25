@@ -27,6 +27,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/fakegithub"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
 	"github.com/hewenyu/kilnflow.dev/internal/gitref"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/server/ai"
 	"github.com/hewenyu/kilnflow.dev/internal/server/ai/review"
@@ -40,7 +41,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
 )
 
-func TestMain(m *testing.M) { pgtest.Main(m) }
+func TestMain(m *testing.M) { pgtest.MainWith(m, gittest.Cleanup) }
 
 func TestAccountAllowed(t *testing.T) {
 	t.Parallel()
@@ -132,8 +133,7 @@ func newGitRepo(t *testing.T, files map[string]string) *gitRepo {
 		t.Skip("没有 git")
 	}
 	g := &gitRepo{t: t, dir: t.TempDir()}
-	g.git("init", "-q", "-b", "main")
-	g.commit(files, "init")
+	gittest.Init(t, g.dir, "main", files)
 	return g
 }
 

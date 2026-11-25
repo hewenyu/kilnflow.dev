@@ -30,7 +30,8 @@ test: test-go test-web test-orca
 
 test-go:
 	go vet ./...
-	go test -race ./...
+	# 本地没有 KILN_TEST_DATABASE_URL 时用脚本启动一个共享 Postgres，避免每个包各起一个实例。
+	.kiln/scripts/with-test-pg.sh go test -race ./...
 
 test-web: web/node_modules
 	cd web && pnpm test
@@ -47,11 +48,27 @@ GOLANGCI_LINT := go tool $(GOLANGCI_TOOL)
 # 按每个发布平台（TARGETS）分别检查：只在某个平台上编译的代码（syscall 结构的字段类型、构建标签）只有按那个平台检查才会
 # 被发现。golangci-lint 为本机构建（go tool -n 给出它的路径；直接 GOOS=… go tool 会把它编译成目标平台的、无法执行），
 # 再带目标平台的 GOOS、GOARCH 运行。
+# 各平台并发执行（Go 构建缓存和 golangci-lint 缓存都支持多进程并发，用 --allow-parallel-runners 关掉它默认的
+# 单实例文件锁），每个平台输出到独立文件，全部结束后按 TARGETS 顺序打印，任意一个失败都让目标失败。
 lint-go:
-	@bin=$$(env -u GOOS -u GOARCH go tool -n $(GOLANGCI_TOOL)) && for p in $(TARGETS); do \
-		echo "golangci-lint run ./... (GOOS/GOARCH=$${p})"; \
-		GOOS=$${p%/*} GOARCH=$${p#*/} "$$bin" run ./... || exit 1; \
-	done
+	@bin=$$(env -u GOOS -u GOARCH go tool -n $(GOLANGCI_TOOL)) || exit 1; \
+	tmp=$$(mktemp -d) || exit 1; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	i=0; \
+	for p in $(TARGETS); do \
+		i=$$((i+1)); \
+		( GOOS=$${p%/*} GOARCH=$${p#*/} "$$bin" run --allow-parallel-runners ./... >"$$tmp/out.$$i" 2>&1; echo $$? >"$$tmp/status.$$i" ) & \
+	done; \
+	wait; \
+	status=0; i=0; \
+	for p in $(TARGETS); do \
+		i=$$((i+1)); \
+		echo "golangci-lint run ./... (GOOS/GOARCH=$$p)"; \
+		cat "$$tmp/out.$$i"; \
+		[ "$$(cat "$$tmp/status.$$i")" = 0 ] || status=1; \
+	done; \
+	rm -rf "$$tmp"; \
+	exit $$status
 	go mod tidy -diff
 
 # 规则见 web/eslint.config.js，另外做类型检查

@@ -98,6 +98,7 @@ var domains = map[string]domain{
 	"internal/forge":       lib,
 	"internal/github":      lib,
 	"internal/gitref":      lib,
+	"internal/gittest":     lib,
 	"internal/httpretry":   lib,
 	"internal/logging":     lib,
 	"internal/npm":         lib,

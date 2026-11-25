@@ -362,9 +362,9 @@ type docContentError struct {
 }
 
 // writeDocContentError 返回带明确 code 与 message 的 JSON 错误；不缓存、不嗅探。
-func (d *Dashboard) writeDocContentError(w http.ResponseWriter, status int, code, msg string) {
+func (d *Dashboard) writeDocContentError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	d.writeJSON(w, status, docContentError{Code: code, Message: msg})
+	d.writeJSON(w, r, status, docContentError{Code: code, Message: msg})
 }
 
 // docsContent 包装正文读取接口：未登录返回 JSON 401（而不是跳转到登录页）。
@@ -372,7 +372,7 @@ func (d *Dashboard) docsContent(h func(w http.ResponseWriter, r *http.Request, s
 	return func(w http.ResponseWriter, r *http.Request) {
 		se := d.getSession(r)
 		if se == nil {
-			d.writeDocContentError(w, http.StatusUnauthorized, "unauthorized", "登录已过期，请重新登录")
+			d.writeDocContentError(w, r, http.StatusUnauthorized, "unauthorized", "登录已过期，请重新登录")
 			return
 		}
 		h(w, r, se)
@@ -390,24 +390,24 @@ func docIDFromQuery(r *http.Request) (string, bool) {
 
 // writeDocContent 把一篇正文或解析错误写成响应。错误码：
 // 400 参数无效、404 没有这篇文档或没有依据、409 依据记录不一致、410 正文已按保留策略清理、500 内部错误。
-func (d *Dashboard) writeDocContent(w http.ResponseWriter, doc *docsync.Snapshot, err error) {
+func (d *Dashboard) writeDocContent(w http.ResponseWriter, r *http.Request, doc *docsync.Snapshot, err error) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	switch {
 	case errors.Is(err, docsync.ErrSnapshotExpired):
-		d.writeDocContentError(w, http.StatusGone, "content_purged", "这篇设计文档的正文已按保留策略清理，只保留了元数据")
+		d.writeDocContentError(w, r, http.StatusGone, "content_purged", "这篇设计文档的正文已按保留策略清理，只保留了元数据")
 	case errors.Is(err, ai.ErrDocsBasisConflict):
-		d.writeDocContentError(w, http.StatusConflict, "basis_conflict", "设计依据的记录与实际快照不一致，无法确认这篇文档属于它")
+		d.writeDocContentError(w, r, http.StatusConflict, "basis_conflict", "设计依据的记录与实际快照不一致，无法确认这篇文档属于它")
 	case errors.Is(err, ai.ErrDocsBasisMissing):
-		d.writeDocContentError(w, http.StatusNotFound, "no_basis", "这个对象没有可读的设计文档依据")
+		d.writeDocContentError(w, r, http.StatusNotFound, "no_basis", "这个对象没有可读的设计文档依据")
 	case errors.Is(err, ai.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
-		d.writeDocContentError(w, http.StatusNotFound, "not_found", "没有这个对象")
+		d.writeDocContentError(w, r, http.StatusNotFound, "not_found", "没有这个对象")
 	case err != nil:
 		d.log.Error("读取设计文档正文", "err", err)
-		d.writeDocContentError(w, http.StatusInternalServerError, "internal", "读取正文时出现内部错误")
+		d.writeDocContentError(w, r, http.StatusInternalServerError, "internal", "读取正文时出现内部错误")
 	case doc == nil:
-		d.writeDocContentError(w, http.StatusNotFound, "doc_not_found", "依据中没有这篇文档")
+		d.writeDocContentError(w, r, http.StatusNotFound, "doc_not_found", "依据中没有这篇文档")
 	default:
-		d.writeJSON(w, http.StatusOK, docContent{
+		d.writeJSON(w, r, http.StatusOK, docContent{
 			DocID: doc.DocID, Title: doc.Title, Revision: doc.Revision, SHA256: doc.SHA256, Content: doc.Content,
 		})
 	}
@@ -418,15 +418,15 @@ func (d *Dashboard) getWorkItemDocContent(w http.ResponseWriter, r *http.Request
 	id := pathID(r)
 	docID, ok := docIDFromQuery(r)
 	if id <= 0 || !ok {
-		d.writeDocContentError(w, http.StatusBadRequest, "invalid_request", "工作项编号或 doc_id 无效")
+		d.writeDocContentError(w, r, http.StatusBadRequest, "invalid_request", "工作项编号或 doc_id 无效")
 		return
 	}
 	if d.ai == nil {
-		d.writeDocContentError(w, http.StatusNotFound, "not_found", "没有这个对象")
+		d.writeDocContentError(w, r, http.StatusNotFound, "not_found", "没有这个对象")
 		return
 	}
 	doc, err := d.ai.WorkItemDocContent(r.Context(), id, docID)
-	d.writeDocContent(w, doc, err)
+	d.writeDocContent(w, r, doc, err)
 }
 
 // getRequestDocContent 按需读取 AI 请求固定依据中一篇文档的正文。
@@ -434,15 +434,15 @@ func (d *Dashboard) getRequestDocContent(w http.ResponseWriter, r *http.Request,
 	id := pathID(r)
 	docID, ok := docIDFromQuery(r)
 	if id <= 0 || !ok {
-		d.writeDocContentError(w, http.StatusBadRequest, "invalid_request", "请求编号或 doc_id 无效")
+		d.writeDocContentError(w, r, http.StatusBadRequest, "invalid_request", "请求编号或 doc_id 无效")
 		return
 	}
 	if d.ai == nil {
-		d.writeDocContentError(w, http.StatusNotFound, "not_found", "没有这个对象")
+		d.writeDocContentError(w, r, http.StatusNotFound, "not_found", "没有这个对象")
 		return
 	}
 	doc, err := d.ai.RequestDocContent(r.Context(), id, docID)
-	d.writeDocContent(w, doc, err)
+	d.writeDocContent(w, r, doc, err)
 }
 
 // getTaskDocContent 按需读取 AI 任务依据中一篇文档的正文。
@@ -450,15 +450,15 @@ func (d *Dashboard) getTaskDocContent(w http.ResponseWriter, r *http.Request, _ 
 	id := pathID(r)
 	docID, ok := docIDFromQuery(r)
 	if id <= 0 || !ok {
-		d.writeDocContentError(w, http.StatusBadRequest, "invalid_request", "任务编号或 doc_id 无效")
+		d.writeDocContentError(w, r, http.StatusBadRequest, "invalid_request", "任务编号或 doc_id 无效")
 		return
 	}
 	if d.ai == nil {
-		d.writeDocContentError(w, http.StatusNotFound, "not_found", "没有这个对象")
+		d.writeDocContentError(w, r, http.StatusNotFound, "not_found", "没有这个对象")
 		return
 	}
 	doc, err := d.ai.TaskDocContent(r.Context(), id, docID)
-	d.writeDocContent(w, doc, err)
+	d.writeDocContent(w, r, doc, err)
 }
 
 // ---- 页面数据 ----

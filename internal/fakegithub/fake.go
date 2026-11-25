@@ -122,6 +122,8 @@ type Server struct {
 	// faults 是注入的故障（SetFault），hiddenRefs 是列表接口暂时看不到的 ref（HideRefs），见 faults.go。
 	faults     map[string]*Fault
 	hiddenRefs []string
+	// objects 是完整 SHA 的对象内容缓存（见 objectcache.go），随这个模拟 GitHub 一起释放。
+	objects map[objectCacheKey]map[string]any
 	// staleReviews 为真时列出 PR review 的接口读到稍旧的数据（看不到已有的 review，HideReviews）。
 	staleReviews bool
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/fakegithub"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
 	"github.com/hewenyu/kilnflow.dev/internal/gitref"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/server/ai"
 	"github.com/hewenyu/kilnflow.dev/internal/server/gitread"
@@ -38,7 +39,7 @@ import (
 // 仓库），规划、取消、结束任务用真实的 AI 核心（ai.Core，注册本包的任务类型），PR review 由真实的 outbox worker 投递。
 // Runner 的领取由测试直接模拟（与 ai.Core 的领取相同：同一事务中 running、epoch+1、写 attempt）。
 
-func TestMain(m *testing.M) { pgtest.Main(m) }
+func TestMain(m *testing.M) { pgtest.MainWith(m, gittest.Cleanup) }
 
 // testKey 是全部测试共用的 App 私钥（生成 RSA 密钥较慢，只生成一次）。
 var testKey = sync.OnceValue(func() *rsa.PrivateKey {
@@ -130,8 +131,7 @@ func newHarness(t *testing.T) *harness {
 		t: t, ctx: t.Context(), db: store.New(pgtest.Pool(t)), dir: t.TempDir(), events: &recordingEvents{},
 		queueFrom: map[string]string{}, queueFromBase: map[string]string{},
 	}
-	h.git("init", "-q", "-b", "main")
-	h.commitOn("main", map[string]string{"README.md": "demo\n"}, "init")
+	gittest.Init(t, h.dir, "main", map[string]string{"README.md": "demo\n"})
 	h.fake = fakegithub.New(testAccount)
 	t.Cleanup(h.fake.Close)
 	h.repo = &fakegithub.Repo{ID: testRepoID, Owner: testAccount, Name: "demo", Dir: h.dir, Private: true}

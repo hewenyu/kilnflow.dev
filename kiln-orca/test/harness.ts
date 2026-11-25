@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { existsSync, rmSync } from 'node:fs';
+import { cp, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { create, type MessageInitShape } from '@bufbuild/protobuf';
@@ -169,6 +169,30 @@ export async function commitFile(dir: string, file: string, content: string, msg
   return git(dir, 'rev-parse', 'HEAD');
 }
 
+/**
+ * 初始仓库模板：每个测试进程懒构建一次，Origin.create 把它递归拷贝到测试自己的目录，不再为每个测试跑 6 个 git 子进程。
+ * 建好之后只读；模板仓库没有配置远端，.git 里也没有绝对路径，拷贝到任意目录都能照常使用。
+ * 存在 globalThis 上（不是模块级变量）：Vitest 按测试文件重建模块，globalThis 才能让同一进程的多个文件共用一份。
+ */
+const originTemplateSlot = globalThis as { __kilnOrcaOriginTemplate?: Promise<string> };
+
+function originTemplate(): Promise<string> {
+  return (originTemplateSlot.__kilnOrcaOriginTemplate ??= buildOriginTemplate());
+}
+
+async function buildOriginTemplate(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), `kiln-orca-origin-${process.pid}-`));
+  // 进程结束时删除模板目录；测试自己拷贝出的仓库由 makeEnv 的 cleanup 删除。
+  process.once('exit', () => rmSync(dir, { recursive: true, force: true }));
+  const bare = path.join(dir, 'origin.git');
+  const work = path.join(dir, 'origin-work');
+  await must(nodeExec, 'git', ['init', '--quiet', '--bare', '-b', 'master', bare]);
+  await must(nodeExec, 'git', ['init', '--quiet', '-b', 'master', work]);
+  await commitFile(work, 'README.md', '# repo\n', 'init');
+  await git(work, 'push', '--quiet', bare, 'master');
+  return dir;
+}
+
 /** Origin 是一个本地的裸仓库（代替 GitHub）和往里推送的工作目录。 */
 export class Origin {
   constructor(
@@ -177,14 +201,12 @@ export class Origin {
   ) {}
 
   static async create(root: string): Promise<Origin> {
+    const template = await originTemplate();
     const bare = path.join(root, 'origin.git');
     const work = path.join(root, 'origin-work');
-    await must(nodeExec, 'git', ['init', '--quiet', '--bare', '-b', 'master', bare]);
-    await must(nodeExec, 'git', ['init', '--quiet', '-b', 'master', work]);
-    const o = new Origin(bare, work);
-    await commitFile(work, 'README.md', '# repo\n', 'init');
-    await git(work, 'push', '--quiet', bare, 'master');
-    return o;
+    await cp(path.join(template, 'origin.git'), bare, { recursive: true });
+    await cp(path.join(template, 'origin-work'), work, { recursive: true });
+    return new Origin(bare, work);
   }
 
   async commit(file: string, content: string, branch = 'master'): Promise<string> {

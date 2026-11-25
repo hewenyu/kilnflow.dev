@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -29,6 +28,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/forge"
 	gh "github.com/hewenyu/kilnflow.dev/internal/github"
 	"github.com/hewenyu/kilnflow.dev/internal/gitref"
+	"github.com/hewenyu/kilnflow.dev/internal/gittest"
 	"github.com/hewenyu/kilnflow.dev/internal/mergecfg"
 	"github.com/hewenyu/kilnflow.dev/internal/pgtest"
 	"github.com/hewenyu/kilnflow.dev/internal/server/admin"
@@ -261,7 +261,7 @@ func failedLoginForm() *formState {
 // 页面处理器的功能测试用真实的 Dashboard（New）、admin.Service 和 Postgres（internal/pgtest），通过 httptest 发送请求，
 // 断言状态码、页面数据（JSON）和数据库副作用。需要 GitHub 的操作（启动构建、重跑、刷新仓库、补对账）使用 internal/fakegithub。
 
-func TestMain(m *testing.M) { pgtest.Main(m) }
+func TestMain(m *testing.M) { pgtest.MainWith(m, gittest.Cleanup) }
 
 // 测试数据中的账号、installation 和仓库，与 fakegithub 的默认值一致。
 const (
@@ -481,18 +481,7 @@ func (e *webEnv) login(login string) *client {
 func gitRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
-	for name, content := range files {
-		p := filepath.Join(dir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	gitRun(t, dir, "init", "-q", "-b", "main")
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "commit", "-q", "-m", "init")
+	gittest.Init(t, dir, "main", files)
 	return dir
 }
 
