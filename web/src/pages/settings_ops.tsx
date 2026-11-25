@@ -7,6 +7,7 @@ import { Form, SubmitButton } from '../components/Form'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { Subhead } from '../components/Subhead'
 import { Ago } from '../components/Time'
+import { useLocale, useT } from '../i18n/locale'
 import { list } from '../lib/envelope'
 import { labelVariant, outboxState, stateTone } from '../lib/format'
 import css from './settings_people.module.css'
@@ -35,22 +36,24 @@ const schema = z.object({
 type Data = z.infer<typeof schema>
 
 function Ops({ data }: PageProps<Data>) {
+  const t = useT()
+  const { locale } = useLocale()
   useLive(data.Outbox.some((o) => o.State === 'pending'))
   return (
     <SettingsLayout section={data.Section}>
-      <Subhead>运维</Subhead>
+      <Subhead>{t('settingsNav.ops')}</Subhead>
       <Box>
         <dl className={css.kv}>
-          <dt>版本</dt>
+          <dt>{t('ops.version')}</dt>
           <dd className="mono">{data.Version}</dd>
           <dt>GitHub App</dt>
-          <dd>{data.App || <span className={css.muted}>未连接</span>}</dd>
-          <dt>公网地址</dt>
+          <dd>{data.App || <span className={css.muted}>{t('ops.notConnected')}</span>}</dd>
+          <dt>{t('ops.publicURL')}</dt>
           <dd className="mono">{data.PublicURL}</dd>
         </dl>
       </Box>
       <Subhead level={2} spaced id="outbox-title">
-        Outbox（待发送和失败的 GitHub 请求）
+        {t('ops.outbox')}
       </Subhead>
       <Box>
         <table className={css.table} aria-labelledby="outbox-title">
@@ -58,12 +61,12 @@ function Ops({ data }: PageProps<Data>) {
             <tr>
               <th scope="col">#</th>
               <th scope="col">key</th>
-              <th scope="col">状态</th>
-              <th scope="col">次数</th>
-              <th scope="col">错误</th>
-              <th scope="col">更新</th>
+              <th scope="col">{t('ops.state')}</th>
+              <th scope="col">{t('ops.attempts')}</th>
+              <th scope="col">{t('ops.error')}</th>
+              <th scope="col">{t('ops.updated')}</th>
               <th scope="col">
-                <span className="visually-hidden">操作</span>
+                <span className="visually-hidden">{t('ops.actions')}</span>
               </th>
             </tr>
           </thead>
@@ -77,24 +80,24 @@ function Ops({ data }: PageProps<Data>) {
                   <td data-label="key" className={`${css.mono ?? ''} ${css.key ?? ''}`}>
                     {o.DedupeKey}
                   </td>
-                  <td data-label="状态">
+                  <td data-label={t('ops.state')}>
                     <Label variant={labelVariant(stateTone(o.State))} title={o.State}>
-                      {outboxState(o.State)}
+                      {outboxState(o.State, locale)}
                     </Label>
                   </td>
-                  <td data-label="次数" className="num">
+                  <td data-label={t('ops.attempts')} className="num">
                     {o.Attempts}
                   </td>
-                  <td data-label="错误" className={css.err}>
+                  <td data-label={t('ops.error')} className={css.err}>
                     {o.LastError}
                   </td>
-                  <td data-label="更新" className={css.nowrap}>
+                  <td data-label={t('ops.updated')} className={css.nowrap}>
                     <Ago t={o.UpdatedAt} />
                   </td>
                   <td>
                     {o.State === 'dead' && (
-                      <Form action={`/outbox/${o.ID}/retry`} aria-label={`重试 outbox #${o.ID}`}>
-                        <SubmitButton size="small">重试</SubmitButton>
+                      <Form action={`/outbox/${o.ID}/retry`} aria-label={t('ops.retryLabel', { id: o.ID })}>
+                        <SubmitButton size="small">{t('ops.retry')}</SubmitButton>
                       </Form>
                     )}
                   </td>
@@ -103,7 +106,7 @@ function Ops({ data }: PageProps<Data>) {
             ) : (
               <tr>
                 <td colSpan={7} className={css.emptyCell}>
-                  全部已送达
+                  {t('ops.allDelivered')}
                 </td>
               </tr>
             )}

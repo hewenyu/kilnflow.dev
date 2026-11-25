@@ -340,5 +340,5 @@ func (e activityEntry) RunText() uiText {
 		}
 		return message(msgRunActRerun, n)
 	}
-	return rawText(e.Text())
+	return e.Text()
 }

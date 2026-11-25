@@ -8,7 +8,10 @@ import { EmptyState } from '../components/EmptyState'
 import { SettingsLayout } from '../components/SettingsLayout'
 import { Subhead } from '../components/Subhead'
 import { Ago } from '../components/Time'
-import { list } from '../lib/envelope'
+import { Msg, Trans, useT } from '../i18n/locale'
+import { list, textSchema } from '../lib/envelope'
+import { toDate } from '../lib/format'
+import { settingsTags, withLink } from './settings/common'
 import css from './settings_people.module.css'
 
 // 成员：谁能登录 Dashboard、是什么角色、最近一次登录。名单来自 Server 配置，这里只读。
@@ -21,7 +24,7 @@ const memberSchema = z.object({
   /** 管理员绑定的账号。 */
   Bound: z.boolean(),
   /** 权限来自哪里（绑定的 GitHub 账号、KILN_ADMINS、KILN_USERS）。 */
-  Source: z.string(),
+  Source: textSchema,
   /** 最近一次登录的时间，从未登录时为零值。 */
   LastLogin: z.string(),
   /** 当前登录的用户。 */
@@ -38,22 +41,19 @@ const schema = z.object({
 })
 type Data = z.infer<typeof schema>
 
+const numTags = { ...settingsTags, b: (c: string) => <b className="num">{c}</b> }
+const accountLink = withLink('/settings/account')
+
 function Members({ data }: PageProps<Data>) {
+  const t = useT()
   return (
     <SettingsLayout section={data.Section}>
-      <Subhead
-        description={
-          <>
-            能登录 Dashboard 的 GitHub 账号。管理员可以修改设置、管理 Runner；成员可以查看、启动构建、重跑和取消。共{' '}
-            <b className="num">{data.Admins}</b> 个管理员、<b className="num">{data.Users}</b> 个成员。
-          </>
-        }
-      >
-        成员
+      <Subhead description={<Trans id="membersPage.description" params={{ admins: data.Admins, users: data.Users }} tags={numTags} />}>
+        {t('settingsNav.members')}
       </Subhead>
       <Box>
         {data.Members.length > 0 ? (
-          <ul className={`${css.rows} ${css.members}`} aria-label="成员">
+          <ul className={`${css.rows} ${css.members}`} aria-label={t('membersPage.listLabel')}>
             {data.Members.map((m) => (
               <BoxRow as="li" key={m.Login}>
                 <div className={css.person}>
@@ -61,22 +61,38 @@ function Members({ data }: PageProps<Data>) {
                   <div>
                     <div className={css.personName}>
                       {m.Login}
-                      {m.Me && <Label variant="accent">你</Label>}
-                      {m.Role === 'admin' ? <Label variant="done">管理员</Label> : <Label>成员</Label>}
+                      {m.Me && <Label variant="accent">{t('membersPage.you')}</Label>}
+                      {m.Role === 'admin' ? <Label variant="done">{t('role.admin')}</Label> : <Label>{t('role.member')}</Label>}
                     </div>
-                    <p className={css.muted}>来自 {m.Source}</p>
+                    <p className={css.muted}>
+                      {t('membersPage.from')} <Msg text={m.Source} />
+                    </p>
                   </div>
                 </div>
                 <div className={css.cells}>
                   <span>
-                    最近登录 <Ago t={m.LastLogin} fallback="从未登录" />
+                    {toDate(m.LastLogin) ? (
+                      <Trans id="membersPage.lastLogin" tags={{ ago: () => <Ago t={m.LastLogin} /> }} />
+                    ) : (
+                      t('membersPage.never')
+                    )}
                   </span>
                   <span>
-                    <LinkButton size="small" variant="invisible" href={`/settings/activity?actor=${encodeURIComponent(m.Login)}`} aria-label={`${m.Login} 的活动`}>
-                      活动
+                    <LinkButton
+                      size="small"
+                      variant="invisible"
+                      href={`/settings/activity?actor=${encodeURIComponent(m.Login)}`}
+                      aria-label={t('membersPage.activityLabel', { login: m.Login })}
+                    >
+                      {t('membersPage.activity')}
                     </LinkButton>
-                    <LinkButton size="small" variant="invisible" href={`/runs?actor=${encodeURIComponent(m.Login)}`} aria-label={`${m.Login} 发起的运行`}>
-                      运行
+                    <LinkButton
+                      size="small"
+                      variant="invisible"
+                      href={`/runs?actor=${encodeURIComponent(m.Login)}`}
+                      aria-label={t('membersPage.runsLabel', { login: m.Login })}
+                    >
+                      {t('membersPage.runs')}
                     </LinkButton>
                   </span>
                 </div>
@@ -84,24 +100,17 @@ function Members({ data }: PageProps<Data>) {
             ))}
           </ul>
         ) : (
-          <EmptyState icon={PeopleIcon} title="还没有成员">
-            现在只能用 admin token 登录。先在 <a href="/settings/account">登录与身份</a> 中绑定你的 GitHub 账号。
+          <EmptyState icon={PeopleIcon} title={t('membersPage.emptyTitle')}>
+            <Trans id="membersPage.emptyText" tags={accountLink} />
           </EmptyState>
         )}
       </Box>
       <details className={css.help}>
-        <summary>怎样添加或移除成员</summary>
+        <summary>{t('membersPage.help')}</summary>
         <p>
-          成员名单在 Server 的配置中：<code>KILN_ADMINS</code>（管理员）和 <code>KILN_USERS</code>（成员），写 GitHub 登录名或数字 ID，逗号分隔，修改后重启
-          Server 生效。绑定的 GitHub 账号
-          {!data.Bound && (
-            <>
-              （在 <a href="/settings/account">登录与身份</a> 中绑定）
-            </>
-          )}
-          自动是管理员，不需要写进名单。
+          <Trans id={data.Bound ? 'membersPage.helpListBound' : 'membersPage.helpListUnbound'} tags={accountLink} />
         </p>
-        <p>从名单中移除的账号，已经登录的会话在下一次请求时失效，不用等会话过期。</p>
+        <p>{t('membersPage.helpRemoved')}</p>
       </details>
     </SettingsLayout>
   )

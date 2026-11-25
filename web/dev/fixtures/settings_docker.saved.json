@@ -1,6 +1,11 @@
 {
  "Page": "settings_docker",
- "Title": "Docker Hub 连接 · acme",
+ "Title": {
+  "id": "settings.titleDocker",
+  "params": {
+   "account": "acme"
+  }
+ },
  "Nav": "settings",
  "Status": 422,
  "Session": {
@@ -51,8 +56,12 @@
     "ref_policy": "refs/tags/v*"
    },
    "Errors": {
-    "namespace": "命名空间只能包含小写字母、数字和 . _ -（Docker Hub 镜像名必须小写），例如 acme",
-    "token": "为了安全，刚才输入的访问令牌没有保留，修正上面的错误后请重新输入"
+    "namespace": {
+     "id": "settingsDocker.errNamespaceInvalid"
+    },
+    "token": {
+     "id": "settingsDocker.errTokenNotKept"
+    }
    },
    "Failed": true
   },

@@ -20,7 +20,6 @@
   "Env": "",
   "Label": "acme",
   "Kind": "owner",
-  "KindLabel": "账号级（账号下的所有仓库可见）",
   "Environment": null,
   "Vars": [
    {
@@ -43,7 +42,6 @@
    "Errors": {},
    "Failed": false
   },
-  "CrumbLabel": "变量与密钥",
   "CrumbURL": "/settings/variables",
   "URL": "/settings/scope?account=acme",
   "Query": "account=acme"

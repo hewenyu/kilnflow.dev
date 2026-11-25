@@ -15,8 +15,11 @@ import (
 // 绑定后用这个 GitHub 账号登录 Dashboard 即为管理员；CLI（admin token）的操作在审计日志中记为这个账号。
 // 确认 GitHub 登录可用后可以关闭 Dashboard 的 admin token 登录；CLI 不受影响，可以随时重新开启（恢复入口）。
 
-// ErrNotBound 表示还没有绑定 GitHub 账号。
+// ErrNotBound 表示还没有绑定 GitHub 账号（关闭 token 登录的前提不满足，包装在 FailedPrecondition 的 *connect.Error 中）。
 var ErrNotBound = errors.New("还没有绑定 GitHub 账号：先在 Dashboard 的 设置 → 登录与身份 中绑定")
+
+// ErrAlreadyUnbound 表示解除绑定时还没有绑定（包装在 FailedPrecondition 的 *connect.Error 中）。
+var ErrAlreadyUnbound = errors.New("没有绑定 GitHub 账号，不需要解除")
 
 // AdminBinding 返回管理员绑定的 GitHub 账号；还没有绑定时返回 nil。
 func (s *Service) AdminBinding(ctx context.Context) (*store.AdminBinding, error) {
@@ -61,7 +64,7 @@ func (s *Service) UnbindAdmin(ctx context.Context, actor string) error {
 			return err
 		}
 		if prev == nil {
-			return connect.NewError(connect.CodeFailedPrecondition, errors.New("没有绑定 GitHub 账号，不需要解除"))
+			return connect.NewError(connect.CodeFailedPrecondition, ErrAlreadyUnbound)
 		}
 		if _, err := store.DeleteAdminBinding(ctx, tx); err != nil {
 			return err

@@ -33,6 +33,15 @@ const (
 	DocCheckSampleInvalid      = "sample_invalid"
 )
 
+// DocCheckErrorCodes 返回全部错误码（展示层的契约测试据此检查每个错误码都有对应的说明）。
+func DocCheckErrorCodes() []string {
+	return []string{
+		DocCheckAuthFailed, DocCheckForbidden, DocCheckNotFound, DocCheckCollectionNotFound, DocCheckSampleNotFound,
+		DocCheckRateLimited, DocCheckUpstream, DocCheckInvalidResponse, DocCheckInvalidBaseURL, DocCheckNetworkError,
+		DocCheckTimeout, DocCheckInvalidDocument, DocCheckSampleInvalid,
+	}
+}
+
 // DocCheckErrorText 返回错误码给人看的说明（固定文案，不含远端内容）。
 func DocCheckErrorText(code string) string {
 	switch code {

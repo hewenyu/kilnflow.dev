@@ -1,6 +1,8 @@
 {
  "Page": "settings_activity",
- "Title": "活动",
+ "Title": {
+  "id": "settings.titleActivity"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {
@@ -32,9 +34,14 @@
      "mode": "failed"
     },
     "At": "2026-11-05T04:53:46-08:00",
-    "Text": "重跑了 run #409（第 1 次重跑）",
-    "Link": "/runs/409",
-    "RunText": "重跑了 run #409（第 1 次重跑）"
+    "Text": {
+     "id": "activity.runRerun",
+     "params": {
+      "run": 409,
+      "n": 1
+     }
+    },
+    "Link": "/runs/409"
    },
    {
     "ID": 207,
@@ -44,9 +51,13 @@
      "name": "mini-02"
     },
     "At": "2026-11-05T04:46:46-08:00",
-    "Text": "暂停了 Runner mini-02 接单",
-    "Link": "/runners",
-    "RunText": "暂停了 Runner mini-02 接单"
+    "Text": {
+     "id": "activity.runnerDrain",
+     "params": {
+      "name": "mini-02"
+     }
+    },
+    "Link": "/runners"
    },
    {
     "ID": 206,
@@ -56,9 +67,13 @@
      "run_id": 408
     },
     "At": "2026-11-05T04:10:46-08:00",
-    "Text": "手动启动了 run #408",
-    "Link": "/runs/408",
-    "RunText": "手动启动了 run #408"
+    "Text": {
+     "id": "activity.runDispatch",
+     "params": {
+      "run": 408
+     }
+    },
+    "Link": "/runs/408"
    },
    {
     "ID": 205,
@@ -69,9 +84,14 @@
      "scope": "acme/kiln"
     },
     "At": "2026-11-05T02:45:46-08:00",
-    "Text": "设置了 secret NPM_TOKEN（acme/kiln）",
-    "Link": "",
-    "RunText": "设置了 secret NPM_TOKEN（acme/kiln）"
+    "Text": {
+     "id": "activity.secretSet",
+     "params": {
+      "name": "NPM_TOKEN",
+      "scope": "acme/kiln"
+     }
+    },
+    "Link": ""
    },
    {
     "ID": 204,
@@ -81,9 +101,13 @@
      "github_login": "octocat"
     },
     "At": "2026-10-24T04:55:46-08:00",
-    "Text": "把管理员绑定到 GitHub 账号 octocat",
-    "Link": "",
-    "RunText": "把管理员绑定到 GitHub 账号 octocat"
+    "Text": {
+     "id": "activity.adminBind",
+     "params": {
+      "login": "octocat"
+     }
+    },
+    "Link": ""
    },
    {
     "ID": 203,
@@ -93,9 +117,10 @@
      "via": "token"
     },
     "At": "2026-10-24T04:50:46-08:00",
-    "Text": "用 admin token 登录了 Dashboard",
-    "Link": "",
-    "RunText": "用 admin token 登录了 Dashboard"
+    "Text": {
+     "id": "activity.loginToken"
+    },
+    "Link": ""
    }
   ],
   "OlderURL": "/settings/activity?before=203",

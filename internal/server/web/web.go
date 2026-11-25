@@ -117,16 +117,6 @@ func New(cfg Config, deps Deps) (*Dashboard, error) {
 	}, nil
 }
 
-// render 渲染页面。先渲染到缓冲区，出错时返回 500 而不是半个页面。title 是原样显示的标题（还没有迁移成消息的页面）。
-func (d *Dashboard) render(w http.ResponseWriter, r *http.Request, page, title string, data any) {
-	d.renderPage(w, r, page, rawText(title), data, http.StatusOK)
-}
-
-// renderStatus 与 render 相同，使用状态码 status（例如表单校验失败时的 422）。
-func (d *Dashboard) renderStatus(w http.ResponseWriter, r *http.Request, page, title string, data any, status int) {
-	d.renderPage(w, r, page, rawText(title), data, status)
-}
-
 // renderPage 渲染页面并使用状态码 status，title 是消息或原样的文字（见 text.go）：前端请求返回页面数据（JSON）；
 // 浏览器直接打开（例如下载地址或 GitHub 登录回调出错）返回内嵌了这份页面数据的 index.html，前端直接显示，不再请求一次。
 func (d *Dashboard) renderPage(w http.ResponseWriter, r *http.Request, page string, title uiText, data any, status int) {
@@ -294,12 +284,6 @@ func (d *Dashboard) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /outbox/{id}/retry", d.web(true, d.postOutboxRetry))
 	mux.HandleFunc("POST /sync", d.web(true, d.postSync))
 	mux.HandleFunc("POST /settings/repos/reconcile", d.web(true, d.postReconcile))
-}
-
-// flashBack 重定向到站内页面 to，并带上一条原样显示的提示（还没有迁移成消息的操作；新的操作用 flashMsg）。
-// to 由调用方用常量或 ID 拼成，不来自用户输入。
-func (d *Dashboard) flashBack(w http.ResponseWriter, r *http.Request, to, msg string) {
-	d.redirect(w, r, withFlash(to, msg))
 }
 
 // flashMsg 重定向到站内页面 to，并带上一条消息作为提示（前端按当前语言显示）。消息必须登记为 flash（见 text.go）；

@@ -1,6 +1,8 @@
 {
  "Page": "settings_activity",
- "Title": "活动",
+ "Title": {
+  "id": "settings.titleActivity"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

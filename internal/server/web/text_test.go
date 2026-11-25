@@ -94,7 +94,7 @@ func textZH(t *testing.T, x uiText) string {
 		}
 		if m[2] == "duration" {
 			// 时长（秒）：与前端相同，整分钟显示为分钟，其余显示为秒
-			return humanDuration(time.Duration(toInt64(t, v)) * time.Second)
+			return zhDuration(time.Duration(toInt64(t, v)) * time.Second)
 		}
 		if f, ok := v.(float64); ok {
 			// 从页面数据解码的数字是 float64：按整数显示，与前端相同
@@ -102,6 +102,14 @@ func textZH(t *testing.T, x uiText) string {
 		}
 		return fmt.Sprint(v)
 	})
+}
+
+// zhDuration 按中文显示时长（与前端相同：整分钟显示为分钟，其余显示为秒）。
+func zhDuration(d time.Duration) string {
+	if d >= time.Minute && d%time.Minute == 0 {
+		return fmt.Sprintf("%d 分钟", int(d/time.Minute))
+	}
+	return fmt.Sprintf("%d 秒", int(d.Round(time.Second)/time.Second))
 }
 
 // toInt64 返回整数参数的值（直接构造的是 int64，从页面数据解码的是 float64）。
@@ -136,6 +144,43 @@ func textsZH(t *testing.T, xs []uiText) []string {
 func flashZH(t *testing.T, v string) string {
 	t.Helper()
 	return textZH(t, parseFlash(v))
+}
+
+// bodyZH 返回页面 body 的数据（JSON），其中的消息按中文词典换成文字（与 textZH 相同），测试据此检查页面上的中文。
+// 消息是只有 id 和 params 两个键的对象。
+func bodyZH(t *testing.T, body string) string {
+	t.Helper()
+	var v any
+	if err := json.Unmarshal([]byte(body), &v); err != nil {
+		t.Fatalf("页面数据不是 JSON：%v：%.300s", err, body)
+	}
+	var walk func(v any) any
+	walk = func(v any) any {
+		switch x := v.(type) {
+		case map[string]any:
+			if id, ok := x["id"].(string); ok && len(x) <= 2 {
+				params, _ := x["params"].(map[string]any)
+				if _, has := x["params"]; len(x) == 1 || params != nil || !has {
+					return textZH(t, uiText{id: msgID(id), params: params})
+				}
+			}
+			for k, e := range x {
+				x[k] = walk(e)
+			}
+		case []any:
+			for i, e := range x {
+				x[i] = walk(e)
+			}
+		}
+		return v
+	}
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(walk(v)); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
 }
 
 // wantPageZH 检查页面 body 的名称、导航和中文标题。

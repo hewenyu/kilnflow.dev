@@ -1,6 +1,8 @@
 {
  "Page": "settings",
- "Title": "设置 · 连接与发布凭据",
+ "Title": {
+  "id": "settings.titleConn"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

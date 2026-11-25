@@ -600,7 +600,7 @@ func TestAIActivity(t *testing.T) {
 			"重跑了 AI 审计请求 #5，新的请求 #6", aiRequestURL(6),
 		},
 	} {
-		if got := c.e.Text(); got != c.text {
+		if got := textZH(t, c.e.Text()); got != c.text {
 			t.Errorf("%s：Text = %q，应为 %q", c.e.Action, got, c.text)
 		}
 		if got := c.e.Link(); got != c.link {

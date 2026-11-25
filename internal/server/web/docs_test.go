@@ -170,7 +170,7 @@ func TestSettingsRepoDocsVerify(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &red); err != nil || !strings.HasPrefix(red.Redirect, "/settings/repos/docs?repo=tester%2Fdemo") {
 		t.Fatalf("验证后应回到外部文档页：%v / %s", err, w.Body.String())
 	}
-	if !strings.Contains(red.Redirect, url.QueryEscape("验证通过")) {
+	if u, err := url.Parse(red.Redirect); err != nil || !strings.Contains(flashZH(t, u.Query().Get("flash")), "验证通过") {
 		t.Errorf("提示应说明验证通过：%s", red.Redirect)
 	}
 	if strings.Contains(w.Body.String(), "outline-read-token") {
@@ -186,9 +186,13 @@ func TestSettingsRepoDocsVerify(t *testing.T) {
 	if atomic.LoadInt32(&e.docProviderCalls) != 1 {
 		t.Errorf("显式验证应只构造一次外部客户端：%d", e.docProviderCalls)
 	}
+	checkVerifiedDocsPage(t, e)
+}
 
-	// 页面展示验证状态与观测到的文档集链接；不泄露 token。
-	w = e.get(e.alice, "/settings/repos/docs?repo=tester/demo")
+// checkVerifiedDocsPage 检查验证通过后的外部文档页：展示验证状态与观测到的文档集链接，不泄露 token。
+func checkVerifiedDocsPage(t *testing.T, e *webEnv) {
+	t.Helper()
+	w := e.get(e.alice, "/settings/repos/docs?repo=tester/demo")
 	if w.Code != http.StatusOK {
 		t.Fatalf("外部文档页 = %d：%s", w.Code, w.Body.String())
 	}
@@ -197,7 +201,7 @@ func TestSettingsRepoDocsVerify(t *testing.T) {
 		Active  bool
 		Binding *struct {
 			CheckStatus      string
-			CheckErrorText   string
+			CheckErrorText   uiText
 			CheckDocCount    *int
 			CheckSampleDocID string
 			CollectionURL    string
@@ -239,10 +243,10 @@ func TestRepoDocsVerifyHidesInternalError(t *testing.T) {
 		t.Fatal(err)
 	}
 	flash := u.Query().Get("flash")
-	if !strings.Contains(flash, "错误编号") {
+	if !strings.Contains(flashZH(t, flash), "错误编号") {
 		t.Errorf("提示应只给出错误编号：%q", flash)
 	}
-	if strings.Contains(flash, "repo_doc_bindings") || strings.Contains(flash, "SQL") {
+	if strings.Contains(flashZH(t, flash), "repo_doc_bindings") || strings.Contains(flashZH(t, flash), "SQL") {
 		t.Errorf("提示不应包含数据库错误原文：%q", flash)
 	}
 	if out := e.log.String(); !strings.Contains(out, "repo_doc_bindings") {
@@ -651,9 +655,12 @@ func TestRepoDocsInactiveAndCSRF(t *testing.T) {
 	}
 	page := pageData[struct {
 		Active  bool
-		Binding *struct{ CheckStatus, CheckErrorText string }
+		Binding *struct {
+			CheckStatus    string
+			CheckErrorText uiText
+		}
 	}](t, w.Body.String())
-	if page.Active || page.Binding == nil || page.Binding.CheckStatus != "failed" || page.Binding.CheckErrorText == "" {
+	if page.Active || page.Binding == nil || page.Binding.CheckStatus != "failed" || page.Binding.CheckErrorText.IsZero() {
 		t.Fatalf("停用仓库的验证状态 = %+v", page)
 	}
 	if strings.Contains(w.Body.String(), "outline-read-token") {

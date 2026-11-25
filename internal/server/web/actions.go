@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/hewenyu/kilnflow.dev/internal/server/admin"
 	"github.com/hewenyu/kilnflow.dev/internal/server/auth"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
 )
@@ -201,11 +203,16 @@ func runnerOpResult(v *opTarget, op string, lease, poll time.Duration) uiText {
 }
 
 func (d *Dashboard) postOutboxRetry(w http.ResponseWriter, r *http.Request, se *session) {
-	if err := d.admin.RetryOutbox(r.Context(), pathID(r), se.Login); err != nil {
-		d.flashBack(w, r, "/settings/ops", d.failure(r, err))
+	id := pathID(r)
+	if err := d.admin.RetryOutbox(r.Context(), id, se.Login); err != nil {
+		msg := d.failureFlash(r, err, msgOpsRetryFailed, msgOpsRetryFailedRef, intArg(argID, id))
+		if ce, ok := errors.AsType[*connect.Error](err); ok && ce.Code() == connect.CodeNotFound {
+			msg = message(msgOpsRetryNotFound, intArg(argID, id))
+		}
+		d.flashMsg(w, r, "/settings/ops", msg)
 		return
 	}
-	d.flashBack(w, r, "/settings/ops", "已重新排队")
+	d.flashMsg(w, r, "/settings/ops", message(msgOpsRetried, intArg(argID, id)))
 }
 
 // postSync 刷新仓库目录（Settings → 仓库的"刷新仓库"）：只列出 installation 和仓库，不读取分支、tag、PR。
@@ -214,10 +221,10 @@ func (d *Dashboard) postSync(w http.ResponseWriter, r *http.Request, se *session
 	back := reposBack(r)
 	res, err := d.admin.SyncInstallations(r.Context(), se.Login)
 	if err != nil {
-		d.flashBack(w, r, back, "刷新仓库失败："+d.failure(r, err))
+		d.flashMsg(w, r, back, d.failureFlash(r, err, msgReposSyncFailed, msgReposSyncFailedRef))
 		return
 	}
-	d.flashBack(w, r, back, fmt.Sprintf("已刷新仓库：%d 个 installation，%d 个启用中的仓库", res.Installations, res.Repos))
+	d.flashMsg(w, r, back, message(msgReposSynced, intArg(argInstallations, int64(res.Installations)), intArg(argRepos, int64(res.Repos))))
 }
 
 // postReconcile 对一个仓库补对账：只请求这个仓库的分支、tag 和打开的 PR，补上漏掉的 webhook（PLAN #7.3）。
@@ -226,14 +233,24 @@ func (d *Dashboard) postReconcile(w http.ResponseWriter, r *http.Request, se *se
 	repo := r.PostFormValue("repo")
 	res, err := d.admin.ReconcileRepo(r.Context(), repo, se.Login)
 	if err != nil {
-		d.flashBack(w, r, back, repo+" 补对账失败："+d.failure(r, err))
+		d.flashMsg(w, r, back, d.reconcileFailure(r, err, repo))
 		return
 	}
-	msg := fmt.Sprintf("%s 补对账完成：%d 个分支、%d 个 tag、%d 个打开的 PR，补上 %d 个 run", res.Repo, res.Branches, res.Tags, res.Pulls, res.Runs)
+	id := msgReposReconciled
 	if res.Baseline {
-		msg += "。这是第一次对账，之前没有记录过的 ref 只记录为基线，不构建"
+		id = msgReposReconciledBase
 	}
-	d.flashBack(w, r, back, msg)
+	d.flashMsg(w, r, back, message(id, strArg(argRepo, res.Repo), intArg(argBranches, int64(res.Branches)),
+		intArg(argTags, int64(res.Tags)), intArg(argPulls, int64(res.Pulls)), intArg(argAdded, int64(res.Runs))))
+}
+
+// reconcileFailure 返回补对账失败后的提示：被 GitHub 限流时给出可以重试的时间（Unix 秒，前端按当前语言显示），
+// 仓库不在 Kiln 中等校验错误按 settingsFailureFlash 显示对应的消息，其余带原样的说明或错误编号。
+func (d *Dashboard) reconcileFailure(r *http.Request, err error, repo string) uiText {
+	if rl, ok := errors.AsType[*admin.RateLimitedError](err); ok {
+		return message(msgReposReconcileLimited, strArg(argRepo, repo), intArg(argAt, rl.Until.Unix()))
+	}
+	return d.settingsFailureFlash(r, err, msgReposReconcileFailed, msgReposReconcileFailedRef, strArg(argRepo, repo))
 }
 
 // reposBack 返回仓库页的地址，保留表单中带回的搜索词和页码。

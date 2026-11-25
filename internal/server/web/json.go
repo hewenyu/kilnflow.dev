@@ -1,6 +1,10 @@
 package web
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/hewenyu/kilnflow.dev/internal/server/store"
+)
 
 // 页面数据的 JSON 编码：字段照常输出，另外加上模板时代由方法计算的值（前端直接使用，不重复实现规则）。
 // 每个类型先转换为没有方法的同构类型（plain），避免 MarshalJSON 递归。
@@ -143,9 +147,9 @@ func (e activityEntry) MarshalJSON() ([]byte, error) {
 	type plain activityEntry
 	return json.Marshal(struct {
 		plain
-		Text, Link string
-		RunText    uiText
-	}{plain(e), e.Text(), e.Link(), e.RunText()})
+		Text, RunText uiText
+		Link          string
+	}{plain(e), e.Text(), e.RunText(), e.Link()})
 }
 
 // scopeJSON 是作用域配置页的计算值：URL 是配置页地址，Query 是作用域的查询参数（前端拼接变量和 secret 的新建、编辑页地址）。
@@ -166,15 +170,17 @@ func (p *scopePage) MarshalJSON() ([]byte, error) {
 }
 
 // MarshalJSON 输出变量或 secret 的编辑页。itemPage 嵌入了 *scopePage，必须自己实现，否则会用 scopePage 的编码而丢掉自己的字段。
+// Kind 是条目的种类（variables、secrets），作用域的类型另作 ScopeKind 输出（前端按它显示类型说明）。
 func (p *itemPage) MarshalJSON() ([]byte, error) {
 	type plainScope scopePage
 	return json.Marshal(struct {
 		*plainScope
 		scopeJSON
-		Kind     itemKind
-		Name     string
-		Secret   any
-		Form     *formState
-		IsSecret bool
-	}{(*plainScope)(p.scopePage), p.scopeJSON(), p.Kind, p.Name, p.Secret, p.Form, p.IsSecret()})
+		Kind      itemKind
+		ScopeKind store.ScopeKind
+		Name      string
+		Secret    any
+		Form      *formState
+		IsSecret  bool
+	}{(*plainScope)(p.scopePage), p.scopeJSON(), p.Kind, p.scopePage.Kind, p.Name, p.Secret, p.Form, p.IsSecret()})
 }

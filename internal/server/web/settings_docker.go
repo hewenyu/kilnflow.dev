@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -27,15 +26,15 @@ import (
 // dockerDefaultRef 是新建 docker-release 时默认的 ref 策略。
 const dockerDefaultRef = "refs/tags/v*"
 
-// 连接字段的显示名。
+// 连接的字段（表单字段名，也是 dockerView.Missing 中的键，前端按键显示当前语言的字段名）。
 const (
-	dockerUserLabel  = "Docker Hub 用户名"
-	dockerNSLabel    = "镜像命名空间"
-	dockerTokenLabel = "访问令牌" //nolint:gosec // 字段的显示名，不是凭据
+	dockerFieldUser  = "username"
+	dockerFieldNS    = "namespace"
+	dockerFieldToken = "token"
 )
 
-// dockerFields 是连接的全部字段（显示名），顺序即"还缺少"中的顺序。
-var dockerFields = []string{dockerUserLabel, dockerNSLabel, dockerTokenLabel}
+// dockerFields 是连接的全部字段，顺序即"还缺少"中的顺序。
+var dockerFields = []string{dockerFieldUser, dockerFieldNS, dockerFieldToken}
 
 // Docker Hub 连接的状态。
 const (
@@ -66,7 +65,7 @@ type dockerView struct {
 	Extra    int
 	Verified *dockerPublish
 	Status   string
-	// Missing 是缺少的字段（显示名）。
+	// Missing 是缺少的字段（dockerFields 中的键）。
 	Missing []string
 }
 
@@ -124,7 +123,7 @@ func (d *Dashboard) dockerStatus(ctx context.Context, account string) (*dockerVi
 	for _, m := range []struct {
 		missing bool
 		label   string
-	}{{v.Username == "", dockerUserLabel}, {v.Namespace == "", dockerNSLabel}, {v.Token == nil, dockerTokenLabel}} {
+	}{{v.Username == "", dockerFieldUser}, {v.Namespace == "", dockerFieldNS}, {v.Token == nil, dockerFieldToken}} {
 		if m.missing {
 			v.Missing = append(v.Missing, m.label)
 		}
@@ -184,7 +183,7 @@ func (d *Dashboard) pageDocker(w http.ResponseWriter, r *http.Request, _ *sessio
 		return
 	}
 	if account == "" {
-		d.flashBack(w, r, "/settings", "请从连接卡片进入：账号不在 Kiln 中")
+		d.flashMsg(w, r, "/settings", message(msgConnEnterFromCard))
 		return
 	}
 	v, err := d.dockerStatus(ctx, account)
@@ -193,39 +192,39 @@ func (d *Dashboard) pageDocker(w http.ResponseWriter, r *http.Request, _ *sessio
 		return
 	}
 	f := newForm()
-	f.Values["username"], f.Values["namespace"], f.Values["ref_policy"] = v.Username, v.Namespace, dockerDefaultRef
+	f.Values[dockerFieldUser], f.Values[dockerFieldNS], f.Values["ref_policy"] = v.Username, v.Namespace, dockerDefaultRef
 	d.renderDocker(w, r, v, f, http.StatusOK)
 }
 
 func (d *Dashboard) renderDocker(w http.ResponseWriter, r *http.Request, v *dockerView, f *formState, status int) {
 	p := &dockerPage{Section: sectionConn, Docker: v, Form: f, DefaultRef: dockerDefaultRef}
-	d.renderStatus(w, r, "settings_docker", "Docker Hub 连接 · "+v.Account, p, status)
+	d.renderPage(w, r, "settings_docker", message(msgSetTitleDocker, strArg(argAccount, v.Account)), p, status)
 }
 
 // readDockerForm 读取并校验 Docker Hub 连接表单。令牌只返回，不写入表单状态。
 func readDockerForm(r *http.Request, v *dockerView) (f *formState, token string) {
 	f = newForm()
-	for _, k := range []string{"username", "namespace", "ref_policy"} {
+	for _, k := range []string{dockerFieldUser, dockerFieldNS, "ref_policy"} {
 		f.Values[k] = strings.TrimSpace(r.PostFormValue(k))
 	}
-	token = strings.TrimSpace(r.PostFormValue("token"))
-	switch user := f.Values["username"]; {
+	token = strings.TrimSpace(r.PostFormValue(dockerFieldToken))
+	switch user := f.Values[dockerFieldUser]; {
 	case user == "":
-		f.fail("username", "请填写 Docker Hub 用户名（访问令牌所属的 Docker ID）")
+		f.failText(dockerFieldUser, message(msgDockerErrUserEmpty))
 	case strings.ContainsAny(user, " \t/:@"):
-		f.fail("username", "用户名不能包含空格、/、: 或 @，填 Docker ID 本身即可")
+		f.failText(dockerFieldUser, message(msgDockerErrUserInvalid))
 	}
-	switch ns := f.Values["namespace"]; {
+	switch ns := f.Values[dockerFieldNS]; {
 	case ns == "":
-		f.fail("namespace", "请填写镜像命名空间（镜像所在的 Docker Hub 用户名或组织名）")
+		f.failText(dockerFieldNS, message(msgDockerErrNSEmpty))
 	case !dockerNamespaceRe.MatchString(ns):
-		f.fail("namespace", "命名空间只能包含小写字母、数字和 . _ -（Docker Hub 镜像名必须小写），例如 acme")
+		f.failText(dockerFieldNS, message(msgDockerErrNSInvalid))
 	}
 	switch {
 	case token == "" && v.Token == nil:
-		f.fail("token", "首次配置需要填写访问令牌")
+		f.failText(dockerFieldToken, message(msgDockerErrTokenRequired))
 	case token != "" && f.Failed():
-		f.fail("token", "为了安全，刚才输入的访问令牌没有保留，修正上面的错误后请重新输入")
+		f.failText(dockerFieldToken, message(msgDockerErrTokenNotKept))
 	}
 	return f, token
 }
@@ -240,7 +239,7 @@ func (d *Dashboard) postDocker(w http.ResponseWriter, r *http.Request, se *sessi
 		return
 	}
 	if account == "" {
-		d.flashBack(w, r, "/settings", "账号不在 Kiln 中，没有保存")
+		d.flashMsg(w, r, "/settings", message(msgConnNotSaved))
 		return
 	}
 	v, err := d.dockerStatus(ctx, account)
@@ -249,57 +248,56 @@ func (d *Dashboard) postDocker(w http.ResponseWriter, r *http.Request, se *sessi
 		return
 	}
 	f, token := readDockerForm(r, v)
-	var msg []string
+	var msg uiText
 	if !f.Failed() {
 		if msg, err = d.saveDocker(ctx, v, f, token, se.Login); err != nil {
-			f.fail(formGeneral, "保存失败："+d.failure(r, err))
+			f.failText(formGeneral, d.settingsFormFailure(r, err, msgDockerSaveFailed))
 		}
 	}
 	if f.Failed() {
 		d.renderDocker(w, r, v, f, http.StatusUnprocessableEntity)
 		return
 	}
-	d.flashBack(w, r, dockerURL(account), strings.Join(msg, "；"))
+	d.flashMsg(w, r, dockerURL(account), msg)
 }
 
-// saveDocker 写入 Docker Hub 连接（一个事务），返回给用户的提示。
-func (d *Dashboard) saveDocker(ctx context.Context, v *dockerView, f *formState, token, actor string) ([]string, error) {
+// saveDocker 写入 Docker Hub 连接（一个事务），返回给用户的提示：修改了哪些字段（变量和 secret 的名称，原样显示）、
+// 访问令牌是否保持不变；首次保存时说明创建了 environment 和它的 ref 策略。
+func (d *Dashboard) saveDocker(ctx context.Context, v *dockerView, f *formState, token, actor string) (uiText, error) {
 	c := &admin.DockerConnection{Account: v.Account, Token: token}
-	var msg, changed []string
 	if v.Env == nil {
 		c.RefPolicy = splitList(f.Values["ref_policy"])
 		if len(c.RefPolicy) == 0 {
 			c.RefPolicy = []string{dockerDefaultRef}
 		}
-		msg = append(msg, fmt.Sprintf("已创建 environment %s（只允许 %s）", admin.DockerEnvName, strings.Join(c.RefPolicy, ", ")))
 	} else {
 		c.Environment = v.Env.Name
 	}
-	if user := f.Values["username"]; user != v.Username {
+	var changed []string
+	if user := f.Values[dockerFieldUser]; user != v.Username {
 		c.Username = &user
-		changed = append(changed, dockerUserLabel)
+		changed = append(changed, admin.DockerUserVar)
 	}
-	if ns := f.Values["namespace"]; ns != v.Namespace {
+	if ns := f.Values[dockerFieldNS]; ns != v.Namespace {
 		c.Namespace = &ns
-		changed = append(changed, dockerNSLabel)
+		changed = append(changed, admin.DockerNamespaceVar)
 	}
 	if token != "" {
-		changed = append(changed, dockerTokenLabel)
+		changed = append(changed, admin.DockerTokenSecret)
 	}
 	if err := d.admin.SaveDockerConnection(ctx, c, actor); err != nil {
-		return nil, err
+		return uiText{}, err
 	}
+	fields := strArg(argFields, strings.Join(changed, listSep))
 	switch {
+	case v.Env == nil:
+		return message(msgDockerSavedCreated, strArg(argEnv, admin.DockerEnvName), strArg(argRefs, strings.Join(c.RefPolicy, listSep))), nil
 	case len(changed) == 0:
-		msg = append(msg, "没有修改，Docker Hub 配置保持不变")
-	default:
-		msg = append(msg, "已保存 Docker Hub 配置（"+strings.Join(changed, "、")+"）")
+		return message(msgDockerUnchanged), nil
+	case token == "" && v.Token != nil:
+		return message(msgDockerSavedTokenKept, fields), nil
 	}
-	if token == "" && v.Token != nil {
-		msg = append(msg, "访问令牌没有修改，继续使用原来的")
-	}
-	msg = append(msg, "保存只把配置存进 Kiln，没有登录或推送 Docker Hub")
-	return msg, nil
+	return message(msgDockerSaved, fields), nil
 }
 
 // postDockerDelete 删除账号的 Docker Hub 连接（用户名、命名空间和访问令牌，一个事务），保留 environment docker-release
@@ -312,11 +310,11 @@ func (d *Dashboard) postDockerDelete(w http.ResponseWriter, r *http.Request, se 
 		return
 	}
 	if account == "" {
-		d.flashBack(w, r, "/settings", "账号不在 Kiln 中")
+		d.flashMsg(w, r, "/settings", message(msgConnAccountMissing))
 		return
 	}
 	if r.PostFormValue("confirm") != "1" {
-		d.flashBack(w, r, dockerURL(account), "没有删除：请先勾选确认")
+		d.flashMsg(w, r, dockerURL(account), message(msgDockerDeleteUnconfirmed))
 		return
 	}
 	v, err := d.dockerStatus(ctx, account)
@@ -325,12 +323,12 @@ func (d *Dashboard) postDockerDelete(w http.ResponseWriter, r *http.Request, se 
 		return
 	}
 	if v.Env == nil {
-		d.flashBack(w, r, "/settings", "没有已保存的 Docker Hub 凭据")
+		d.flashMsg(w, r, "/settings", message(msgDockerDeleteNothing))
 		return
 	}
 	if err := d.admin.DeleteDockerConnection(ctx, account, v.Env.Name, se.Login); err != nil {
-		d.flashBack(w, r, dockerURL(account), "删除失败："+d.failure(r, err))
+		d.flashMsg(w, r, dockerURL(account), d.failureFlash(r, err, msgDockerDeleteFailed, msgDockerDeleteFailedRef, strArg(argAccount, account)))
 		return
 	}
-	d.flashBack(w, r, "/settings", fmt.Sprintf("已删除 %s 的 Docker Hub 凭据；environment %s 及其保护规则保留", account, v.Env.Name))
+	d.flashMsg(w, r, "/settings", message(msgDockerDeleted, strArg(argAccount, account), strArg(argEnv, v.Env.Name)))
 }

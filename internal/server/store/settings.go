@@ -190,17 +190,29 @@ type ScopeRef struct {
 // ErrEnvironmentNotFound 表示作用域中指定的 environment 不存在（账号或仓库存在）。
 var ErrEnvironmentNotFound = errors.New("environment 不存在")
 
-// envNotFoundError 是 ResolveScope 找不到 environment 时的错误：说明文字给 CLI 和 Dashboard 直接显示，errors.Is 匹配 ErrEnvironmentNotFound。
-type envNotFoundError struct{ name string }
+// EnvironmentNotFoundError 是 ResolveScope 找不到 environment 时的错误：Name 是原样的 environment 名称，
+// 说明文字给 CLI 和日志，errors.Is 匹配 ErrEnvironmentNotFound。
+type EnvironmentNotFoundError struct{ Name string }
 
-func (e *envNotFoundError) Error() string {
-	return fmt.Sprintf("environment %s 不存在（先用 kiln env set 创建）", e.name)
+func (e *EnvironmentNotFoundError) Error() string {
+	return fmt.Sprintf("environment %s 不存在（先用 kiln env set 创建）", e.Name)
 }
 
-func (e *envNotFoundError) Unwrap() error { return ErrEnvironmentNotFound }
+func (e *EnvironmentNotFoundError) Unwrap() error { return ErrEnvironmentNotFound }
+
+// ErrScopeRequired 表示作用域既没有账号也没有仓库。
+var ErrScopeRequired = errors.New("需要指定账号（--account）或仓库（--repo）")
+
+// AccountNotFoundError 表示作用域中的账号不在 Kiln 中（App 没有安装到这个账号）；Account 是原样的账号名。
+type AccountNotFoundError struct{ Account string }
+
+func (e *AccountNotFoundError) Error() string {
+	return fmt.Sprintf("账号 %s 不在 Kiln 中（App 是否已安装？）", e.Account)
+}
 
 // ResolveScope 把 CLI / Dashboard 传来的作用域（账号登录名、owner/name、environment 名）解析为 ID。
-// 仓库不存在时返回的错误包装了 ErrRepoNotFound，environment 不存在时包装了 ErrEnvironmentNotFound。
+// 仓库不存在时返回的错误包装了 ErrRepoNotFound（*RepoNotFoundError），environment 不存在时是 *EnvironmentNotFoundError，
+// 账号不存在时是 *AccountNotFoundError，都没有指定时是 ErrScopeRequired；仓库名写错格式时是 *RepoNameError。
 func ResolveScope(ctx context.Context, q Querier, account, repo, env string) (*ScopeRef, error) {
 	var ownerID int64
 	var found *Repo
@@ -214,14 +226,14 @@ func ResolveScope(ctx context.Context, q Querier, account, repo, env string) (*S
 		account = r.Owner
 	} else {
 		if account == "" {
-			return nil, errors.New("需要指定账号（--account）或仓库（--repo）")
+			return nil, ErrScopeRequired
 		}
 		err := q.QueryRow(ctx, `SELECT account_id FROM installations WHERE lower(account_login)=lower($1) AND NOT deleted ORDER BY id LIMIT 1`, account).Scan(&ownerID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = q.QueryRow(ctx, `SELECT owner_id FROM repos WHERE lower(owner)=lower($1) LIMIT 1`, account).Scan(&ownerID)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("账号 %s 不在 Kiln 中（App 是否已安装？）", account)
+			return nil, &AccountNotFoundError{Account: account}
 		}
 		if err != nil {
 			return nil, err
@@ -240,7 +252,7 @@ func ResolveScope(ctx context.Context, q Querier, account, repo, env string) (*S
 	var id int64
 	err := q.QueryRow(ctx, `SELECT id FROM environments WHERE owner_id=$1 AND repo_id IS NOT DISTINCT FROM $2 AND lower(name)=lower($3)`, ownerID, repoID, env).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, &envNotFoundError{name: env}
+		return nil, &EnvironmentNotFoundError{Name: env}
 	}
 	if err != nil {
 		return nil, err

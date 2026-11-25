@@ -18,6 +18,19 @@ import (
 // maxNpmToken 是 npm token 的长度上限。
 const maxNpmToken = 4096
 
+// npm 配置的校验和前提错误（Dashboard 按类型显示当前语言的说明，CLI 用 Error()）。
+var (
+	// ErrNpmTokenEmpty 表示没有填写 token。
+	ErrNpmTokenEmpty = errors.New("token 为空")
+	// ErrNpmTokenTooLong 表示 token 超过 maxNpmToken。
+	ErrNpmTokenTooLong = errors.New("token 太长")
+)
+
+// NpmNotConfiguredError 表示删除 npm 配置时账号还没有配置；Account 是账号名。
+type NpmNotConfiguredError struct{ Account string }
+
+func (e *NpmNotConfiguredError) Error() string { return "账号 " + e.Account + " 没有配置 npm" }
+
 func (a *rpcAPI) SetNpmAccount(ctx context.Context, req *connect.Request[apiv1.SetNpmAccountRequest]) (*connect.Response[apiv1.SetNpmAccountResponse], error) {
 	m := req.Msg
 	acct, err := a.s.SetNpmAccount(ctx, m.Account, m.Scope, m.Registry, m.Token, rpcActor(ctx))
@@ -28,6 +41,7 @@ func (a *rpcAPI) SetNpmAccount(ctx context.Context, req *connect.Request[apiv1.S
 }
 
 // SetNpmAccount 加密保存（新建或覆盖）账号的 npm 配置。token 只写入密文，不进入审计日志和错误信息。
+// scope 不合格时返回 *npm.ScopeError，registry 不合格时返回 *endpoint.Error，token 为空或太长时返回 ErrNpmTokenEmpty、ErrNpmTokenTooLong。
 func (s *Service) SetNpmAccount(ctx context.Context, account, scope, registry, token, actor string) (*apiv1.NpmAccount, error) {
 	scope, err := npm.NormalizeScope(strings.TrimSpace(scope))
 	if err != nil {
@@ -46,9 +60,9 @@ func (s *Service) SetNpmAccount(ctx context.Context, account, scope, registry, t
 	token = strings.TrimSpace(token)
 	switch {
 	case token == "":
-		return nil, errors.New("token 为空")
+		return nil, ErrNpmTokenEmpty
 	case len(token) > maxNpmToken:
-		return nil, errors.New("token 太长")
+		return nil, ErrNpmTokenTooLong
 	}
 	var out *apiv1.NpmAccount
 	err = s.db.Tx(ctx, func(tx pgx.Tx) error {
@@ -93,7 +107,7 @@ func (s *Service) DeleteNpmAccount(ctx context.Context, account, actor string) e
 			return err
 		}
 		if !ok {
-			return errors.New("账号 " + ref.Label + " 没有配置 npm")
+			return &NpmNotConfiguredError{Account: ref.Label}
 		}
 		return store.RecordConfigChange(ctx, tx, ref.OwnerID, actor, "npm.delete", map[string]any{"account": ref.Label})
 	})

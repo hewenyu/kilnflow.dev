@@ -1,6 +1,12 @@
 {
  "Page": "settings_item",
- "Title": "编辑变量 GO_VERSION · acme/kilnflow.dev",
+ "Title": {
+  "id": "settings.titleVarEdit",
+  "params": {
+   "name": "GO_VERSION",
+   "scope": "acme/kilnflow.dev"
+  }
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {
@@ -20,7 +26,6 @@
   "Env": "",
   "Label": "acme/kilnflow.dev",
   "Kind": "variables",
-  "KindLabel": "仓库级",
   "Environment": null,
   "Vars": [
    {
@@ -47,7 +52,6 @@
    "Errors": {},
    "Failed": false
   },
-  "CrumbLabel": "变量与密钥",
   "CrumbURL": "/settings/variables",
   "URL": "/settings/scope?repo=acme%2Fkilnflow.dev",
   "Query": "repo=acme%2Fkilnflow.dev",
@@ -60,6 +64,7 @@
    "Errors": {},
    "Failed": false
   },
-  "IsSecret": false
+  "IsSecret": false,
+  "ScopeKind": "repo"
  }
 }

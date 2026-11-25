@@ -21,14 +21,48 @@ import (
 // secret、变量和 environment 的管理（PLAN #16.4）。
 // 写操作的公开方法各自开一个事务；需要在同一个事务中组合多个写入时（例如 Docker Hub 连接，见 docker.go）用 *Tx 版本。
 
-// ValidName 检查变量或 secret 的名称：不能为空，只能包含字母、数字和 _（CLI 和 Dashboard 共用）。
+// 设置的校验和前提错误：稳定的类型（sentinel 或带原始参数的类型），Dashboard 按它显示当前语言的说明，
+// CLI 和日志用 Error() 的中文说明（与原来相同）。
+
+// ErrNameEmpty 表示变量或 secret 的名称为空。
+var ErrNameEmpty = errors.New("名称不能为空")
+
+// InvalidNameError 表示变量或 secret 的名称含有字母、数字和 _ 以外的字符；Name 是原样的名称。
+type InvalidNameError struct{ Name string }
+
+func (e *InvalidNameError) Error() string {
+	return fmt.Sprintf("名称 %q 只能包含字母、数字和 _", e.Name)
+}
+
+// ErrEnvNameRequired 表示没有给出 environment 名称。
+var ErrEnvNameRequired = errors.New("需要 environment 名称")
+
+// EnvNameSpaceError 表示 environment 名称以空白开头或结尾；Name 是原样的名称。
+type EnvNameSpaceError struct{ Name string }
+
+func (e *EnvNameSpaceError) Error() string {
+	return fmt.Sprintf("environment 名称 %q 不能以空白开头或结尾", e.Name)
+}
+
+// PublishRepoError 表示 environment 允许发布的仓库没有写成 owner/name；Repo 是原样的输入。
+type PublishRepoError struct{ Repo string }
+
+func (e *PublishRepoError) Error() string {
+	return "允许发布的仓库应写成 owner/name：" + e.Repo
+}
+
+// ErrEnvRequired 表示删除 environment 时作用域中没有指定 environment。
+var ErrEnvRequired = errors.New("需要指定 environment")
+
+// ValidName 检查变量或 secret 的名称：不能为空（ErrNameEmpty），只能包含字母、数字和 _（*InvalidNameError）。
+// CLI 和 Dashboard 共用。
 func ValidName(n string) error {
 	if n == "" {
-		return errors.New("名称不能为空")
+		return ErrNameEmpty
 	}
 	for _, c := range n {
 		if c != '_' && (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (c < '0' || c > '9') {
-			return fmt.Errorf("名称 %q 只能包含字母、数字和 _", n)
+			return &InvalidNameError{Name: n}
 		}
 	}
 	return nil
@@ -229,15 +263,15 @@ func (s *Service) UpsertEnvironment(ctx context.Context, e *apiv1.Environment, a
 // validEnvironment 检查 environment 的名称和允许发布的仓库。
 func validEnvironment(e *apiv1.Environment) error {
 	if e == nil || strings.TrimSpace(e.Name) == "" {
-		return errors.New("需要 environment 名称")
+		return ErrEnvNameRequired
 	}
 	if strings.TrimSpace(e.Name) != e.Name {
 		// workflow 中按名称查找 environment，首尾的空白会让它永远找不到
-		return fmt.Errorf("environment 名称 %q 不能以空白开头或结尾", e.Name)
+		return &EnvNameSpaceError{Name: e.Name}
 	}
 	for _, r := range e.AllowedPublishRepos {
 		if !ValidRepoFullName(r) {
-			return fmt.Errorf("允许发布的仓库应写成 owner/name：%s", r)
+			return &PublishRepoError{Repo: r}
 		}
 	}
 	return nil
@@ -288,7 +322,7 @@ func (a *rpcAPI) DeleteEnvironment(ctx context.Context, req *connect.Request[api
 func (s *Service) DeleteEnvironment(ctx context.Context, sc *apiv1.Scope, actor string) error {
 	return s.inScope(ctx, sc, func(tx pgx.Tx, ref *store.ScopeRef) error {
 		if ref.Kind != store.ScopeEnvironment {
-			return errors.New("需要指定 environment")
+			return ErrEnvRequired
 		}
 		for _, sql := range []string{
 			`DELETE FROM variables WHERE scope_kind=$2 AND scope_id=$1`,

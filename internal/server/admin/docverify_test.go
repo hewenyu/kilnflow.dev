@@ -222,8 +222,12 @@ func TestVerifyDocBindingNoBinding(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.withDocProvider(&fakeDocProvider{})
-	if _, err := e.svc.VerifyDocBinding(e.ctx, "tester/demo", "alice"); err == nil || !strings.Contains(err.Error(), "没有文档绑定") {
+	_, err := e.svc.VerifyDocBinding(e.ctx, "tester/demo", "alice")
+	if err == nil || !strings.Contains(err.Error(), "没有文档绑定") {
 		t.Fatalf("没有绑定时应明确报错：%v", err)
+	}
+	if ne, ok := errors.AsType[*NoDocBindingError](err); !ok || ne.Repo != "tester/demo" {
+		t.Errorf("没有绑定时应是 *NoDocBindingError：%#v", err)
 	}
 }
 

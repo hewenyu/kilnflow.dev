@@ -1,6 +1,8 @@
 {
  "Page": "settings_envs",
- "Title": "设置 · 环境",
+ "Title": {
+  "id": "settings.titleEnvs"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

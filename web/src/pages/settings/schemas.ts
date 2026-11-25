@@ -39,6 +39,10 @@ export const variableSchema = z.object({ Name: z.string(), Value: z.string() })
 export const dockerStatusSchema = z.enum(['unconfigured', 'incomplete', 'saved', 'verified'])
 export type DockerStatus = z.infer<typeof dockerStatusSchema>
 
+/** Docker Hub 连接的字段（表单字段名，也是 dockerView.Missing 中的键）。 */
+export const dockerFieldSchema = z.enum(['username', 'namespace', 'token'])
+export type DockerField = z.infer<typeof dockerFieldSchema>
+
 /** dockerView：一个账号的 Docker Hub 连接。 */
 export const dockerViewSchema = z.object({
   Account: z.string(),
@@ -53,8 +57,8 @@ export const dockerViewSchema = z.object({
   /** 最近一次用当前这套配置成功推送的镜像。 */
   Verified: z.object({ Image: z.string(), Version: z.string(), At: z.string() }).nullable(),
   Status: dockerStatusSchema,
-  /** 缺少的字段（显示名）。 */
-  Missing: list(z.string()),
+  /** 缺少的字段：username、namespace、token（前端按键显示当前语言的字段名）。 */
+  Missing: list(dockerFieldSchema),
   /** 连接编辑页。 */
   URL: z.string(),
 })
@@ -88,16 +92,16 @@ export const scopePageSchema = z.object({
   Account: z.string(),
   Repo: z.string(),
   Env: z.string(),
+  /** 作用域的名称（原样显示）。 */
   Label: z.string(),
-  /** owner、repo、environment */
-  Kind: z.string(),
-  KindLabel: z.string(),
+  /** owner、repo、environment（environment 属于账号还是仓库看 Repo）；前端按它显示类型说明。 */
+  Kind: z.enum(['owner', 'repo', 'environment']),
   Environment: envViewSchema.nullable(),
   Vars: list(variableSchema),
   Secrets: list(secretMetaSchema),
   Docker: z.boolean(),
   DockerURL: z.string(),
-  CrumbLabel: z.string(),
+  /** 返回的上一级分区（与 Section 对应，分区名按 Section 显示）。 */
   CrumbURL: z.string(),
   /** 配置页地址。 */
   URL: z.string(),

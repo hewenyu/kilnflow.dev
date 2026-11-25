@@ -68,8 +68,9 @@ func scopeProto(account, repo, env string) *apiv1.Scope {
 
 // formData 是页面数据中的表单状态（formState），另带计算的 Failed。
 type formData struct {
-	Values, Errors map[string]string
-	Failed         bool
+	Values map[string]string
+	Errors map[string]uiText
+	Failed bool
 }
 
 // envData 是页面数据中的 environment（envView）：内嵌的 apiv1.Environment 按它的 json 标签编码（小写、下划线）。
@@ -86,22 +87,40 @@ type envData struct {
 
 // scopeData 是作用域配置页的页面数据（scopePage），另带计算的 URL、Query。
 type scopeData struct {
-	Account, Repo, Env, Label, KindLabel string
-	Environment                          *envData
-	Vars                                 []store.Variable
-	Secrets                              []store.SecretMeta
-	EnvForm                              *formData
-	URL, Query                           string
+	Account, Repo, Env, Label string
+	Kind                      store.ScopeKind
+	Environment               *envData
+	Vars                      []store.Variable
+	Secrets                   []store.SecretMeta
+	EnvForm                   *formData
+	URL, Query                string
 }
 
 // itemData 是变量或 secret 编辑页的页面数据（itemPage）。
 type itemData struct {
 	scopeData
-	Kind     itemKind
-	Name     string
-	Secret   *store.SecretMeta
-	Form     *formData
-	IsSecret bool
+	Kind      itemKind
+	ScopeKind store.ScopeKind
+	Name      string
+	Secret    *store.SecretMeta
+	Form      *formData
+	IsSecret  bool
+}
+
+// noLeak 检查响应（页面数据、跳转地址和其中的提示）中没有提交的 secret 或令牌（包括 URL 编码后的形式）。
+// 太短的值（少于 8 个字符）容易与页面上的其他文字重合，不检查。
+func noLeak(t *testing.T, what string, w *httptest.ResponseRecorder, secrets ...string) {
+	t.Helper()
+	for _, s := range secrets {
+		if len(s) < 8 {
+			continue
+		}
+		for _, v := range []string{s, url.QueryEscape(s)} {
+			if strings.Contains(w.Body.String(), v) || strings.Contains(w.Header().Get("Location"), v) {
+				t.Errorf("%s：响应中有提交的 secret 或令牌", what)
+			}
+		}
+	}
 }
 
 func TestSettings_AdminOnly(t *testing.T) {
@@ -146,11 +165,11 @@ func TestPostVariable(t *testing.T) {
 
 	// 新建
 	flash := wantRedirect(t, "新建变量", post(url.Values{"account": {testAccount}, "mode": {"new"}, "name": {"FOO"}, "value": {"bar"}}), accountScopeURL)
-	if flash != "已创建变量 FOO" || e.varValue(store.ScopeOwner, "FOO") != "bar" {
+	if flashZH(t, flash) != "已创建变量 FOO。" || e.varValue(store.ScopeOwner, "FOO") != "bar" {
 		t.Fatalf("新建变量：提示 %q，值 %q", flash, e.varValue(store.ScopeOwner, "FOO"))
 	}
 	sp := pageData[scopeData](t, e.get(e.alice, accountScopeURL).Body.String())
-	if sp.KindLabel != "账号级（账号下的所有仓库可见）" || !slices.Equal(sp.Vars, []store.Variable{{Name: "FOO", Value: "bar"}}) || sp.URL != accountScopeURL || sp.Query != "account=tester" {
+	if sp.Kind != store.ScopeOwner || !slices.Equal(sp.Vars, []store.Variable{{Name: "FOO", Value: "bar"}}) || sp.URL != accountScopeURL || sp.Query != "account=tester" {
 		t.Errorf("账号级配置页：%+v", sp)
 	}
 
@@ -163,13 +182,13 @@ func TestPostVariable(t *testing.T) {
 		values map[string]string
 	}{
 		{"新建同名", url.Values{"mode": {"new"}, "name": {"FOO"}, "value": {"other"}}, []string{"变量 FOO 已存在"}, map[string]string{"value": "other"}},
-		{"名称不合法", url.Values{"mode": {"new"}, "name": {"1-bad"}, "value": {"keep me"}}, []string{"名称只能包含字母、数字和 _"}, map[string]string{"name": "1-bad", "value": "keep me"}},
-		{"名称为空", url.Values{"mode": {"new"}, "name": {" "}, "value": {"v"}}, []string{"名称只能包含字母、数字和 _，不能为空"}, nil},
+		{"名称不合法", url.Values{"mode": {"new"}, "name": {"1-bad"}, "value": {"keep me"}}, []string{"名称 1-bad 只能包含字母、数字和 _"}, map[string]string{"name": "1-bad", "value": "keep me"}},
+		{"名称为空", url.Values{"mode": {"new"}, "name": {" "}, "value": {"v"}}, []string{"名称不能为空：只能包含字母、数字和 _"}, nil},
 	} {
 		c.form.Set("account", testAccount)
 		w := post(c.form)
 		wantStatus(t, c.name, w, http.StatusUnprocessableEntity)
-		mustHave(t, c.name, w.Body.String(), c.want...)
+		mustHave(t, c.name, bodyZH(t, w.Body.String()), c.want...)
 		p := pageData[itemData](t, w.Body.String())
 		if p.Form == nil || !p.Form.Failed || p.Kind != kindVariables || p.IsSecret {
 			t.Errorf("%s：%+v", c.name, p.Form)
@@ -186,17 +205,17 @@ func TestPostVariable(t *testing.T) {
 	}
 
 	// 编辑页预填当前的值；编辑后保存
-	if p := pageData[itemData](t, e.get(e.alice, "/settings/variables/edit?account=tester&name=FOO").Body.String()); p.Name != "FOO" || p.Kind != kindVariables ||
+	if p := pageData[itemData](t, e.get(e.alice, "/settings/variables/edit?account=tester&name=FOO").Body.String()); p.Name != "FOO" || p.Kind != kindVariables || p.ScopeKind != store.ScopeOwner ||
 		p.Form == nil || p.Form.Values["value"] != "bar" || p.Account != testAccount {
 		t.Errorf("编辑页（Name 非空表示编辑）：%+v", p)
 	}
 	flash = wantRedirect(t, "编辑变量", post(url.Values{"account": {testAccount}, "mode": {"edit"}, "name": {"FOO"}, "value": {"baz"}}), accountScopeURL)
-	if flash != "已保存变量 FOO" || e.varValue(store.ScopeOwner, "FOO") != "baz" {
+	if flashZH(t, flash) != "已保存变量 FOO。" || e.varValue(store.ScopeOwner, "FOO") != "baz" {
 		t.Errorf("编辑变量：提示 %q，值 %q", flash, e.varValue(store.ScopeOwner, "FOO"))
 	}
 	// 编辑不存在的变量、地址中没有名称
 	flash = wantRedirect(t, "编辑不存在的变量", e.get(e.alice, "/settings/variables/edit?account=tester&name=NOPE"), accountScopeURL)
-	mustHave(t, "提示", flash, "变量 NOPE 不存在（可能已被删除）")
+	mustHave(t, "提示", flashZH(t, flash), "变量 NOPE 不存在（可能已被删除）")
 	wantStatus(t, "地址中没有名称", e.get(e.alice, "/settings/variables/edit?account=tester"), http.StatusNotFound)
 
 	// 仓库级和 environment 级：跳回各自的配置页
@@ -209,17 +228,17 @@ func TestPostVariable(t *testing.T) {
 	}
 	// 账号不存在：回到变量与密钥分区并说明
 	flash = wantRedirect(t, "账号不存在", post(url.Values{"account": {"ghost"}, "mode": {"new"}, "name": {"X"}, "value": {"v"}}), "/settings/variables")
-	mustHave(t, "提示", flash, "账号 ghost 不在 Kiln 中")
+	mustHave(t, "提示", flashZH(t, flash), "账号 ghost 不在 Kiln 中")
 
 	// 删除
 	flash = wantRedirect(t, "删除变量", e.post(e.alice, "/settings/variables/delete", url.Values{"account": {testAccount}, "name": {"FOO"}}), accountScopeURL)
-	if flash != "已删除变量 FOO" || e.varValue(store.ScopeOwner, "FOO") != "<none>" {
+	if flashZH(t, flash) != "已删除变量 FOO。" || e.varValue(store.ScopeOwner, "FOO") != "<none>" {
 		t.Errorf("删除变量：提示 %q", flash)
 	}
 	// 删除在不存在的作用域中：说明失败
 	flash = wantRedirect(t, "在不存在的仓库中删除", e.post(e.alice, "/settings/variables/delete", url.Values{"repo": {"tester/nope"}, "name": {"FOO"}}),
 		"/settings/scope?repo=tester%2Fnope")
-	mustHave(t, "提示", flash, "删除变量失败：")
+	mustHave(t, "提示", flashZH(t, flash), "仓库 tester/nope 不在 Kiln 中")
 
 	// 审计记录登录的用户
 	if got := e.configActors("variable.set"); fmt.Sprint(got) != "[alice alice alice alice]" {
@@ -236,26 +255,33 @@ func TestPostSecret(t *testing.T) {
 	const value = "s3cret-value-123"
 	post := func(form url.Values) *httptest.ResponseRecorder {
 		form.Set("account", testAccount)
-		return e.post(e.alice, "/settings/secrets", form)
+		w := e.post(e.alice, "/settings/secrets", form)
+		noLeak(t, "提交 secret", w, form.Get("value"))
+		if w.Code == http.StatusUnprocessableEntity {
+			if p := pageData[itemData](t, w.Body.String()); p.Form == nil || p.Form.Values["value"] != "" {
+				t.Errorf("校验失败的表单不应保留 secret 的值：%+v", p.Form)
+			}
+		}
+		return w
 	}
 
 	// 新建时值不能为空；其他字段出错时值不保留
 	w := post(url.Values{"mode": {"new"}, "name": {"TOKEN"}, "value": {"  "}})
 	wantStatus(t, "值为空", w, http.StatusUnprocessableEntity)
-	mustHave(t, "值为空", w.Body.String(), "请填写 secret 的值")
+	mustHave(t, "值为空", bodyZH(t, w.Body.String()), "请填写 secret 的值")
 	if p := pageData[itemData](t, w.Body.String()); p.Form == nil || p.Form.Values["name"] != "TOKEN" || !p.IsSecret {
 		t.Errorf("值为空应保留名称：%+v", p.Form)
 	}
 	w = post(url.Values{"mode": {"new"}, "name": {"bad-name"}, "value": {value}})
 	wantStatus(t, "名称不合法", w, http.StatusUnprocessableEntity)
-	mustHave(t, "名称不合法", w.Body.String(), "名称只能包含字母", "为了安全，刚才输入的值没有保留，请重新输入")
+	mustHave(t, "名称不合法", bodyZH(t, w.Body.String()), "名称 bad-name 只能包含字母、数字和 _", "为了安全，刚才输入的值没有保留，请重新输入")
 	if strings.Contains(w.Body.String(), value) {
 		t.Error("校验失败的页面不应回显 secret 的值")
 	}
 
 	// 新建：值加密保存，页面数据中只有名称
 	flash := wantRedirect(t, "新建 secret", post(url.Values{"mode": {"new"}, "name": {"TOKEN"}, "value": {value}}), accountScopeURL)
-	mustHave(t, "提示", flash, "已保存 secret TOKEN（值不会再显示）")
+	mustHave(t, "提示", flashZH(t, flash), "已保存 secret TOKEN（值不会再显示）")
 	if n := e.count(`SELECT count(*) FROM secrets WHERE name='TOKEN' AND position($1::bytea in ciphertext) = 0`, []byte(value)); n != 1 {
 		t.Error("secret 应加密保存")
 	}
@@ -273,11 +299,11 @@ func TestPostSecret(t *testing.T) {
 	}
 	w = post(url.Values{"mode": {"new"}, "name": {"TOKEN"}, "value": {"x"}})
 	wantStatus(t, "新建同名", w, http.StatusUnprocessableEntity)
-	mustHave(t, "新建同名", w.Body.String(), "secret TOKEN 已存在")
+	mustHave(t, "新建同名", bodyZH(t, w.Body.String()), "secret TOKEN 已存在")
 
 	// 替换时留空：不修改
 	flash = wantRedirect(t, "留空替换", post(url.Values{"mode": {"edit"}, "name": {"TOKEN"}, "value": {""}}), accountScopeURL)
-	if flash != "没有填写新值，secret TOKEN 保持不变" || e.secretVersion("TOKEN") != v1 {
+	if flashZH(t, flash) != "没有填写新值，secret TOKEN 保持不变。" || e.secretVersion("TOKEN") != v1 {
 		t.Errorf("留空替换：提示 %q，版本 %d → %d", flash, v1, e.secretVersion("TOKEN"))
 	}
 	// 替换：版本改变
@@ -286,11 +312,11 @@ func TestPostSecret(t *testing.T) {
 		t.Error("替换后 secret 的版本应改变")
 	}
 	flash = wantRedirect(t, "替换不存在的 secret", e.get(e.alice, "/settings/secrets/edit?account=tester&name=NOPE"), accountScopeURL)
-	mustHave(t, "提示", flash, "secret NOPE 不存在（可能已被删除）")
+	mustHave(t, "提示", flashZH(t, flash), "secret NOPE 不存在（可能已被删除）")
 
 	// 删除
 	flash = wantRedirect(t, "删除", e.post(e.alice, "/settings/secrets/delete", url.Values{"account": {testAccount}, "name": {"TOKEN"}}), accountScopeURL)
-	if flash != "已删除 secret TOKEN" || e.secretVersion("TOKEN") != 0 {
+	if flashZH(t, flash) != "已删除 secret TOKEN。" || e.secretVersion("TOKEN") != 0 {
 		t.Errorf("删除 secret：提示 %q", flash)
 	}
 	for _, a := range append(e.audits("config.secret.set"), e.audits("config.secret.delete")...) {
@@ -327,11 +353,11 @@ func TestPostEnvironment(t *testing.T) {
 			[]string{"每个仓库都应写成 owner/name：bad"},
 			"allowed_publish_repos", "tester/pub, bad",
 		},
-		{"仓库不存在", url.Values{"scope": {"repo:tester/ghost"}, "name": {"release"}}, []string{"创建 environment 失败："}, "", ""},
+		{"仓库不存在", url.Values{"scope": {"repo:tester/ghost"}, "name": {"release"}}, []string{"仓库 tester/ghost 不在 Kiln 中"}, "", ""},
 	} {
 		w := create(c.form)
 		wantStatus(t, c.name, w, http.StatusUnprocessableEntity)
-		mustHave(t, c.name, w.Body.String(), c.want...)
+		mustHave(t, c.name, bodyZH(t, w.Body.String()), c.want...)
 		p := pageData[struct{ Form *formData }](t, w.Body.String())
 		if p.Form == nil || !p.Form.Failed || (c.field != "" && p.Form.Values[c.field] != c.value) {
 			t.Errorf("%s：应保留 %s 的输入 %q：%+v", c.name, c.field, c.value, p.Form)
@@ -344,12 +370,12 @@ func TestPostEnvironment(t *testing.T) {
 	// 新建账号级和仓库级的同名 environment
 	flash := wantRedirect(t, "新建账号级", create(url.Values{"scope": {"account:tester"}, "name": {"release"}, "ref_policy": {"refs/tags/v*"}}),
 		"/settings/scope?account=tester&env=release")
-	mustHave(t, "提示", flash, "已创建 environment release")
+	mustHave(t, "提示", flashZH(t, flash), "已创建 environment release")
 	wantRedirect(t, "新建仓库级", create(url.Values{"scope": {"repo:" + testRepo}, "name": {"release"}}), "/settings/scope?env=release&repo=tester%2Fdemo")
 	// 同一作用域中已存在（名称不区分大小写）
 	w := create(url.Values{"scope": {"account:tester"}, "name": {"RELEASE"}})
 	wantStatus(t, "已存在", w, http.StatusUnprocessableEntity)
-	mustHave(t, "已存在", w.Body.String(), "environment RELEASE 已存在于这个作用域")
+	mustHave(t, "已存在", bodyZH(t, w.Body.String()), "environment RELEASE 已存在于这个作用域")
 	if n := e.count(`SELECT count(*) FROM environments`); n != 2 {
 		t.Fatalf("应有 2 个 environment：%d", n)
 	}
@@ -372,11 +398,11 @@ func TestPostEnvironment(t *testing.T) {
 		}
 	}
 	sp := pageData[scopeData](t, e.get(e.alice, "/settings/scope?account=tester&env=release").Body.String())
-	if expect(t, "账号级配置页", sp, sp.KindLabel == "账号级 environment（账号下的所有仓库共用）", sp.Environment != nil) {
+	if expect(t, "账号级配置页", sp, sp.Kind == store.ScopeEnvironment, sp.Repo == "", sp.Environment != nil) {
 		expect(t, "账号级配置页", sp.Environment, slices.Equal(sp.Environment.OverriddenIn, []string{testRepo}), slices.Equal(sp.Environment.RefPolicy, []string{"refs/tags/v*"}))
 	}
 	sp = pageData[scopeData](t, e.get(e.alice, "/settings/scope?repo=tester/demo&env=RELEASE").Body.String())
-	expect(t, "仓库级配置页", sp, sp.KindLabel == "仓库级 environment", sp.Environment != nil && sp.Environment.Overrides, sp.Env == "release")
+	expect(t, "仓库级配置页", sp, sp.Kind == store.ScopeEnvironment, sp.Repo == testRepo, sp.Environment != nil && sp.Environment.Overrides, sp.Env == "release")
 
 	// 修改保护规则
 	edit := func(form url.Values) *httptest.ResponseRecorder {
@@ -386,12 +412,12 @@ func TestPostEnvironment(t *testing.T) {
 	}
 	w = edit(url.Values{"ref_policy": {"refs/heads/main\nrefs/tags/*"}, "allowed_publish_repos": {"tester/pub nope"}})
 	wantStatus(t, "修改时发布仓库格式不对", w, http.StatusUnprocessableEntity)
-	mustHave(t, "修改失败", w.Body.String(), "每个仓库都应写成 owner/name：nope")
+	mustHave(t, "修改失败", bodyZH(t, w.Body.String()), "每个仓库都应写成 owner/name：nope")
 	f := pageData[scopeData](t, w.Body.String()).EnvForm
 	expect(t, "修改失败应保留保护规则的输入", f, f != nil && f.Failed && f.Values["ref_policy"] == "refs/heads/main\nrefs/tags/*")
 	flash = wantRedirect(t, "修改", edit(url.Values{"ref_policy": {"refs/heads/main\nrefs/tags/*"}, "allowed_publish_repos": {"tester/pub"}}),
 		"/settings/scope?account=tester&env=release")
-	mustHave(t, "提示", flash, "已保存 environment release 的保护规则")
+	mustHave(t, "提示", flashZH(t, flash), "已保存 environment release 的保护规则")
 	envs, err := e.svc.ListEnvironments(e.ctx, testAccount)
 	e.must(err)
 	var got string
@@ -407,13 +433,13 @@ func TestPostEnvironment(t *testing.T) {
 	// 删除：连同其中的变量
 	e.must(e.svc.SetVariable(e.ctx, scopeProto(testAccount, "", "release"), "FOO", "bar", "setup"))
 	flash = wantRedirect(t, "删除", e.post(e.alice, "/settings/environments/delete", url.Values{"account": {testAccount}, "env": {"release"}}), "/settings/environments")
-	mustHave(t, "提示", flash, "已删除 environment release 及其中的变量和 secret")
+	mustHave(t, "提示", flashZH(t, flash), "已删除 environment release 及其中的变量和 secret")
 	if e.count(`SELECT count(*) FROM environments WHERE repo_id IS NULL`) != 0 || e.count(`SELECT count(*) FROM variables`) != 0 {
 		t.Error("应删除 environment 及其中的变量")
 	}
 	flash = wantRedirect(t, "删除不存在的", e.post(e.alice, "/settings/environments/delete", url.Values{"account": {testAccount}, "env": {"release"}}),
 		"/settings/scope?account=tester&env=release")
-	mustHave(t, "提示", flash, "删除 environment 失败：")
+	mustHave(t, "提示", flashZH(t, flash), "environment release 不存在")
 	if got := e.configActors("environment.upsert"); fmt.Sprint(got) != "[alice alice alice]" {
 		t.Errorf("environment.upsert 的审计操作者 = %v", got)
 	}
@@ -424,18 +450,20 @@ func TestPageScope(t *testing.T) {
 	e := newWebEnv(t)
 	e.upsertEnv(testAccount, "", "release", "refs/tags/v*")
 	for _, c := range []struct {
-		target, label, kind, env string
+		target, label string
+		kind          store.ScopeKind
+		env           string
 	}{
-		{accountScopeURL, "tester", "账号级（账号下的所有仓库可见）", ""},
-		{"/settings/scope?account=TESTER", "", "账号级（账号下的所有仓库可见）", ""},
-		{repoScopeURL, "tester/demo", "仓库级", ""},
+		{accountScopeURL, "tester", store.ScopeOwner, ""},
+		{"/settings/scope?account=TESTER", "", store.ScopeOwner, ""},
+		{repoScopeURL, "tester/demo", store.ScopeRepo, ""},
 		// environment 名称不区分大小写，页面使用保存的名称
-		{"/settings/scope?account=tester&env=Release", "", "账号级 environment（账号下的所有仓库共用）", "release"},
+		{"/settings/scope?account=tester&env=Release", "", store.ScopeEnvironment, "release"},
 	} {
 		w := e.get(e.alice, c.target)
 		wantStatus(t, c.target, w, http.StatusOK)
 		p := pageData[scopeData](t, w.Body.String())
-		if (c.label != "" && p.Label != c.label) || p.KindLabel != c.kind || p.Env != c.env || len(p.Vars) != 0 || len(p.Secrets) != 0 {
+		if (c.label != "" && p.Label != c.label) || p.Kind != c.kind || p.Env != c.env || len(p.Vars) != 0 || len(p.Secrets) != 0 {
 			t.Errorf("%s：%+v", c.target, p)
 		}
 		if c.env != "" && (p.Environment == nil || p.Environment.Name != c.env || !slices.Equal(p.Environment.RefPolicy, []string{"refs/tags/v*"})) {
@@ -449,7 +477,7 @@ func TestPageScope(t *testing.T) {
 		"/settings/scope?repo=tester/nope": "tester/nope",
 	} {
 		flash := wantRedirect(t, target, e.get(e.alice, target), "/settings/variables")
-		mustHave(t, target, flash, want)
+		mustHave(t, target, flashZH(t, flash), want)
 	}
 	// environment 不存在：404
 	w := e.get(e.alice, "/settings/scope?account=tester&env=nope")
@@ -573,7 +601,7 @@ func TestPageOps(t *testing.T) {
 	}
 
 	flash := wantRedirect(t, "重试", e.post(e.alice, fmt.Sprintf("/outbox/%d/retry", dead), nil), "/settings/ops")
-	if flash != "已重新排队" {
+	if flashZH(t, flash) != fmt.Sprintf("已重新排队 outbox #%d。", dead) {
 		t.Errorf("重试的提示 = %q", flash)
 	}
 	var state string
@@ -586,7 +614,7 @@ func TestPageOps(t *testing.T) {
 		t.Errorf("重试的审计 = %+v", a)
 	}
 	flash = wantRedirect(t, "重试不存在的", e.post(e.alice, "/outbox/99999/retry", nil), "/settings/ops")
-	if flash == "" || flash == "已重新排队" {
+	if flashZH(t, flash) == "" || flashZH(t, flash) == "已重新排队" {
 		t.Errorf("重试不存在的记录应说明原因：%q", flash)
 	}
 }
@@ -598,7 +626,14 @@ func TestDocker(t *testing.T) {
 		if !form.Has("account") {
 			form.Set("account", testAccount)
 		}
-		return e.post(e.alice, "/settings/docker", form)
+		w := e.post(e.alice, "/settings/docker", form)
+		noLeak(t, "提交 Docker Hub 连接", w, form.Get("token"))
+		if w.Code == http.StatusUnprocessableEntity {
+			if f := pageData[struct{ Form *formData }](t, w.Body.String()).Form; f == nil || f.Values["token"] != "" {
+				t.Errorf("校验失败的表单不应保留访问令牌：%+v", f)
+			}
+		}
+		return w
 	}
 	// dockerData 是页面数据中的 Docker Hub 连接（dockerView），另带计算的编辑页地址 URL。
 	type dockerData struct {
@@ -621,9 +656,9 @@ func TestDocker(t *testing.T) {
 
 	// 账号不在 Kiln 中
 	flash := wantRedirect(t, "打开不存在的账号", e.get(e.alice, "/settings/docker?account=ghost"), "/settings")
-	mustHave(t, "提示", flash, "账号不在 Kiln 中")
+	mustHave(t, "提示", flashZH(t, flash), "账号不在 Kiln 中")
 	flash = wantRedirect(t, "保存到不存在的账号", post(url.Values{"account": {"ghost"}, "username": {"u"}, "namespace": {"ns"}, "token": {"t"}}), "/settings")
-	mustHave(t, "提示", flash, "账号不在 Kiln 中，没有保存")
+	mustHave(t, "提示", flashZH(t, flash), "账号不在 Kiln 中，没有保存")
 
 	// 校验失败：422，令牌不回显
 	const token = "dckr_pat_secret_value"
@@ -643,7 +678,7 @@ func TestDocker(t *testing.T) {
 	} {
 		w := post(c.form)
 		wantStatus(t, c.name, w, http.StatusUnprocessableEntity)
-		mustHave(t, c.name, w.Body.String(), c.want...)
+		mustHave(t, c.name, bodyZH(t, w.Body.String()), c.want...)
 		if strings.Contains(w.Body.String(), token) {
 			t.Errorf("%s：页面回显了访问令牌", c.name)
 		}
@@ -658,7 +693,7 @@ func TestDocker(t *testing.T) {
 
 	// 首次保存：创建 docker-release（默认 ref 策略）和三项配置
 	flash = wantRedirect(t, "首次保存", post(url.Values{"username": {"bot"}, "namespace": {"acme"}, "token": {token}, "ref_policy": {""}}), dockerPageURL)
-	mustHave(t, "提示", flash, "已创建 environment docker-release（只允许 refs/tags/v*）", "已保存 Docker Hub 配置（Docker Hub 用户名、镜像命名空间、访问令牌）",
+	mustHave(t, "提示", flashZH(t, flash), "已创建 environment docker-release（只允许 refs/tags/v*）并保存 Docker Hub 配置。",
 		"保存只把配置存进 Kiln")
 	if e.varValue(store.ScopeEnvironment, admin.DockerUserVar) != "bot" || e.varValue(store.ScopeEnvironment, admin.DockerNamespaceVar) != "acme" || e.secretVersion(admin.DockerTokenSecret) == 0 {
 		t.Fatal("应保存用户名、命名空间和令牌")
@@ -680,7 +715,7 @@ func TestDocker(t *testing.T) {
 
 	// 没有修改
 	flash = wantRedirect(t, "没有修改", post(url.Values{"username": {"bot"}, "namespace": {"acme"}}), dockerPageURL)
-	mustHave(t, "提示", flash, "没有修改，Docker Hub 配置保持不变", "访问令牌没有修改，继续使用原来的")
+	mustHave(t, "提示", flashZH(t, flash), "没有修改，Docker Hub 配置保持不变；访问令牌继续使用原来的。")
 
 	// 用当前这套配置推送成功后显示已验证；修改命名空间后回到未验证
 	e.exec(`INSERT INTO image_publishes (name, version, digest, job_id, username, password_secret_version) VALUES ('docker.io/acme/app','v1.0.0','sha256:x',1,'bot',$1)`,
@@ -689,7 +724,7 @@ func TestDocker(t *testing.T) {
 		t.Errorf("推送成功后的状态 = %s", s)
 	}
 	flash = wantRedirect(t, "修改命名空间", post(url.Values{"username": {"bot"}, "namespace": {"acme2"}}), dockerPageURL)
-	mustHave(t, "提示", flash, "已保存 Docker Hub 配置（镜像命名空间）")
+	mustHave(t, "提示", flashZH(t, flash), "已保存 Docker Hub 配置（DOCKERHUB_NAMESPACE）；访问令牌没有修改，继续使用原来的。")
 	if s := status(); s != dockerSaved {
 		t.Errorf("修改命名空间后的状态 = %s", s)
 	}
@@ -697,9 +732,9 @@ func TestDocker(t *testing.T) {
 	// 删除：需要确认；保留 environment 和其中的其他变量
 	e.must(e.svc.SetVariable(e.ctx, scopeProto(testAccount, "", admin.DockerEnvName), "EXTRA", "keep", "setup"))
 	flash = wantRedirect(t, "没有确认", e.post(e.alice, "/settings/docker/delete", url.Values{"account": {testAccount}}), dockerPageURL)
-	mustHave(t, "提示", flash, "没有删除：请先勾选确认")
+	mustHave(t, "提示", flashZH(t, flash), "没有删除：请先勾选确认")
 	flash = wantRedirect(t, "删除", e.post(e.alice, "/settings/docker/delete", url.Values{"account": {testAccount}, "confirm": {"1"}}), "/settings")
-	mustHave(t, "提示", flash, "已删除 tester 的 Docker Hub 凭据；environment docker-release 及其保护规则保留")
+	mustHave(t, "提示", flashZH(t, flash), "已删除 tester 的 Docker Hub 凭据；environment docker-release 及其保护规则保留")
 	if e.secretVersion(admin.DockerTokenSecret) != 0 || e.varValue(store.ScopeEnvironment, admin.DockerUserVar) != "<none>" ||
 		e.varValue(store.ScopeEnvironment, "EXTRA") != "keep" || e.count(`SELECT count(*) FROM environments`) != 1 {
 		t.Error("删除应只去掉连接的三项配置")

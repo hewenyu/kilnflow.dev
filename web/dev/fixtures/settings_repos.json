@@ -1,6 +1,8 @@
 {
  "Page": "settings_repos",
- "Title": "设置 · 仓库",
+ "Title": {
+  "id": "settings.titleRepos"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {
@@ -12,7 +14,13 @@
  "CSRF": "csrf",
  "OAuth": true,
  "Active": 2,
- "Flash": "已刷新仓库：2 个 installation，11 个启用中的仓库",
+ "Flash": {
+  "id": "settingsRepos.synced",
+  "params": {
+   "installations": 2,
+   "repos": 11
+  }
+ },
  "Data": {
   "Section": "repos",
   "Repos": [

@@ -129,6 +129,35 @@ func TestScope(t *testing.T) {
 			t.Errorf("NormalizeScope(%q) = %q, %v，期望 %q", tc.in, got, err, tc.norm)
 		}
 	}
+	// 不合格的 scope 给出原因码和原样的 scope（Dashboard 按语言显示），说明文字（CLI、日志）不变
+	for _, tc := range []struct {
+		in      string
+		problem npm.PartProblem
+		char    rune
+		text    string
+	}{
+		{"@", npm.PartEmpty, 0, `scope "@" 无效：不能为空`},
+		{"@_a", npm.PartLeadingDot, 0, `scope "@_a" 无效：不能以 . 或 _ 开头`},
+		{"@Acme", npm.PartUppercase, 0, `scope "@Acme" 无效：不能有大写字母`},
+		{"@a/b", npm.PartBadChar, '/', `scope "@a/b" 无效：不能包含字符 '/'（只能用小写字母、数字、-、.、_）`},
+	} {
+		err := npm.ValidScope(tc.in)
+		se, ok := errors.AsType[*npm.ScopeError](err)
+		if !ok || se.Scope != tc.in || se.Part == nil || se.Part.Problem != tc.problem || se.Part.Char != tc.char {
+			t.Errorf("ValidScope(%q) = %#v，期望原因 %q（%q）", tc.in, err, tc.problem, tc.char)
+		}
+		if pe, ok := errors.AsType[*npm.PartError](err); !ok || pe.Problem != tc.problem {
+			t.Errorf("ValidScope(%q) 应包装 *PartError", tc.in)
+		}
+		if err == nil || err.Error() != tc.text {
+			t.Errorf("ValidScope(%q) = %v，期望 %q", tc.in, err, tc.text)
+		}
+	}
+	if err := npm.ValidScope("acme"); err == nil || err.Error() != `scope "acme" 必须以 @ 开头` {
+		t.Errorf("ValidScope(acme) = %v", err)
+	} else if se, ok := errors.AsType[*npm.ScopeError](err); !ok || se.Part != nil || errors.Unwrap(err) != nil {
+		t.Errorf("没有 @ 的 scope 应是不带 Part 的 *ScopeError：%#v", err)
+	}
 	if got := npm.FullName("acme", "kiln"); got != "@acme/kiln" {
 		t.Errorf("FullName = %q", got)
 	}

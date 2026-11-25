@@ -1,6 +1,11 @@
 {
  "Page": "settings_npm",
- "Title": "npm · acme-sandbox",
+ "Title": {
+  "id": "settings.titleNpm",
+  "params": {
+   "account": "acme-sandbox"
+  }
+ },
  "Nav": "settings",
  "Status": 422,
  "Session": {

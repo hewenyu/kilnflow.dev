@@ -1,6 +1,8 @@
 {
  "Page": "settings_env_new",
- "Title": "设置 · 新建 environment",
+ "Title": {
+  "id": "settings.titleEnvNew"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

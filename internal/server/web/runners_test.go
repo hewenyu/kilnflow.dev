@@ -182,8 +182,8 @@ func TestRunnerNewRender(t *testing.T) {
 	// 生成令牌的表单：校验失败时保留输入、字段旁报错
 	f := newForm()
 	f.Values["pool"], f.Values["name"] = "bad pool", "mini 01"
-	f.fail("pool", "pool 只能包含字母")
-	f.fail("name", "名称只能包含字母")
+	f.failText("pool", rawText("pool 只能包含字母"))
+	f.failText("name", rawText("名称只能包含字母"))
 	p := pageData[runnerNewData](t, renderAs(t, "runner_new", "admin", &runnerNewPage{Form: f, RequestID: "r1", PublicURL: "https://kiln.example.com", ServerVersion: "v0.1.11", Pools: []string{"default"}}))
 	expect(t, "生成令牌的表单", p, p.Form.Failed, p.Form.Values["pool"] == "bad pool", !p.Form.Errors["pool"].IsZero(), !p.Form.Errors["name"].IsZero(),
 		p.RequestID == "r1", p.PublicURL == "https://kiln.example.com", p.Reveal == nil, p.Command == "")
@@ -345,9 +345,6 @@ func TestRunnerOpResult(t *testing.T) {
 		if c.absent != "" && strings.Contains(got, c.absent) {
 			t.Errorf("%s %s：%q 中不应有 %q", c.op, c.v.Name, got, c.absent)
 		}
-	}
-	if humanDuration(90*time.Second) != "90 秒" || humanDuration(2*time.Minute) != "2 分钟" {
-		t.Error("humanDuration")
 	}
 }
 

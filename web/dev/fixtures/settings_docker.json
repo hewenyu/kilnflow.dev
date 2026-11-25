@@ -1,6 +1,11 @@
 {
  "Page": "settings_docker",
- "Title": "Docker Hub 连接 · acme",
+ "Title": {
+  "id": "settings.titleDocker",
+  "params": {
+   "account": "acme"
+  }
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

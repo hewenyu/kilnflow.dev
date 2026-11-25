@@ -1,6 +1,8 @@
 {
  "Page": "settings_ops",
- "Title": "设置 · 运维",
+ "Title": {
+  "id": "settings.titleOps"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {

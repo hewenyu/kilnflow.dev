@@ -1,6 +1,8 @@
 {
  "Page": "settings",
- "Title": "设置 · 连接与发布凭据",
+ "Title": {
+  "id": "settings.titleConn"
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {
@@ -69,8 +71,8 @@
     "Verified": null,
     "Status": "incomplete",
     "Missing": [
-     "镜像命名空间",
-     "访问令牌"
+     "namespace",
+     "token"
     ],
     "URL": "/settings/docker?account=acme-lab"
    },
@@ -84,9 +86,9 @@
     "Verified": null,
     "Status": "unconfigured",
     "Missing": [
-     "Docker Hub 用户名",
-     "镜像命名空间",
-     "访问令牌"
+     "username",
+     "namespace",
+     "token"
     ],
     "URL": "/settings/docker?account=acme-sandbox"
    }

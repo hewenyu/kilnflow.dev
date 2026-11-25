@@ -1,6 +1,11 @@
 {
  "Page": "settings_docker",
- "Title": "Docker Hub 连接 · acme-sandbox",
+ "Title": {
+  "id": "settings.titleDocker",
+  "params": {
+   "account": "acme-sandbox"
+  }
+ },
  "Nav": "settings",
  "Status": 200,
  "Session": {
@@ -25,9 +30,9 @@
    "Verified": null,
    "Status": "unconfigured",
    "Missing": [
-    "Docker Hub 用户名",
-    "镜像命名空间",
-    "访问令牌"
+    "username",
+    "namespace",
+    "token"
    ],
    "URL": "/settings/docker?account=acme-sandbox"
   },

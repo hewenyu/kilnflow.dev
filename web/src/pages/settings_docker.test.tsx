@@ -5,7 +5,7 @@ import { vi } from 'vitest'
 import fixture from '../../dev/fixtures/settings_docker.json'
 import fresh from '../../dev/fixtures/settings_docker.new.json'
 import failed from '../../dev/fixtures/settings_docker.saved.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { envelope, renderPage, switchLocale, tFor, withData } from '../test/render'
 import { hidden, stubSubmit } from './settings/testing'
 
 afterEach(() => {
@@ -64,5 +64,29 @@ describe('设置 · Docker Hub 连接', () => {
     expect(post?.body.get('account')).toBe('acme')
     expect(post?.body.get('confirm')).toBe('1')
     expect(post?.body.get('csrf')).toBe('csrf')
+  })
+  it('英文界面：校验错误按语言显示；中途切换语言，已填的值保留，令牌仍为空', async () => {
+    const en = tFor('en')
+    const { container } = renderPage(envelope(failed), '/settings/docker?account=acme')
+    const username = screen.getByRole('textbox', { name: /Docker Hub 用户名/ })
+    await userEvent.clear(username)
+    await userEvent.type(username, 'kiln-bot')
+    expect(screen.getByText(/命名空间只能包含小写字母/)).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByText(en('settingsForm.notSaved'))).toBeInTheDocument()
+    expect(screen.getByText(en('settingsDocker.errNamespaceInvalid'))).toBeInTheDocument()
+    expect(screen.getByText(en('settingsDocker.errTokenNotKept'))).toBeInTheDocument()
+    expect(screen.queryByText(/命名空间只能包含小写字母/)).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: new RegExp(en('dockerField.username')) })).toHaveValue('kiln-bot')
+    expect(screen.getByRole('textbox', { name: new RegExp(en('dockerField.namespace')) })).toHaveValue('KilnBuild')
+    expect(container.querySelector('input[name="token"]')).toHaveValue('')
+  })
+
+  it('英文界面：首次配置列出缺少的字段', () => {
+    const en = tFor('en')
+    renderPage(envelope(fresh), '/settings/docker?account=acme-sandbox', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Connections and credentials/Docker Hub · acme-sandbox')
+    expect(document.title).toContain('Docker Hub connection · acme-sandbox')
+    expect(screen.getByText(en('dockerStatus.unconfigured'))).toBeInTheDocument()
   })
 })

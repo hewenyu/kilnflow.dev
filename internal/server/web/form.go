@@ -30,9 +30,6 @@ func (f *formState) Err(field string) string {
 // Failed 表示表单有错误（页面数据中的 Failed，见 json.go）。
 func (f *formState) Failed() bool { return len(f.Errors) > 0 }
 
-// fail 记录字段的错误（原样显示的文字，还没有迁移成消息的表单）；同一字段只保留第一个。
-func (f *formState) fail(field, msg string) { f.failText(field, rawText(msg)) }
-
 // failText 记录字段的错误（消息或原样的文字）；同一字段只保留第一个。
 func (f *formState) failText(field string, t uiText) {
 	if _, ok := f.Errors[field]; !ok {

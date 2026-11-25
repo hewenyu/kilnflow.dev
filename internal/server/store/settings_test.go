@@ -351,10 +351,11 @@ func TestResolveScope(t *testing.T) {
 		{name: "仓库没有自己的 environment", repo: "alice/web", env: "release", wantErr: ErrEnvironmentNotFound, wantMsg: "kiln env set"},
 		{name: "environment 不存在", account: "alice", env: "prod", wantErr: ErrEnvironmentNotFound, wantMsg: "environment prod 不存在"},
 		{name: "仓库不存在", repo: "alice/none", wantErr: ErrRepoNotFound},
+		{name: "仓库名格式不对", repo: "alice", wantMsg: "仓库应写成 owner/name：alice"},
 		{name: "账号不存在", account: "nobody", wantMsg: "账号 nobody 不在 Kiln 中"},
 		{name: "installation 已卸载且没有仓库", account: "dave", wantMsg: "账号 dave 不在 Kiln 中"},
-		{name: "都没有指定", wantMsg: "需要指定账号"},
-		{name: "只指定 environment", env: "release", wantMsg: "需要指定账号"},
+		{name: "都没有指定", wantErr: ErrScopeRequired, wantMsg: "需要指定账号"},
+		{name: "只指定 environment", env: "release", wantErr: ErrScopeRequired, wantMsg: "需要指定账号"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -379,6 +380,25 @@ func TestResolveScope(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), c.wantMsg) {
 				t.Errorf("错误应包含 %q：%v", c.wantMsg, err)
+			}
+			// Dashboard 按错误的类型和原样的名称显示当前语言的说明
+			switch {
+			case errors.Is(err, ErrEnvironmentNotFound):
+				if e, ok := errors.AsType[*EnvironmentNotFoundError](err); !ok || e.Name != c.env {
+					t.Errorf("应是带 environment 名称 %q 的 *EnvironmentNotFoundError：%#v", c.env, err)
+				}
+			case errors.Is(err, ErrRepoNotFound):
+				if e, ok := errors.AsType[*RepoNotFoundError](err); !ok || e.Name != c.repo {
+					t.Errorf("应是带仓库名 %q 的 *RepoNotFoundError：%#v", c.repo, err)
+				}
+			case strings.Contains(c.wantMsg, "owner/name"):
+				if e, ok := errors.AsType[*RepoNameError](err); !ok || e.Name != c.repo {
+					t.Errorf("应是带仓库名 %q 的 *RepoNameError：%#v", c.repo, err)
+				}
+			case strings.Contains(c.wantMsg, "不在 Kiln 中"):
+				if e, ok := errors.AsType[*AccountNotFoundError](err); !ok || e.Account != c.account {
+					t.Errorf("应是带账号 %q 的 *AccountNotFoundError：%#v", c.account, err)
+				}
 			}
 		})
 	}

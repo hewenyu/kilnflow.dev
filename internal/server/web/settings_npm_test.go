@@ -51,7 +51,9 @@ const npmTestToken = "npm_s3cret-token-123"
 // postNpm 以 alice 的身份为 tester 提交 npm 表单。
 func (e *webEnv) postNpm(form url.Values) *httptest.ResponseRecorder {
 	form.Set("account", testAccount)
-	return e.post(e.alice, "/settings/npm", form)
+	w := e.post(e.alice, "/settings/npm", form)
+	noLeak(e.t, "提交 npm 配置", w, form.Get("token"))
+	return w
 }
 
 // 校验失败：字段旁标出错误，保留 scope 和 registry，token 不回显，不保存。
@@ -82,12 +84,20 @@ func TestNpmSettingsValidation(t *testing.T) {
 			[]string{"必须是 https"},
 			map[string]string{"scope": "@acme", "registry": "http://npm.example.com/"},
 		},
+		// 带用户信息的 registry 可能含有凭据：不回填、不显示
+		{
+			"registry 带用户信息",
+			url.Values{"scope": {"acme"}, "registry": {"https://u:reg-s3cret-pass@npm.example.com/"}, "token": {token}},
+			"registry",
+			[]string{"不能包含用户信息", "刚才输入的地址没有保留"},
+			map[string]string{"scope": "@acme", "registry": ""},
+		},
 		{"token 为空", url.Values{"scope": {"@acme"}, "token": {"  "}}, "token", []string{"请填写 npm token"}, map[string]string{"registry": npm.DefaultRegistry}},
 	} {
 		w := e.postNpm(c.form)
 		wantStatus(t, c.what, w, http.StatusUnprocessableEntity)
 		body := w.Body.String()
-		mustHave(t, c.what, body, c.want...)
+		mustHave(t, c.what, bodyZH(t, body), c.want...)
 		if strings.Contains(body, token) {
 			t.Errorf("%s：校验失败的页面不应回显 token", c.what)
 		}
@@ -95,7 +105,8 @@ func TestNpmSettingsValidation(t *testing.T) {
 			t.Errorf("%s：应重新渲染 npm 编辑页，实际 %s", c.what, pg.Page)
 		}
 		p := pageData[npmPageData](t, body)
-		if p.Form == nil || !p.Form.Failed || p.Form.Errors[c.field] == "" || p.Form.Values["token"] != "" {
+		noLeak(t, c.what, w, "reg-s3cret-pass")
+		if p.Form == nil || !p.Form.Failed || p.Form.Errors[c.field].IsZero() || p.Form.Values["token"] != "" {
 			t.Errorf("%s：表单 %+v", c.what, p.Form)
 			continue
 		}
@@ -111,12 +122,12 @@ func TestNpmSettingsValidation(t *testing.T) {
 
 	// 账号无效：回到连接与发布凭据并说明，不保存
 	flash := wantRedirect(t, "账号无效", e.post(e.alice, "/settings/npm", url.Values{"account": {"ghost"}, "scope": {"@acme"}, "token": {token}}), "/settings")
-	mustHave(t, "账号无效", flash, "账号不在 Kiln 中")
+	mustHave(t, "账号无效", flashZH(t, flash), "账号不在 Kiln 中")
 	if n := e.count(`SELECT count(*) FROM npm_accounts`); n != 0 {
 		t.Errorf("账号无效时不应保存：%d", n)
 	}
 	flash = wantRedirect(t, "打开无效账号", e.get(e.alice, "/settings/npm?account=ghost"), "/settings")
-	mustHave(t, "打开无效账号", flash, "账号不在 Kiln 中")
+	mustHave(t, "打开无效账号", flashZH(t, flash), "账号不在 Kiln 中")
 }
 
 // 保存、替换和删除账号的 npm 配置。
@@ -129,7 +140,7 @@ func TestNpmSettings(t *testing.T) {
 
 	// 保存：scope 补上 @，registry 留空时用 npm 官方 registry，token 加密保存
 	flash := wantRedirect(t, "保存", post(url.Values{"scope": {"acme"}, "registry": {""}, "token": {token}}), npmPageURL)
-	mustHave(t, "提示", flash, "已保存 npm 配置：release.npm 发布到 @acme/<name>")
+	mustHave(t, "提示", flashZH(t, flash), "已保存 npm 配置：release.npm 发布到 @acme/…（token 不会再显示）。")
 	if n := e.count(`SELECT count(*) FROM npm_accounts WHERE owner_id=$1 AND position($2::bytea in ciphertext) = 0`, testAccountID, []byte(token)); n != 1 {
 		t.Error("npm token 应加密保存")
 	}
@@ -156,16 +167,16 @@ func TestNpmSettings(t *testing.T) {
 
 	// 删除：要确认；删除后回到连接与发布凭据；再删除说明没有配置
 	flash = wantRedirect(t, "未确认的删除", e.post(e.alice, "/settings/npm/delete", url.Values{"account": {testAccount}}), npmPageURL)
-	if flash != "没有删除：请先确认" || e.npmVersion() == 0 {
+	if flashZH(t, flash) != "没有删除：请先确认。" || e.npmVersion() == 0 {
 		t.Errorf("未确认的删除：提示 %q", flash)
 	}
 	del := url.Values{"account": {testAccount}, "confirm": {"1"}}
 	flash = wantRedirect(t, "删除", e.post(e.alice, "/settings/npm/delete", del), "/settings")
-	if flash != "已删除 tester 的 npm 配置；重新配置之前 release.npm 无法发布" || e.npmVersion() != 0 {
+	if flashZH(t, flash) != "已删除 tester 的 npm 配置；重新配置之前 release.npm 无法发布。" || e.npmVersion() != 0 {
 		t.Errorf("删除：提示 %q", flash)
 	}
 	flash = wantRedirect(t, "再次删除", e.post(e.alice, "/settings/npm/delete", del), npmPageURL)
-	mustHave(t, "再次删除", flash, "删除 npm 配置失败", "没有配置 npm")
+	mustHave(t, "再次删除", flashZH(t, flash), "账号 tester 没有配置 npm")
 
 	// 审计：操作者是登录用户，不含 token
 	sets, dels := e.audits("config.npm.set"), e.audits("config.npm.delete")

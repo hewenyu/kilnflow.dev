@@ -1,9 +1,19 @@
 {
  "Page": "settings_repo_docs",
- "Title": "设置 · acme/legacy-api · 外部文档",
+ "Title": {
+  "id": "settings.titleRepoDocs",
+  "params": {
+   "repo": "acme/legacy-api"
+  }
+ },
  "Nav": "settings",
  "Status": 200,
- "Session": {"Login": "octocat", "Admin": true, "ViaToken": false, "Bound": true},
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
  "CSRF": "csrf",
  "OAuth": true,
  "Active": 0,
@@ -29,7 +39,9 @@
    "CheckedAt": "2026-11-16T15:02:01+08:00",
    "CheckedBy": "octocat",
    "CheckErrorCode": "auth_failed",
-   "CheckErrorText": "文档系统拒绝了这组凭据：请确认 token 有效、没有过期",
+   "CheckErrorText": {
+    "id": "docCheck.authFailed"
+   },
    "CheckDocCount": null,
    "CheckSampleDocID": "",
    "ObservedCollectionName": ""

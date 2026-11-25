@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -540,12 +539,13 @@ type docBindingPageView struct {
 	UpdatedAt  time.Time
 	Generation int64
 	// CheckStatus 是空（尚未验证）/ ok / empty / failed。
-	CheckStatus            string
-	CheckStartedAt         *time.Time
-	CheckedAt              *time.Time
-	CheckedBy              string
-	CheckErrorCode         string
-	CheckErrorText         string
+	CheckStatus    string
+	CheckStartedAt *time.Time
+	CheckedAt      *time.Time
+	CheckedBy      string
+	CheckErrorCode string
+	// CheckErrorText 是错误码对应的消息（见 docCheckText）。
+	CheckErrorText         uiText
 	CheckDocCount          *int
 	CheckSampleDocID       string
 	ObservedCollectionName string
@@ -572,7 +572,7 @@ func newDocBindingPageView(b *store.DocBinding) *docBindingPageView {
 		v.CheckStatus = *b.CheckStatus
 	}
 	if b.CheckErrorCode != "" {
-		v.CheckErrorText = docsync.DocCheckErrorText(b.CheckErrorCode)
+		v.CheckErrorText = docCheckText(b.CheckErrorCode)
 	}
 	return v
 }
@@ -618,12 +618,12 @@ func (d *Dashboard) pageRepoDocs(w http.ResponseWriter, r *http.Request, _ *sess
 	ctx := r.Context()
 	fullName := strings.TrimSpace(r.URL.Query().Get("repo"))
 	if fullName == "" {
-		d.notFound(w, r, "请指定要查看的仓库（从“设置 · 仓库”的“外部文档”进入）。")
+		d.notFoundText(w, r, message(msgDocsNoRepo))
 		return
 	}
 	repo, err := store.FindRepoAny(ctx, d.db, fullName)
 	if errors.Is(err, store.ErrRepoNotFound) || (err != nil && !admin.ValidRepoFullName(fullName)) {
-		d.notFound(w, r, fmt.Sprintf("Kiln 中没有仓库 %s：名称可能写错了，或者仓库还没有同步。", fullName))
+		d.notFoundText(w, r, message(msgDocsRepoNotFound, strArg(argRepo, fullName)))
 		return
 	}
 	if err != nil {
@@ -644,7 +644,7 @@ func (d *Dashboard) pageRepoDocs(w http.ResponseWriter, r *http.Request, _ *sess
 		Section: sectionRepos, Repo: repo.FullName(), Active: repo.Active,
 		Binding: newDocBindingPageView(binding), Decision: newDecisionDocPageView(decision),
 	}
-	d.render(w, r, "settings_repo_docs", fmt.Sprintf("设置 · %s · 外部文档", p.Repo), p)
+	d.renderPage(w, r, "settings_repo_docs", message(msgSetTitleRepoDocs, strArg(argRepo, p.Repo)), p, http.StatusOK)
 }
 
 // postRepoDocsVerify 显式触发一次只读连接验证，完成后回到仓库的外部文档页。结果说明绝不含 token。
@@ -652,35 +652,37 @@ func (d *Dashboard) postRepoDocsVerify(w http.ResponseWriter, r *http.Request, s
 	repo := strings.TrimSpace(r.PostFormValue("repo"))
 	back := "/settings/repos/docs?repo=" + url.QueryEscape(repo)
 	if repo == "" {
-		d.flashBack(w, r, "/settings/repos", "没有验证：请选择仓库")
+		d.flashMsg(w, r, "/settings/repos", message(msgDocsVerifyNoRepo))
 		return
 	}
 	res, err := d.admin.VerifyDocBinding(r.Context(), repo, se.Login)
 	if errors.Is(err, admin.ErrDocBindingChangedDuringVerify) {
-		d.flashBack(w, r, back, "验证期间文档绑定已变更，本次检查结果没有应用；请对新配置重新验证")
+		d.flashMsg(w, r, back, message(msgDocsVerifyChanged))
 		return
 	}
 	if err != nil {
-		d.flashBack(w, r, back, fmt.Sprintf("验证 %s 的文档读取失败：%s", repo, d.failure(r, err)))
+		d.flashMsg(w, r, back, d.settingsFailureFlash(r, err, msgDocsVerifyFailed, msgDocsVerifyFailedRef, strArg(argRepo, repo)))
 		return
 	}
-	d.flashBack(w, r, back, docVerifyMessage(res))
+	d.flashMsg(w, r, back, docVerifyMessage(res))
 }
 
-// docVerifyMessage 返回验证结果的一句话说明（不含 token 与远端原始信息）。
-func docVerifyMessage(res *admin.DocVerifyResult) string {
-	count := 0
+// docVerifyMessage 返回验证结果的提示（不含 token 与远端原始信息）：失败时按错误码给出原因。
+func docVerifyMessage(res *admin.DocVerifyResult) uiText {
+	var count int64
 	if res.DocCount != nil {
-		count = *res.DocCount
+		count = int64(*res.DocCount)
 	}
 	switch res.Status {
 	case docsync.DocCheckStatusOK:
-		return fmt.Sprintf("验证通过：文档集可访问，共 %d 篇文档，抽查了 %s 的正文", count, res.SampleDocID)
+		return message(msgDocsVerifyOK, intArg(argCount, count), strArg(argDoc, res.SampleDocID))
 	case docsync.DocCheckStatusEmpty:
-		return "验证通过：文档集可访问，但当前没有文档（冻结时会记录一个空集合）"
-	default:
-		return "验证失败：" + docsync.DocCheckErrorText(res.ErrorCode)
+		return message(msgDocsVerifyEmpty)
 	}
+	if t := docCheckText(res.ErrorCode); !t.IsZero() {
+		return t
+	}
+	return message(msgDocCheckUnknown, strArg(argCode, res.ErrorCode))
 }
 
 // loadRepoDocStatuses 为仓库列表的一页仓库填上外部文档的简要状态（是否绑定、验证状态、是否配了待决策清单）。

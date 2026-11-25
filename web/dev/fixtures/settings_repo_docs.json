@@ -1,9 +1,19 @@
 {
  "Page": "settings_repo_docs",
- "Title": "设置 · acme/kiln · 外部文档",
+ "Title": {
+  "id": "settings.titleRepoDocs",
+  "params": {
+   "repo": "acme/kiln"
+  }
+ },
  "Nav": "settings",
  "Status": 200,
- "Session": {"Login": "octocat", "Admin": true, "ViaToken": false, "Bound": true},
+ "Session": {
+  "Login": "octocat",
+  "Admin": true,
+  "ViaToken": false,
+  "Bound": true
+ },
  "CSRF": "csrf",
  "OAuth": true,
  "Active": 0,

@@ -68,7 +68,7 @@ func TestAccountBindFlow(t *testing.T) {
 
 	// 不能在绑定之前关闭 admin token 登录
 	flash := wantRedirect(t, "绑定前关闭", e.post(tok, accountURL+"/token-login", url.Values{"enabled": {"0"}}), accountURL)
-	if !strings.Contains(flash, "没有关闭") {
+	if !strings.Contains(flashZH(t, flash), "没有关闭") {
 		t.Errorf("绑定前关闭的提示 = %q", flash)
 	}
 
@@ -123,7 +123,7 @@ func TestAccountBindFlow(t *testing.T) {
 	}
 
 	// 解除绑定需要确认；解除后 octocat 不在名单中，会话随即失效
-	if flash := wantRedirect(t, "没有确认", e.post(gh, accountURL+"/unbind", nil), accountURL); !strings.Contains(flash, "请勾选确认") {
+	if flash := wantRedirect(t, "没有确认", e.post(gh, accountURL+"/unbind", nil), accountURL); !strings.Contains(flashZH(t, flash), "请勾选确认") {
 		t.Errorf("没有确认的提示 = %q", flash)
 	}
 	wantRedirect(t, "解除绑定", e.post(gh, accountURL+"/unbind", url.Values{"confirm": {"1"}}), accountURL)
@@ -131,6 +131,11 @@ func TestAccountBindFlow(t *testing.T) {
 		t.Fatalf("应已解除绑定：%+v", b)
 	}
 	wantRedirect(t, "解除后的会话", e.get(gh, "/runs"), "/login?next=%2Fruns&reason=revoked")
+	// 已经没有绑定时再解除：前提不满足（admin.ErrAlreadyUnbound），提示是对应的消息
+	flash = wantRedirect(t, "再次解除绑定", e.post(e.alice, accountURL+"/unbind", url.Values{"confirm": {"1"}}), accountURL)
+	if got := parseFlash(flash); got.id != msgSetErrAlreadyUnbound || flashZH(t, flash) != "没有绑定 GitHub 账号，不需要解除。" {
+		t.Errorf("再次解除绑定的提示 = %q", flash)
+	}
 }
 
 func TestAccountBindRequiresSameSession(t *testing.T) {
@@ -189,7 +194,10 @@ func TestMembersAndActivityPages(t *testing.T) {
 	mp := pageData[membersPage](t, e.get(e.alice, membersURL).Body.String())
 	source := map[string]string{}
 	for _, m := range mp.Members {
-		source[m.Login] = m.Source
+		source[m.Login] = textZH(t, m.Source)
+		if m.Login != "octocat" && (m.Source.id != "" || m.Source.raw == "") {
+			t.Errorf("名单来源应原样显示环境变量名：%+v", m.Source)
+		}
 	}
 	if len(mp.Members) == 0 || mp.Members[0].Login != "octocat" || !mp.Members[0].Bound || !mp.Bound {
 		t.Errorf("绑定的账号应排在最前面：%+v", mp.Members)
@@ -207,13 +215,14 @@ func TestMembersAndActivityPages(t *testing.T) {
 	type activityData struct {
 		activityPage
 		Entries []struct {
-			Actor, Action, Text, Link string
+			Actor, Action, Link string
+			Text                uiText
 		}
 	}
 	ap := pageData[activityData](t, e.get(e.alice, activityURL).Body.String())
 	texts := map[string]string{}
 	for _, en := range ap.Entries {
-		texts[en.Action] = en.Text
+		texts[en.Action] = textZH(t, en.Text)
 		if en.Action == "run.cancel" && en.Link != runURL(run) {
 			t.Errorf("取消 run 的活动应链接到 run：%+v", en)
 		}
