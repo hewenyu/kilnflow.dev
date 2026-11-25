@@ -1,8 +1,11 @@
 import { z } from 'zod'
+import { defaultLocale, type Locale } from '../i18n/locale-id'
+import { msg, translate, type MsgKey, type Params } from '../i18n/messages'
 import { list } from './envelope'
+import { enumLabel } from './format'
 import { lookup } from './lookup'
 
-// AI 开发（PLAN #26.15）的工作项：列表页和详情页共用的数据格式和中文说明。
+// AI 开发（PLAN #26.15）的工作项：列表页和详情页共用的数据格式和按语言显示的说明（locale 不传时为 zh-CN）。
 
 /** aiDevIssueSchema 是工作项中的一个 Issue（internal/server/web 的 aiDevIssue）。 */
 const aiDevIssueSchema = z.object({
@@ -89,72 +92,73 @@ export const poolSchema = z.object({
 
 type LabelVariant = 'secondary' | 'accent' | 'success' | 'attention' | 'danger' | 'done'
 
-/** 工作项状态的中文和颜色：进行中琥珀、等人处理红、已开 PR 蓝、已合并紫、其余灰（DESIGN.md Labels）。 */
-const states: Record<string, { text: string; variant: LabelVariant }> = {
-  developing: { text: '开发中', variant: 'attention' },
-  delivering: { text: '等待推进', variant: 'attention' },
-  pr_open: { text: 'PR 已开', variant: 'accent' },
-  fixing: { text: '返修中', variant: 'attention' },
-  blocked: { text: '受阻', variant: 'danger' },
-  merged: { text: '已合并', variant: 'done' },
-  stopped: { text: '已终止', variant: 'secondary' },
-  no_change: { text: '无需改代码', variant: 'secondary' },
+/** 工作项状态的颜色：进行中琥珀、等人处理红、已开 PR 蓝、已合并紫、其余灰（DESIGN.md Labels）；名称在词典 workItemState.* 中。 */
+const stateVariants: Record<string, LabelVariant> = {
+  developing: 'attention',
+  delivering: 'attention',
+  pr_open: 'accent',
+  fixing: 'attention',
+  blocked: 'danger',
+  merged: 'done',
+  stopped: 'secondary',
+  no_change: 'secondary',
 }
 
-/** workItemState 返回工作项状态的中文和 Label 颜色；未知的状态原样显示。 */
-export function workItemState(state: string): { text: string; variant: LabelVariant } {
-  return lookup(states, state) ?? { text: state, variant: 'secondary' }
+/** workItemState 返回工作项状态的名称和 Label 颜色；未知的状态原样显示（locale 不传时为 zh-CN）。 */
+export function workItemState(state: string, locale: Locale = defaultLocale): { text: string; variant: LabelVariant } {
+  return { text: enumLabel(locale, 'workItemState', state), variant: lookup(stateVariants, state) ?? 'secondary' }
 }
 
-/** 任务池中 Issue 情况的中文和颜色：可选蓝、已领取琥珀、跳过的灰（DESIGN.md Labels）。 */
-const poolStatuses: Record<string, { text: string; variant: LabelVariant }> = {
-  candidate: { text: '可选', variant: 'accent' },
-  claimed: { text: '已领取', variant: 'attention' },
-  skip_label: { text: 'kiln:skip', variant: 'secondary' },
-  waiting: { text: '等待依赖', variant: 'secondary' },
-  skipped: { text: '已跳过', variant: 'secondary' },
+/** 任务池中 Issue 情况的颜色：可选蓝、已领取琥珀、跳过的灰（DESIGN.md Labels）；名称在词典 poolStatus.* 中。 */
+const poolVariants: Record<string, LabelVariant> = {
+  candidate: 'accent',
+  claimed: 'attention',
+  skip_label: 'secondary',
+  waiting: 'secondary',
+  skipped: 'secondary',
 }
 
-/** poolStatus 返回任务池中 Issue 情况的中文和 Label 颜色；未知的情况原样显示。 */
-export function poolStatus(status: string): { text: string; variant: LabelVariant } {
-  return lookup(poolStatuses, status) ?? { text: status, variant: 'secondary' }
+/** poolStatus 返回任务池中 Issue 情况的名称和 Label 颜色；未知的情况原样显示。 */
+export function poolStatus(status: string, locale: Locale = defaultLocale): { text: string; variant: LabelVariant } {
+  return { text: enumLabel(locale, 'poolStatus', status), variant: lookup(poolVariants, status) ?? 'secondary' }
 }
 
-const resolutions: Record<string, string> = {
-  full: '完整解决',
-  partial: '部分解决',
-  none: '未解决',
+/** resolution 返回 Issue 完成度（full、partial、none）的名称；还没有交付（空）时返回空串，未知的原样返回。 */
+export function resolution(r: string, locale: Locale = defaultLocale): string {
+  return r === '' ? '' : enumLabel(locale, 'resolution', r)
 }
 
-/** resolution 返回 Issue 完成度的中文；还没有交付（空）时返回空串。 */
-export function resolution(r: string): string {
-  return lookup(resolutions, r) ?? r
+const tr = (locale: Locale, id: MsgKey, params?: Params) => translate(locale, msg(id, params))
+
+/** phaseText 返回工作项阶段（design、implement）的名称；未知的原样返回。 */
+export function phaseText(phase: string, locale: Locale = defaultLocale): string {
+  return enumLabel(locale, 'workItemPhase', phase)
 }
 
 /** workItemPhase 返回先设计的工作项所处的阶段（"设计"、"实现"，部分完成之后带轮次）；一个 PR 完成的第一轮返回空串。 */
-export function workItemPhase(it: Pick<AIDevItem, 'Phase' | 'DesignFirst' | 'ImplRound'>): string {
+export function workItemPhase(it: Pick<AIDevItem, 'Phase' | 'DesignFirst' | 'ImplRound'>, locale: Locale = defaultLocale): string {
   let p = ''
-  if (it.Phase === 'design') p = '设计'
-  else if (it.DesignFirst) p = '实现'
-  if (it.ImplRound > 1) p = `${p || '实现'}第 ${it.ImplRound} 轮`
+  if (it.Phase === 'design') p = tr(locale, 'workItemPhase.design')
+  else if (it.DesignFirst) p = tr(locale, 'workItemPhase.implement')
+  if (it.ImplRound > 1) p = tr(locale, 'workItemPhase.round', { phase: p || tr(locale, 'workItemPhase.implement'), round: it.ImplRound })
   return p
 }
 
 /** workItemMode 返回工作项的交付方式。 */
-export function workItemMode(it: Pick<AIDevItem, 'DesignFirst'>): string {
-  return it.DesignFirst ? '先设计：设计 PR 合并后再实现' : '一个 PR 完成（先设计再开发）'
+export function workItemMode(it: Pick<AIDevItem, 'DesignFirst'>, locale: Locale = defaultLocale): string {
+  return tr(locale, it.DesignFirst ? 'workItemMode.designFirst' : 'workItemMode.onePR')
 }
 
 /** retryText 返回重试按钮的文字。 */
-export function retryText(it: Pick<AIDevItem, 'NextRound'>): string {
-  return it.NextRound ? '开始下一轮实现' : '再返修一轮'
+export function retryText(it: Pick<AIDevItem, 'NextRound'>, locale: Locale = defaultLocale): string {
+  return tr(locale, it.NextRound ? 'workItem.retryNextRound' : 'workItem.retryFix')
 }
 
 /** fixRounds 返回返修轮次的说明，例如"返修 1 / 2 轮 · 冲突返修 1 / 2 轮"；还没有返修时返回空串。 */
-export function fixRounds(it: Pick<AIDevItem, 'FixRounds' | 'ConflictRounds' | 'MaxFixRounds'>): string {
+export function fixRounds(it: Pick<AIDevItem, 'FixRounds' | 'ConflictRounds' | 'MaxFixRounds'>, locale: Locale = defaultLocale): string {
   const parts: string[] = []
-  if (it.FixRounds > 0) parts.push(`返修 ${it.FixRounds} / ${it.MaxFixRounds} 轮`)
-  if (it.ConflictRounds > 0) parts.push(`冲突返修 ${it.ConflictRounds} / ${it.MaxFixRounds} 轮`)
+  if (it.FixRounds > 0) parts.push(tr(locale, 'workItem.fixRounds', { n: it.FixRounds, max: it.MaxFixRounds }))
+  if (it.ConflictRounds > 0) parts.push(tr(locale, 'workItem.conflictRounds', { n: it.ConflictRounds, max: it.MaxFixRounds }))
   return parts.join(' · ')
 }
 
@@ -162,7 +166,10 @@ export function fixRounds(it: Pick<AIDevItem, 'FixRounds' | 'ConflictRounds' | '
 export const occupancySchema = z.object({
   /** 占用者（没有被占用时为 0）。 */
   Occupant: z.number(),
-  /** 不能开始新的工作项的原因。 */
+  /** 占用者的阶段（design、implement）和状态（名称按语言显示）。 */
+  Phase: z.string(),
+  State: z.string(),
+  /** 占用者记下的原因或在等什么（原样显示）。 */
   Reason: z.string(),
   /** 排在占用者之后的未结束的工作项（升级前留下的）。 */
   Waiting: list(z.number()),

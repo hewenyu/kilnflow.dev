@@ -1,8 +1,9 @@
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import fixture from '../../dev/fixtures/ai_requests.json'
 import requestFixture from '../../dev/fixtures/ai_request.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, envelope, rawStrings, renderPage, switchLocale, withData } from '../test/render'
 import { aiRequestsURL } from './ai_requests'
 
 // AI 请求列表和 AI 请求详情页。
@@ -67,7 +68,7 @@ describe('AI 请求详情页', () => {
     const data = structuredClone(requestFixture)
     const t = data.Data.Tasks[1]
     if (!t) throw new Error('fixture 中没有第二个任务')
-    Object.assign(t, { State: 'pending', StateTitle: '待领取', Platform: '', Runner: '', Started: null, Finished: null })
+    Object.assign(t, { State: 'pending', Platform: '', Runner: '', Started: null, Finished: null })
     renderPage(envelope(data), '/ai/requests/88')
     const row = within(screen.getByRole('table', { name: 'AI 任务' })).getByRole('link', { name: 'codex · any' }).closest('tr')
     expect(row).toHaveTextContent('darwin/arm64 或 linux/amd64')
@@ -100,5 +101,63 @@ describe('AI 请求详情页', () => {
     view2.unmount()
     renderPage(withData(envelope(requestFixture, member), { Terminal: false, CanRerun: false }), '/ai/requests/88')
     expect(screen.getByRole('button', { name: '取消请求…' })).toBeInTheDocument()
+  })
+})
+
+describe('AI 请求（英文与切换语言）', () => {
+  it('英文：列表的标题、类型、状态、筛选和空状态按英文显示，没有残留的中文界面文字', () => {
+    const view = renderPage(envelope(fixture), '/ai/requests', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI requests')
+    const table = within(screen.getByRole('table', { name: 'AI requests' }))
+    expect(table.getByRole('link', { name: 'AI review request #88' }).closest('tr')).toHaveTextContent('Failed')
+    expect(table.getByRole('link', { name: 'AI development request #90' }).closest('tr')).toHaveTextContent('In progress')
+    expect(table.getByRole('link', { name: 'Work item #4' })).toHaveAttribute('href', '/ai-dev/4')
+    expect(table.getByRole('link', { name: 'AI review request #91' }).closest('td')).toHaveTextContent('(rerun of #88)')
+    expect(screen.getByRole('button', { name: 'Type: All types' })).toBeInTheDocument()
+    expect(chineseLeft(document.body, rawStrings(fixture.Data))).toEqual([])
+    view.unmount()
+    renderPage(withData(envelope(fixture), { Filter: { Repo: '', Type: 'develop', State: '', PR: 74 }, Requests: [] }), '/ai/requests?type=develop&pr=74', {
+      locale: 'en',
+    })
+    // 筛选选项的名称是服务端给的消息
+    expect(screen.getByRole('button', { name: 'Type: AI development' })).toBeInTheDocument()
+    expect(screen.getByText('Filtered to PR #74; showing 0 requests.')).toBeInTheDocument()
+    expect(screen.getByText('No AI requests match the filters')).toBeInTheDocument()
+    expect(chineseLeft(document.body)).toEqual([])
+  })
+
+  it('英文：详情页的信息、任务、重跑记录和设计依据按英文显示；仓库、任务名、原因原样显示', () => {
+    renderPage(envelope(requestFixture), '/ai/requests/88', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI review request #88')
+    const tasks = within(screen.getByRole('table', { name: 'AI tasks' }))
+    const codex = tasks.getByRole('link', { name: 'codex · macos-arm64' })
+    expect(codex.closest('tr')).toHaveTextContent('Failed')
+    expect(codex.closest('td')).toHaveTextContent('审计发现问题：2 个')
+    expect(screen.getByRole('region', { name: 'Reruns of this request' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Design basis' })).toHaveTextContent('Source recorded on the request: Standalone frozen snapshot set')
+    expect(chineseLeft(document.body, rawStrings(requestFixture.Data))).toEqual([])
+  })
+
+  it('还没有领取的一组平台在英文中用 or 连接', () => {
+    const data = structuredClone(requestFixture)
+    const t = data.Data.Tasks[1]
+    if (!t) throw new Error('fixture 中没有第二个任务')
+    Object.assign(t, { State: 'pending', Platform: '', Runner: '', Started: null, Finished: null })
+    renderPage(envelope(data), '/ai/requests/88', { locale: 'en' })
+    const row = within(screen.getByRole('table', { name: 'AI tasks' })).getByRole('link', { name: 'codex · any' }).closest('tr')
+    expect(row).toHaveTextContent('darwin/arm64 or linux/amd64')
+    expect(row).toHaveTextContent('Queued')
+  })
+
+  it('重跑的确认对话框打开时切换语言：对话框保持打开，标题和说明立即切换', async () => {
+    renderPage(envelope(requestFixture), '/ai/requests/88')
+    await userEvent.click(screen.getByRole('button', { name: '全部重跑…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('全部重跑AI 审计请求 #88？')).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('alertdialog')).toBe(dialog)
+    expect(within(dialog).getByText('Rerun all of AI review request #88?')).toBeInTheDocument()
+    expect(within(dialog).getByText(/all tasks run again \(same commit\)/)).toBeInTheDocument()
+    expect(document.querySelector('h1')).toHaveTextContent('AI review request #88')
   })
 })

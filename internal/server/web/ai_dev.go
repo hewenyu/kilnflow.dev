@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -105,18 +104,20 @@ func newAIDevItem(v *aidev.View) aiDevItem {
 	return it
 }
 
-// aiDevOccupancy 是仓库的 AI 开发占用：Occupant 是占用者（没有被占用时为 0），Reason 是不能开始新的工作项的原因，Waiting 是
-// 排在它之后的未结束的工作项（升级前留下的）。
+// aiDevOccupancy 是仓库的 AI 开发占用（规则见 aidev.Occupancy）：Occupant 是占用者（没有被占用时为 0），Phase、State 是它的
+// 阶段和状态（名称由前端按语言显示），Reason 是它记下的原因或在等什么（原样显示）；Waiting 是排在它之后的未结束的
+// 工作项（升级前留下的）。
 type aiDevOccupancy struct {
-	Occupant int64
-	Reason   string
-	Waiting  []int64
+	Occupant     int64
+	Phase, State string
+	Reason       string
+	Waiting      []int64
 }
 
 func newAIDevOccupancy(o *aidev.Occupancy) *aiDevOccupancy {
-	out := &aiDevOccupancy{Reason: o.Why(), Waiting: o.Waiting}
-	if o.Occupant != nil {
-		out.Occupant = o.Occupant.ID
+	out := &aiDevOccupancy{Waiting: o.Waiting}
+	if w := o.Occupant; w != nil {
+		out.Occupant, out.Phase, out.State, out.Reason = w.ID, w.Phase, w.State, w.Reason
 	}
 	if out.Waiting == nil {
 		out.Waiting = []int64{}
@@ -152,7 +153,7 @@ func (d *Dashboard) pageAIDev(w http.ResponseWriter, r *http.Request, se *sessio
 		repo, err := store.FindRepo(ctx, d.db, p.Repo)
 		// 写的不是 owner/name 时 store.FindRepo 返回的不是 ErrRepoNotFound，同样不可能是任何仓库
 		if errors.Is(err, store.ErrRepoNotFound) || (err != nil && !admin.ValidRepoFullName(p.Repo)) {
-			d.notFound(w, r, fmt.Sprintf("Kiln 中没有仓库 %s：名称可能写错了，或者仓库还没有同步。", p.Repo))
+			d.notFoundText(w, r, message(msgAIDevRepoNotFound, strArg(argRepo, p.Repo)))
 			return
 		}
 		if err != nil {
@@ -185,11 +186,11 @@ func (d *Dashboard) pageAIDev(w http.ResponseWriter, r *http.Request, se *sessio
 			return
 		}
 	}
-	title := "AI 开发"
+	title := message(msgAIDevTitle)
 	if p.Repo != "" {
-		title += " · " + p.Repo
+		title = message(msgAIDevTitleRepo, strArg(argRepo, p.Repo))
 	}
-	d.render(w, r, "ai_dev", title, p)
+	d.renderPage(w, r, "ai_dev", title, p, http.StatusOK)
 }
 
 // loadAIDevRepo 填写只看一个仓库时的数据：暂停状态（只有它自己的）、任务池和仓库占用。
@@ -322,7 +323,7 @@ func (d *Dashboard) pageAIDevItem(w http.ResponseWriter, r *http.Request, _ *ses
 	ctx := r.Context()
 	detail, err := d.admin.WorkItem(ctx, id)
 	if errors.Is(err, aidev.ErrNotFound) {
-		d.notFound(w, r, fmt.Sprintf("工作项 #%d 不存在。", id))
+		d.notFoundText(w, r, message(msgAIDevItemNotFound, intArg(argID, id)))
 		return
 	}
 	if err != nil {
@@ -362,7 +363,7 @@ func (d *Dashboard) pageAIDevItem(w http.ResponseWriter, r *http.Request, _ *ses
 		d.serverError(w, r, err)
 		return
 	}
-	d.render(w, r, "ai_dev_item", fmt.Sprintf("工作项 #%d · %s", id, detail.Repo), p)
+	d.renderPage(w, r, "ai_dev_item", message(msgAIDevItemTitle, intArg(argID, id), strArg(argRepo, detail.Repo)), p, http.StatusOK)
 }
 
 // postAIDevSync 从 GitHub 全量同步仓库的任务池（webhook 可能丢失），回到这个仓库的 AI 开发页。
@@ -370,20 +371,20 @@ func (d *Dashboard) postAIDevSync(w http.ResponseWriter, r *http.Request, se *se
 	repo := strings.TrimSpace(r.PostFormValue("repo"))
 	back := aiDevURL(repo)
 	if repo == "" {
-		d.flashBack(w, r, back, "没有同步：请选择仓库")
+		d.flashMsg(w, r, back, message(msgAIDevSyncNoRepo))
 		return
 	}
 	res, err := d.admin.SyncAIDev(r.Context(), repo, se.Login)
 	if err != nil {
-		d.flashBack(w, r, back, fmt.Sprintf("同步 %s 的任务池失败：%s", repo, d.aiDevFailure(r, err)))
+		d.flashMsg(w, r, back, d.aiDevFailure(r, err, aiDevTarget{repo: repo}, msgAIDevSyncFailed, msgAIDevSyncFailedRef))
 		return
 	}
-	msg := fmt.Sprintf("已同步 %s 的任务池：GitHub 上有 %d 个 %s 的 Issue，变化 %d 个，可选 %d 个（有空闲的开发机时开始选题）",
-		repo, res.Listed, aidev.LabelReady, res.Changed, res.Candidates)
+	id := msgAIDevSynced
 	if !res.Complete {
-		msg += "；Issue 太多没有读完，没读到的不会移出任务池"
+		id = msgAIDevSyncedPartial
 	}
-	d.flashBack(w, r, back, msg)
+	d.flashMsg(w, r, back, message(id, strArg(argRepo, repo), intArg(argCount, int64(res.Listed)), strArg(argLabel, aidev.LabelReady),
+		intArg(argChanged, int64(res.Changed)), intArg(argCandidates, int64(res.Candidates))))
 }
 
 // postAIDevPause、postAIDevResume 暂停、恢复仓库的新领取，回到这个仓库的 AI 开发页。
@@ -398,23 +399,20 @@ func (d *Dashboard) postAIDevResume(w http.ResponseWriter, r *http.Request, se *
 func (d *Dashboard) setAIDevPaused(w http.ResponseWriter, r *http.Request, se *session, paused bool) {
 	repo := strings.TrimSpace(r.PostFormValue("repo"))
 	back := aiDevURL(repo)
-	verb := "恢复"
+	// 暂停、恢复的提示各一组：没有选仓库、失败（原样的说明 / 错误编号）、成功
+	noRepo, failed, failedRef, done := msgAIDevResumeNoRepo, msgAIDevResumeFailed, msgAIDevResumeFailRef, msgAIDevResumed
 	if paused {
-		verb = "暂停"
+		noRepo, failed, failedRef, done = msgAIDevPauseNoRepo, msgAIDevPauseFailed, msgAIDevPauseFailedRef, msgAIDevPaused
 	}
 	if repo == "" {
-		d.flashBack(w, r, back, "没有"+verb+"：请选择仓库")
+		d.flashMsg(w, r, back, message(noRepo))
 		return
 	}
 	if err := d.admin.PauseAIDev(r.Context(), repo, paused, se.Login); err != nil {
-		d.flashBack(w, r, back, fmt.Sprintf("%s %s 的 AI 开发失败：%s", verb, repo, d.aiDevFailure(r, err)))
+		d.flashMsg(w, r, back, d.aiDevFailure(r, err, aiDevTarget{repo: repo}, failed, failedRef))
 		return
 	}
-	if paused {
-		d.flashBack(w, r, back, fmt.Sprintf("已暂停 %s 的 AI 开发：不再领取新的 Issue，已有的工作项照常收尾", repo))
-		return
-	}
-	d.flashBack(w, r, back, fmt.Sprintf("已恢复 %s 的 AI 开发", repo))
+	d.flashMsg(w, r, back, message(done, strArg(argRepo, repo)))
 }
 
 // aiDevFormID 读取终止、重试表单的工作项 ID；无效时返回 0。
@@ -430,43 +428,58 @@ func aiDevFormID(r *http.Request) int64 {
 func (d *Dashboard) postAIDevStop(w http.ResponseWriter, r *http.Request, se *session) {
 	id := aiDevFormID(r)
 	if id == 0 {
-		d.flashBack(w, r, aiDevPath, "没有终止：工作项编号无效")
+		d.flashMsg(w, r, aiDevPath, message(msgAIDevStopBadID))
 		return
 	}
 	back := aiDevItemURL(id)
 	if err := d.admin.StopWorkItem(r.Context(), id, se.Login); err != nil {
-		d.flashBack(w, r, back, fmt.Sprintf("终止工作项 #%d 失败：%s", id, d.aiDevFailure(r, err)))
+		d.flashMsg(w, r, back, d.aiDevFailure(r, err, aiDevTarget{id: id}, msgAIDevStopFailed, msgAIDevStopFailedRef))
 		return
 	}
-	d.flashBack(w, r, back, fmt.Sprintf("已终止工作项 #%d：Issue 已释放，PR（如果有）保持原样，由你决定关闭还是接手", id))
+	d.flashMsg(w, r, back, message(msgAIDevStopped, intArg(argID, id)))
 }
 
 // postAIDevRetry 让受阻的工作项再返修一轮（不受轮数限制），回到工作项详情页。
 func (d *Dashboard) postAIDevRetry(w http.ResponseWriter, r *http.Request, se *session) {
 	id := aiDevFormID(r)
 	if id == 0 {
-		d.flashBack(w, r, aiDevPath, "没有重试：工作项编号无效")
+		d.flashMsg(w, r, aiDevPath, message(msgAIDevRetryBadID))
 		return
 	}
 	back := aiDevItemURL(id)
 	if err := d.admin.RetryWorkItem(r.Context(), id, se.Login); err != nil {
-		d.flashBack(w, r, back, fmt.Sprintf("重试工作项 #%d 失败：%s", id, d.aiDevFailure(r, err)))
+		d.flashMsg(w, r, back, d.aiDevFailure(r, err, aiDevTarget{id: id}, msgAIDevRetryFailed, msgAIDevRetryFailedRef))
 		return
 	}
-	d.flashBack(w, r, back, fmt.Sprintf("已让工作项 #%d 再返修一轮", id))
+	d.flashMsg(w, r, back, message(msgAIDevRetried, intArg(argID, id)))
 }
 
-// aiDevFailure 返回 AI 开发操作失败的说明：工作项、仓库不存在和状态不允许时给出可以怎么做。
-func (d *Dashboard) aiDevFailure(r *http.Request, err error) string {
+// aiDevTarget 是 AI 开发操作的对象：工作项（终止、重试）或仓库（同步、暂停、恢复）。
+type aiDevTarget struct {
+	id   int64
+	repo string
+}
+
+// args 返回操作的提示中共同的参数（工作项编号或仓库名）。
+func (t aiDevTarget) args() []msgArg {
+	if t.repo != "" {
+		return []msgArg{strArg(argRepo, t.repo)}
+	}
+	return []msgArg{intArg(argID, t.id)}
+}
+
+// aiDevFailure 返回 AI 开发操作失败后的提示：工作项、仓库不存在和状态不允许时给出可以怎么做；其余按 failureFlash
+// （withReason 带原样的说明，withRef 带错误编号）。
+func (d *Dashboard) aiDevFailure(r *http.Request, err error, t aiDevTarget, withReason, withRef msgID) uiText {
 	switch {
 	case errors.Is(err, aidev.ErrNotFound):
-		return "工作项不存在"
+		return message(msgAIDevItemMissing, intArg(argID, t.id))
 	case errors.Is(err, store.ErrRepoNotFound), errors.Is(err, aidev.ErrRepoNotFound):
-		return "Kiln 中没有这个仓库（名称可能写错了，或者仓库还没有同步）"
+		return message(msgAIDevRepoMissing, strArg(argRepo, t.repo))
 	case errors.Is(err, aidev.ErrNotRetryable):
-		return err.Error() + "；工作项可能已经在返修或已经结束，请刷新页面"
+		return message(msgAIDevNotRetryable, intArg(argID, t.id))
 	case errors.Is(err, aidev.ErrFinished):
-		return "工作项已经结束，不需要终止"
+		return message(msgAIDevFinished, intArg(argID, t.id))
 	}
-	return d.failure(r, err)
+	return d.failureFlash(r, err, withReason, withRef, t.args()...)
 }

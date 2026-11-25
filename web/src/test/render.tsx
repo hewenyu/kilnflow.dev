@@ -68,3 +68,22 @@ export function chineseLeft(root: HTMLElement, raw: readonly string[] = []): str
   return text.match(/[\u4e00-\u9fff][^a-zA-Z0-9]*/g) ?? []
 }
 
+
+/**
+ * rawStrings 返回页面数据 data 中含中文的字符串（服务端原样给出的内容，例如报告、Issue 标题、原因），长的在前：
+ * 作为 chineseLeft 的 raw。服务端给的界面文字是消息（{id, params}），不在其中。
+ */
+export function rawStrings(data: unknown): string[] {
+  const out = new Set<string>()
+  const walk = (v: unknown): void => {
+    if (typeof v === 'string') {
+      if (/[\u4e00-\u9fff]/.test(v)) out.add(v)
+    } else if (Array.isArray(v)) {
+      v.forEach(walk)
+    } else if (typeof v === 'object' && v !== null) {
+      Object.values(v).forEach(walk)
+    }
+  }
+  walk(data)
+  return [...out].sort((a, b) => b.length - a.length)
+}

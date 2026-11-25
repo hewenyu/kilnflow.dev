@@ -1,6 +1,12 @@
 {
   "Page": "ai_task",
-  "Title": "codex · macos-arm64 · AI 审计请求 #88",
+  "Title": {
+    "id": "aiTask.pageTitleReview",
+    "params": {
+      "name": "codex · macos-arm64",
+      "id": 88
+    }
+  },
   "Nav": "ai_requests",
   "Status": 200,
   "Session": {
@@ -25,7 +31,6 @@
       "Platform": "darwin/arm64",
       "Agent": "codex",
       "State": "failed",
-      "StateTitle": "失败",
       "Reason": "审计发现问题：2 个",
       "ReusedFrom": 0,
       "AttemptCount": 1,
@@ -38,7 +43,6 @@
     "Request": {
       "ID": 88,
       "Type": "review",
-      "TypeLabel": "AI 审计",
       "Repo": "acme/kiln",
       "Event": "pull_request",
       "Ref": "refs/pull/74/head",
@@ -70,7 +74,6 @@
         "Platform": "darwin/arm64",
         "Agent": "codex",
         "State": "failed",
-        "StateTitle": "失败",
         "Reason": "审计发现问题：2 个",
         "ReusedFrom": 0,
         "AttemptCount": 1,
@@ -91,7 +94,6 @@
         "Platform": "linux/amd64",
         "Agent": "claude",
         "State": "succeeded",
-        "StateTitle": "成功",
         "Reason": "",
         "ReusedFrom": 0,
         "AttemptCount": 1,
@@ -138,7 +140,9 @@
     "RequestTerminal": true,
     "CanRerun": true,
     "NoLog": false,
-    "LogEmpty": "这次 attempt 没有输出日志。",
+    "LogEmpty": {
+      "id": "aiTask.logNoOutput"
+    },
     "AttemptKey": "current",
     "Spec": "{\n  \"agent\": \"codex\",\n  \"platform\": \"darwin/arm64\",\n  \"pr\": 74\n}",
     "Review": {

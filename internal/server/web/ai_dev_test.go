@@ -23,7 +23,7 @@ func testAIDevPage(now time.Time) *aiDevPage {
 	return &aiDevPage{
 		GitHub: "https://github.com", Repos: []string{"tester/demo"}, Paused: []string{"tester/demo"}, Ready: aidev.LabelReady, HoldLabel: "kiln:hold",
 		Items:     []aiDevItem{testAIDevItem(now)},
-		Occupancy: &aiDevOccupancy{Occupant: 3, Reason: "工作项 #3 进行中（implement / blocked）", Waiting: []int64{}},
+		Occupancy: &aiDevOccupancy{Occupant: 3, Phase: devreport.PhaseImplement, State: aidev.StateBlocked, Reason: "返修 2 轮后仍未通过", Waiting: []int64{}},
 	}
 }
 
@@ -92,9 +92,7 @@ func TestPageAIDev(t *testing.T) {
 
 	w := e.get(e.bob, aiDevPath)
 	wantStatus(t, "空的 AI 开发页", w, http.StatusOK)
-	if pg := parsePage(t, w.Body.String()); pg.Page != "ai_dev" || pg.Nav != "ai_dev" {
-		t.Fatalf("页面 = %q，导航 = %q", pg.Page, pg.Nav)
-	}
+	wantPageZH(t, w.Body.String(), "ai_dev", "ai_dev", "AI 开发")
 	if p := pageData[aiDevPage](t, w.Body.String()); len(p.Items) != 0 || len(p.Paused) != 0 || p.Repos != nil || p.Ready != aidev.LabelReady {
 		t.Fatalf("空的 AI 开发页 = %+v", p)
 	}
@@ -134,7 +132,7 @@ func TestPageAIDev_Repo(t *testing.T) {
 	e := newWebEnv(t)
 	e.addRepo(502, "other")
 	merged := e.addWorkItem(502, aidev.StateMerged, 4, "", 1)
-	blocked := e.addWorkItem(testRepoID, aidev.StateBlocked, 9, "", 3)
+	blocked := e.addWorkItem(testRepoID, aidev.StateBlocked, 9, "返修 2 轮后仍未通过", 3)
 	e.exec(`INSERT INTO ai_repo_state (repo_id, dev_paused) VALUES (502, true)`)
 	e.exec(`INSERT INTO dev_pool (repo_id, issue_number, in_pool, title, issue_updated_at, ready_at) VALUES
 		($1, 3, true, 'Issue 3', now(), now() - interval '2 minutes'), ($1, 6, true, '新需求', now(), now() - interval '1 minute'),
@@ -149,7 +147,9 @@ func TestPageAIDev_Repo(t *testing.T) {
 		t.Errorf("tester/demo 的任务池 = %+v", p.Pool)
 	}
 	// 受阻的工作项仍占用仓库（同一个仓库按工作项串行）
-	if o := p.Occupancy; o == nil || o.Occupant != blocked || !strings.Contains(o.Reason, "按工作项串行") || len(o.Waiting) != 0 {
+	// 页面数据是结构化的阶段、状态和原样的原因，不是拼好的中文整句
+	if o := p.Occupancy; o == nil || o.Occupant != blocked || o.Phase != devreport.PhaseImplement || o.State != aidev.StateBlocked ||
+		o.Reason != "返修 2 轮后仍未通过" || len(o.Waiting) != 0 {
 		t.Errorf("tester/demo 的占用 = %+v", o)
 	}
 	if p := pageData[aiDevPage](t, e.get(e.bob, aiDevPath).Body.String()); p.Pool != nil || p.Occupancy != nil {
@@ -157,10 +157,14 @@ func TestPageAIDev_Repo(t *testing.T) {
 	}
 	p = pageData[aiDevPage](t, e.get(e.bob, aiDevPath+"?repo=TESTER/other").Body.String())
 	if p.Repo != "tester/other" || !slices.Equal(itemIDs(p.Items), []int64{merged}) || !slices.Equal(p.Paused, []string{"tester/other"}) ||
-		p.Occupancy == nil || p.Occupancy.Occupant != 0 || p.Occupancy.Reason != "" {
+		p.Occupancy == nil || p.Occupancy.Occupant != 0 || p.Occupancy.Reason != "" || p.Occupancy.State != "" {
 		t.Errorf("只看 tester/other = %+v", p)
 	}
-	wantStatus(t, "不存在的仓库", e.get(e.bob, aiDevPath+"?repo=tester/ghost"), http.StatusNotFound)
+	w := e.get(e.bob, aiDevPath+"?repo=tester/ghost")
+	wantStatus(t, "不存在的仓库", w, http.StatusNotFound)
+	if got := pageTextZH(t, w.Body.String()); !strings.Contains(got, "Kiln 中没有仓库 tester/ghost：") {
+		t.Errorf("不存在的仓库的说明 = %q", got)
+	}
 	wantStatus(t, "仓库名没有 /", e.get(e.bob, aiDevPath+"?repo=ghost"), http.StatusNotFound)
 	if strings.Contains(e.log.String(), "页面出错") {
 		t.Errorf("无效的仓库名不应记录为服务器错误：%s", e.log.String())
@@ -203,9 +207,7 @@ func TestPageAIDevItem(t *testing.T) {
 
 	w := e.get(e.bob, aiDevItemURL(id))
 	wantStatus(t, "工作项详情", w, http.StatusOK)
-	if pg := parsePage(t, w.Body.String()); pg.Page != "ai_dev_item" || pg.Nav != "ai_dev" {
-		t.Fatalf("页面 = %q，导航 = %q", pg.Page, pg.Nav)
-	}
+	wantPageZH(t, w.Body.String(), "ai_dev_item", "ai_dev", "工作项 #"+strconv.FormatInt(id, 10)+" · tester/demo")
 	p := pageData[aiDevItemPage](t, w.Body.String())
 	if p.Item.ID != id || p.Item.State != aidev.StatePROpen || p.Item.Retryable || p.Plan != "先改 a.go" || p.BaseRef != "main" ||
 		p.TaskURL != aiTaskURL(task) || p.RepoURL != "/ai-dev?repo=tester%2Fdemo" {
@@ -214,7 +216,11 @@ func TestPageAIDevItem(t *testing.T) {
 	if len(p.Comments) != 2 || p.Comments[0].State != aidev.CommentUnknown || p.Comments[1].Error != "被拒" || p.Comments[1].Number != 9 {
 		t.Errorf("评论 = %+v", p.Comments)
 	}
-	wantStatus(t, "不存在的工作项", e.get(e.bob, aiDevItemURL(id+100)), http.StatusNotFound)
+	w = e.get(e.bob, aiDevItemURL(id+100))
+	wantStatus(t, "不存在的工作项", w, http.StatusNotFound)
+	if got := pageTextZH(t, w.Body.String()); !strings.Contains(got, "工作项 #"+strconv.FormatInt(id+100, 10)+" 不存在。") {
+		t.Errorf("不存在的工作项的说明 = %q", got)
+	}
 	wantStatus(t, "不是数字", e.get(e.bob, aiDevPath+"/abc"), http.StatusNotFound)
 }
 
@@ -283,28 +289,28 @@ func TestPostAIDev(t *testing.T) {
 	}
 
 	// 没有配置 GitHub App：不能同步，说明原因
-	flash := wantRedirect(t, "同步", e.post(e.alice, aiDevPath+"/sync", repoForm()), back)
-	if !strings.Contains(flash, "同步 tester/demo 的任务池失败：") {
+	flash := flashZH(t, wantRedirect(t, "同步", e.post(e.alice, aiDevPath+"/sync", repoForm()), back))
+	if !strings.Contains(flash, "同步 tester/demo 的任务池失败：") || strings.HasSuffix(flash, "：") {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "同步没有选仓库", e.post(e.alice, aiDevPath+"/sync", nil), aiDevPath)
-	if !strings.Contains(flash, "请选择仓库") {
+	flash = flashZH(t, wantRedirect(t, "同步没有选仓库", e.post(e.alice, aiDevPath+"/sync", nil), aiDevPath))
+	if flash != "没有同步：请选择仓库" {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "暂停不存在的仓库", e.post(e.alice, aiDevPath+"/pause", url.Values{"repo": {"tester/ghost"}}), "/ai-dev?repo=tester%2Fghost")
-	if !strings.Contains(flash, "Kiln 中没有这个仓库") {
+	flash = flashZH(t, wantRedirect(t, "暂停不存在的仓库", e.post(e.alice, aiDevPath+"/pause", url.Values{"repo": {"tester/ghost"}}), "/ai-dev?repo=tester%2Fghost"))
+	if !strings.Contains(flash, "Kiln 中没有仓库 tester/ghost") {
 		t.Errorf("提示 = %q", flash)
 	}
 
-	flash = wantRedirect(t, "暂停", e.post(e.alice, aiDevPath+"/pause", repoForm()), back)
-	if !strings.Contains(flash, "已暂停 tester/demo") {
+	flash = flashZH(t, wantRedirect(t, "暂停", e.post(e.alice, aiDevPath+"/pause", repoForm()), back))
+	if flash != "已暂停 tester/demo 的 AI 开发：不再领取新的 Issue，已有的工作项照常收尾" {
 		t.Errorf("提示 = %q", flash)
 	}
 	if p := pageData[aiDevPage](t, e.get(e.bob, aiDevPath).Body.String()); !slices.Equal(p.Paused, []string{testRepo}) {
 		t.Errorf("暂停后 Paused = %v", p.Paused)
 	}
-	flash = wantRedirect(t, "恢复", e.post(e.alice, aiDevPath+"/resume", repoForm()), back)
-	if !strings.Contains(flash, "已恢复 tester/demo") {
+	flash = flashZH(t, wantRedirect(t, "恢复", e.post(e.alice, aiDevPath+"/resume", repoForm()), back))
+	if flash != "已恢复 tester/demo 的 AI 开发" {
 		t.Errorf("提示 = %q", flash)
 	}
 	if n := e.count(`SELECT count(*) FROM ai_repo_state WHERE dev_paused`); n != 0 {
@@ -314,20 +320,20 @@ func TestPostAIDev(t *testing.T) {
 		t.Errorf("暂停、恢复的审计日志 = %+v %+v", a, r)
 	}
 
-	flash = wantRedirect(t, "重试", e.post(e.alice, aiDevPath+"/retry", idForm(sid)), itemBack)
-	if !strings.Contains(flash, "已让工作项 #"+sid+" 再返修一轮") {
+	flash = flashZH(t, wantRedirect(t, "重试", e.post(e.alice, aiDevPath+"/retry", idForm(sid)), itemBack))
+	if flash != "已让工作项 #"+sid+" 再返修一轮" {
 		t.Errorf("提示 = %q", flash)
 	}
 	if a := e.audits("aidev.retry"); len(a) != 1 || a[0].Actor != "alice" {
 		t.Errorf("重试的审计日志 = %+v", a)
 	}
-	flash = wantRedirect(t, "重试不是受阻的", e.post(e.alice, aiDevPath+"/retry", idForm(sid)), itemBack)
+	flash = flashZH(t, wantRedirect(t, "重试不是受阻的", e.post(e.alice, aiDevPath+"/retry", idForm(sid)), itemBack))
 	if !strings.Contains(flash, "重试工作项 #"+sid+" 失败") || !strings.Contains(flash, "请刷新页面") {
 		t.Errorf("提示 = %q", flash)
 	}
 
-	flash = wantRedirect(t, "终止", e.post(e.alice, aiDevPath+"/stop", idForm(sid)), itemBack)
-	if !strings.Contains(flash, "已终止工作项 #"+sid) {
+	flash = flashZH(t, wantRedirect(t, "终止", e.post(e.alice, aiDevPath+"/stop", idForm(sid)), itemBack))
+	if !strings.HasPrefix(flash, "已终止工作项 #"+sid+"：") {
 		t.Errorf("提示 = %q", flash)
 	}
 	if n := e.count(`SELECT count(*) FROM dev_work_items WHERE id=$1 AND state='stopped'`, id); n != 1 {
@@ -336,17 +342,17 @@ func TestPostAIDev(t *testing.T) {
 	if a := e.audits("aidev.stop"); len(a) != 1 || a[0].Actor != "alice" {
 		t.Errorf("终止的审计日志 = %+v", a)
 	}
-	flash = wantRedirect(t, "再次终止", e.post(e.alice, aiDevPath+"/stop", idForm(sid)), itemBack)
-	if !strings.Contains(flash, "工作项已经结束") {
+	flash = flashZH(t, wantRedirect(t, "再次终止", e.post(e.alice, aiDevPath+"/stop", idForm(sid)), itemBack))
+	if flash != "终止工作项 #"+sid+" 失败：工作项已经结束，不需要终止" {
 		t.Errorf("提示 = %q", flash)
 	}
 	missing := strconv.FormatInt(id+100, 10)
-	flash = wantRedirect(t, "终止不存在的", e.post(e.alice, aiDevPath+"/stop", idForm(missing)), aiDevPath+"/"+missing)
-	if !strings.Contains(flash, "工作项不存在") {
+	flash = flashZH(t, wantRedirect(t, "终止不存在的", e.post(e.alice, aiDevPath+"/stop", idForm(missing)), aiDevPath+"/"+missing))
+	if flash != "工作项 #"+missing+" 不存在，没有执行任何操作" {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "编号无效", e.post(e.alice, aiDevPath+"/retry", idForm("x")), aiDevPath)
-	if !strings.Contains(flash, "工作项编号无效") {
+	flash = flashZH(t, wantRedirect(t, "编号无效", e.post(e.alice, aiDevPath+"/retry", idForm("x")), aiDevPath))
+	if flash != "没有重试：工作项编号无效" {
 		t.Errorf("提示 = %q", flash)
 	}
 	if strings.Contains(e.log.String(), "操作出错") {

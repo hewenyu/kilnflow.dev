@@ -1,6 +1,8 @@
 {
  "Page": "ai_dev",
- "Title": "AI 开发",
+ "Title": {
+  "id": "aiDev.pageTitle"
+ },
  "Nav": "ai_dev",
  "Status": 200,
  "Session": {

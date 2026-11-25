@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { defaultLocale, msg, translate, type Locale } from '../../i18n/messages'
 import { list } from '../../lib/envelope'
 import { reportSchema } from './report'
 
@@ -8,9 +9,8 @@ import { reportSchema } from './report'
 /** aiRequestView：一个 AI 请求（审计或开发）。 */
 export const aiRequestSchema = z.object({
   ID: z.number(),
-  /** review 或 develop；TypeLabel 是显示名称（AI 审计、AI 开发）。 */
+  /** review 或 develop（名称按语言显示，见 parts.tsx 的 requestTitle）。 */
   Type: z.string(),
-  TypeLabel: z.string(),
   Repo: z.string(),
   Event: z.string(),
   Ref: z.string(),
@@ -50,9 +50,9 @@ export const aiTaskSchema = z.object({
   /** 当前 attempt 实际执行的平台（还没有领取时为空）。 */
   Platform: z.string(),
   Agent: z.string(),
+  /** waiting、pending、running、succeeded、failed、timed_out、cancelled、skipped（名称按语言显示，见 parts.tsx 的 taskState）。 */
   State: z.string(),
-  /** 状态的中文名称。 */
-  StateTitle: z.string(),
+  /** 失败、跳过的原因（服务端记下的原文，原样显示）。 */
   Reason: z.string(),
   /** 沿用结果的来源任务（没有沿用时为 0）。 */
   ReusedFrom: z.number(),
@@ -65,9 +65,9 @@ export const aiTaskSchema = z.object({
 })
 export type AITask = z.infer<typeof aiTaskSchema>
 
-/** taskPlatform 是任务的平台：已经领取的是实际执行的平台，还没有领取的是可以执行的平台（一组平台时"或"连接）。 */
-export function taskPlatform(t: Pick<AITask, 'Platform' | 'Platforms'>): string {
-  return t.Platform || t.Platforms.join(' 或 ')
+/** taskPlatform 是任务的平台：已经领取的是实际执行的平台，还没有领取的是可以执行的平台（一组平台时用"或"连接，locale 不传时为 zh-CN）。 */
+export function taskPlatform(t: Pick<AITask, 'Platform' | 'Platforms'>, locale: Locale = defaultLocale): string {
+  return t.Platform || t.Platforms.join(translate(locale, msg('aiTask.platformOr')))
 }
 
 /** ai.OrcaBinding：一次执行在 Orca 中的关联（PLAN #33.4），连接器上报，没有上报的字段不出现。 */
@@ -176,7 +176,6 @@ export const aiDevelopSchema = z.object({
   WorkItemURL: z.string(),
 })
 export type AIDevelop = z.infer<typeof aiDevelopSchema>
-
 
 /** aiRunningTask：AI 执行节点正在执行的一个 AI 任务。 */
 export const aiRunningTaskSchema = z.object({

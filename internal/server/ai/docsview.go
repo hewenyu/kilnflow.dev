@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -41,7 +40,8 @@ type RequestDocsView struct {
 	// Declared 为假表示历史请求没有记录文档依据（迁移前的 legacy）。
 	Declared bool
 	View     *docsync.SnapshotView
-	// Error 非空表示声明与实际快照不一致（不展示为正常依据）。
+	// Issue 非 nil 表示声明与实际快照不一致（不展示为正常依据）：原因码和参数给页面按语言显示；Error 是它的中文说明。
+	Issue *DocsIssue
 	Error string
 }
 
@@ -54,7 +54,9 @@ type TaskDocsView struct {
 	DeclaredSource string
 	BasisSource    string
 	View           *docsync.SnapshotView
-	// Error 非空表示任务的 spec 与请求明细不一致，或依据不可核对。
+	// Error 非空表示任务的 spec 与请求明细不一致，或依据不可核对（中文说明）；Issue 是记录不一致时的原因码和参数，
+	// 依据因为其他原因（例如 spec 无法解析）不可核对时为 nil，页面原样显示 Error。
+	Issue *DocsIssue
 	Error string
 }
 
@@ -67,9 +69,20 @@ type RelatedTask struct {
 	Mode string
 	// Relation 是 same_basis / refs_match / claimed_dynamic / no_basis / unverifiable / legacy_pinned / mismatch。
 	Relation string
-	// Note 是关系的说明（给人看，不含推断）。
-	Note string
+	// NoteCode 是关系说明的原因码；Note 是它的中文说明（给人看，不含推断，依据无法解析时带上具体原因）。
+	NoteCode RelationNote
+	Note     string
+	// 依据无法解析时（NoteCode 为 basis_conflict / basis_unverifiable）的具体原因：记录不一致时 Issue 是原因码和参数，
+	// 其他原因时为 nil，Detail 是错误的原文。
+	Issue  *DocsIssue
+	Detail string
 }
+
+// setIssue 记录请求的依据与实际快照不一致的原因（Error 是它的中文说明，不带前缀）。
+func (v *RequestDocsView) setIssue(e *DocsIssue) { v.Issue, v.Error = e, e.Detail() }
+
+// setIssue 记录任务的依据不可核对的原因（Error 是它的中文说明，不带前缀）。
+func (v *TaskDocsView) setIssue(e *DocsIssue) { v.Issue, v.Error = e, e.Detail() }
 
 // WorkItemDocsView 返回工作项冻结快照的展示数据；没有冻结时 Source=none。
 func (c *Core) WorkItemDocsView(ctx context.Context, workItemID int64) (*docsync.SnapshotView, error) {
@@ -120,6 +133,7 @@ func (c *Core) TaskDocsView(ctx context.Context, taskID int64) (*TaskDocsView, e
 	v.DeclaredSource = declared
 	if basisErr != nil {
 		v.Error = basisErr.Error()
+		v.Issue, _ = errors.AsType[*DocsIssue](basisErr)
 		if v.View, err = c.emptyDocsView(ctx, t.RequestID); err != nil {
 			return nil, err
 		}
@@ -129,7 +143,7 @@ func (c *Core) TaskDocsView(ctx context.Context, taskID int64) (*TaskDocsView, e
 		return nil, err
 	}
 	if basis.Source != docsync.SourceNone && !validBasisDigest(basis.ManifestDigest) {
-		v.Error = "文档依据缺少合法摘要"
+		v.setIssue(&DocsIssue{Code: IssueBasisDigestInvalid})
 	}
 	return v, nil
 }
@@ -163,8 +177,8 @@ func (c *Core) RequestDocContent(ctx context.Context, requestID int64, docID str
 	if err != nil {
 		return nil, err
 	}
-	if v.Error != "" {
-		return nil, fmt.Errorf("%w：%s", ErrDocsBasisConflict, v.Error)
+	if v.Issue != nil {
+		return nil, v.Issue
 	}
 	if basis.Source == docsync.SourceNone {
 		return nil, ErrDocsBasisMissing
@@ -251,7 +265,13 @@ func (c *Core) RelatedTasks(ctx context.Context, workItemID int64) ([]RelatedTas
 		v.Mode = spec.displayMode(r.Type)
 		attemptID := attempts[r.ID]
 		basis, basisErr := c.taskDocsBasis(ctx, c.db, &Task{ID: r.ID, RequestID: r.RequestID, Type: r.Type, Spec: r.Spec}, attemptID)
-		v.Relation, v.Note = classifyRelation(r.Type, declared[r.RequestID], spec, basis, basisErr, wiBasis, repoID, workItemID)
+		v.Relation, v.NoteCode = classifyRelation(r.Type, declared[r.RequestID], spec, basis, basisErr, wiBasis, repoID, workItemID)
+		v.Note = v.NoteCode.String()
+		if basisErr != nil {
+			v.Detail = basisErr.Error()
+			v.Issue, _ = errors.AsType[*DocsIssue](basisErr)
+			v.Note += "：" + v.Detail
+		}
 		out = append(out, v)
 	}
 	return out, nil
@@ -343,10 +363,10 @@ func (c *Core) docsViewForBasis(ctx context.Context, b docsync.Basis) (*docsync.
 			return nil, err
 		}
 		if v == nil {
-			return nil, fmt.Errorf("%w：文档快照集 #%d 不存在", ErrDocsBasisConflict, b.SnapshotSetID)
+			return nil, &DocsIssue{Code: IssueSnapshotSetMissing, SnapshotSetID: b.SnapshotSetID}
 		}
 		if b.ManifestDigest != "" && v.ManifestDigest != b.ManifestDigest {
-			return nil, fmt.Errorf("%w：快照集的摘要与记录不一致", ErrDocsBasisConflict)
+			return nil, &DocsIssue{Code: IssueSnapshotSetDigest}
 		}
 		return v, nil
 	case docsync.SourceWorkItem:
@@ -413,18 +433,18 @@ func (c *Core) requestDocsBasis(ctx context.Context, requestID int64) (docsync.B
 		err := c.db.QueryRow(ctx, `SELECT repo_id, manifest_digest FROM doc_snapshot_sets WHERE id=$1`, v.SnapshotSetID).
 			Scan(&gotRepo, &manifest)
 		if errors.Is(err, pgx.ErrNoRows) {
-			v.Error = fmt.Sprintf("文档快照集 #%d 不存在", v.SnapshotSetID)
+			v.setIssue(&DocsIssue{Code: IssueSnapshotSetMissing, SnapshotSetID: v.SnapshotSetID})
 			return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, v, nil
 		}
 		if err != nil {
 			return docsync.Basis{}, nil, err
 		}
 		if gotRepo != repoID {
-			v.Error = "文档快照集不属于这个仓库"
+			v.setIssue(&DocsIssue{Code: IssueSnapshotSetOtherRepo, SnapshotSetID: v.SnapshotSetID})
 			return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, v, nil
 		}
 		if digest == "" || digest != manifest {
-			v.Error = "请求记录的摘要与文档快照集不一致"
+			v.setIssue(&DocsIssue{Code: IssueRequestSetDigest})
 			return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, v, nil
 		}
 		return docsync.Basis{Source: docsync.SourceSnapshotSet, RepoID: repoID, SnapshotSetID: v.SnapshotSetID, ManifestDigest: digest}, v, nil
@@ -434,18 +454,18 @@ func (c *Core) requestDocsBasis(ctx context.Context, requestID int64) (docsync.B
 			return docsync.Basis{}, nil, err
 		}
 		if basis.Source != docsync.SourceWorkItem {
-			v.Error = "请求引用的工作项快照不存在"
+			v.setIssue(&DocsIssue{Code: IssueRequestWorkItemSnapshot})
 			return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, v, nil
 		}
 		if digest == "" || digest != basis.ManifestDigest {
-			v.Error = "请求记录的摘要与工作项快照不一致"
+			v.setIssue(&DocsIssue{Code: IssueRequestWorkItemDigest})
 			return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, v, nil
 		}
 		return basis, v, nil
 	case docsync.SourceNone, docsync.SourceUnplanned, docsync.SourceLegacy:
 		return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, v, nil
 	}
-	v.Error = "请求的文档依据来源无法识别"
+	v.setIssue(&DocsIssue{Code: IssueRequestSourceUnknown})
 	return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, v, nil
 }
 
@@ -529,50 +549,50 @@ func workItemRepo(ctx context.Context, q store.Querier, workItemID int64) (int64
 // 任务解析出的依据指向别的工作项或仓库时，绝不拿它与当前工作项比较。
 func classifyRelation(taskType, declared string, spec specDocs, basis docsync.Basis, basisErr error,
 	wiBasis docsync.Basis, repoID, workItemID int64,
-) (string, string) {
+) (string, RelationNote) {
 	refs := spec.Docs
 	if basisErr != nil {
 		// 依据记录本身不一致（工作项、来源或摘要对不上）是明确的冲突，不是"无法核对"。
 		if errors.Is(basisErr, ErrDocsBasisConflict) {
-			return "mismatch", "任务的文档依据记录与工作项不一致：" + basisErr.Error()
+			return "mismatch", NoteBasisConflict
 		}
-		return "unverifiable", "任务的文档依据无法核对：" + basisErr.Error()
+		return "unverifiable", NoteBasisUnverifiable
 	}
 	// 任务解析出的依据指向另一个仓库 / 工作项：不能与当前工作项的依据比较（哪怕文档引用碰巧一致）。
 	if basis.Source == docsync.SourceWorkItem && (basis.RepoID != repoID || basis.WorkItemID != workItemID) {
-		return "mismatch", "任务记录的依据指向另一个工作项，与当前工作项不一致"
+		return "mismatch", NoteOtherWorkItem
 	}
 	// 迁移前规划、族根后来在重跑时固化：旧任务 spec 保留迁移前格式，按任务记录的引用核对固化的依据。
 	if spec.preMigrationReview(taskType) {
 		switch declared {
 		case docsync.SourceWorkItem:
 			if len(refs) > 0 && basis.Source == docsync.SourceWorkItem && docsync.SameDocRefs(refs, basis.Docs) {
-				return "legacy_pinned", "迁移前没有记录整批摘要；重跑时按任务记录中的引用核对了工作项冻结快照，逐篇一致"
+				return "legacy_pinned", NoteLegacyDigestPinned
 			}
-			return "mismatch", "迁移前的任务记录中的引用与重跑时固化的依据不一致"
+			return "mismatch", NoteLegacyRefsMismatch
 		case docsync.SourceNone:
 			if len(refs) == 0 {
-				return "no_basis", "迁移前的请求没有记录文档依据；重跑时核对确认任务也没有文档引用"
+				return "no_basis", NoteLegacyNoneOK
 			}
-			return "mismatch", "迁移前的任务记录了文档引用，与重跑时固化的“没有依据”不一致"
+			return "mismatch", NoteLegacyNoneRefs
 		}
 	}
 	// 选题任务在领取前不知道工作项：领取之后按 claim_attempt_id 关联到工作项快照，spec 里没有文档引用。
 	// 这是开发任务特有的"领取后关联"，与审计请求的 none 不同；依据必须指向当前工作项（上面已核对）。
 	if taskType == agentcfg.TaskDevelop && len(refs) == 0 && basis.Source == docsync.SourceWorkItem && basis.WorkItemID != 0 {
-		return "claimed_dynamic", "任务没有在 spec 中固定文档；领取后按工作项冻结快照解析"
+		return "claimed_dynamic", NoteClaimedDynamic
 	}
 	switch declared {
 	case docsync.SourceLegacy:
 		if basis.Source == docsync.SourceWorkItem && len(refs) > 0 && docsync.SameDocRefs(refs, basis.Docs) {
-			return "legacy_pinned", "迁移前没有记录依据；重跑时按任务记录中的引用核对了工作项冻结快照，逐篇一致"
+			return "legacy_pinned", NoteLegacyPinned
 		}
 		if basis.Source == docsync.SourceNone {
-			return "no_basis", "迁移前的请求没有记录文档依据"
+			return "no_basis", NoteLegacyNoBasis
 		}
-		return "unverifiable", "迁移前的依据记录不足以确认"
+		return "unverifiable", NoteLegacyInsufficient
 	case docsync.SourceNone, docsync.SourceUnplanned:
-		return "no_basis", "请求记录为没有文档依据"
+		return "no_basis", NoteDeclaredNone
 	}
 	switch basis.Source {
 	case docsync.SourceWorkItem:
@@ -580,67 +600,67 @@ func classifyRelation(taskType, declared string, spec specDocs, basis docsync.Ba
 	case docsync.SourceSnapshotSet:
 		return classifySetRelation(spec, refs, basis)
 	case docsync.SourceNone:
-		return "no_basis", "请求记录为没有文档依据"
+		return "no_basis", NoteDeclaredNone
 	}
-	return "unverifiable", "无法确认依据关系"
+	return "unverifiable", NoteUnknown
 }
 
 // classifyWorkItemRelation 把任务的文档引用与当前工作项的冻结依据（wiBasis）比较。摘要也一致时才能说"同一份依据"；
 // 只有逐篇引用一致、任务没有记录整批摘要时说"文档引用一致"。
-func classifyWorkItemRelation(spec specDocs, refs []aispec.DocRef, wiBasis docsync.Basis) (string, string) {
+func classifyWorkItemRelation(spec specDocs, refs []aispec.DocRef, wiBasis docsync.Basis) (string, RelationNote) {
 	if wiBasis.Source != docsync.SourceWorkItem {
-		return "unverifiable", "当前工作项没有可读的冻结依据，无法核对"
+		return "unverifiable", NoteWorkItemNoBasis
 	}
 	digestKnown := spec.DocsManifestDigest != ""
 	if len(refs) == 0 {
 		if wiBasis.DocCount != 0 {
-			return "unverifiable", "任务没有记录文档引用，无法逐篇核对"
+			return "unverifiable", NoteNoRefs
 		}
 		if !digestKnown {
-			return "refs_match", "任务没有记录文档引用；工作项的冻结依据也是空集合，但没有整批摘要可核对"
+			return "refs_match", NoteItemEmptyNoDigest
 		}
 		if spec.DocsManifestDigest != wiBasis.ManifestDigest {
-			return "mismatch", "任务记录的整批摘要与当前工作项的空集合不一致"
+			return "mismatch", NoteItemEmptyDigest
 		}
-		return "same_basis", "依据是同一份冻结的空文档集"
+		return "same_basis", NoteSameEmpty
 	}
 	if !docsync.SameDocRefs(refs, wiBasis.Docs) {
-		return "mismatch", "任务记录中的文档引用与当前工作项的冻结依据不一致"
+		return "mismatch", NoteItemRefsMismatch
 	}
 	if !digestKnown {
-		return "refs_match", "任务记录的文档引用与当前工作项的冻结依据逐篇一致；任务没有记录整批摘要"
+		return "refs_match", NoteItemRefsNoDigest
 	}
 	if spec.DocsManifestDigest != wiBasis.ManifestDigest {
-		return "mismatch", "任务记录的整批摘要与当前工作项的冻结依据不一致"
+		return "mismatch", NoteItemDigestMismatch
 	}
-	return "same_basis", "任务记录中的文档引用与整批摘要都与这份冻结依据一致"
+	return "same_basis", NoteSameBasis
 }
 
 // classifySetRelation 把任务的文档引用与独立冻结快照集比较。
-func classifySetRelation(spec specDocs, refs []aispec.DocRef, basis docsync.Basis) (string, string) {
+func classifySetRelation(spec specDocs, refs []aispec.DocRef, basis docsync.Basis) (string, RelationNote) {
 	digestKnown := spec.DocsManifestDigest != ""
 	if len(refs) == 0 {
 		if basis.DocCount != 0 {
-			return "unverifiable", "任务没有记录文档引用，无法逐篇核对"
+			return "unverifiable", NoteNoRefs
 		}
 		if !digestKnown {
-			return "unverifiable", "任务没有记录文档引用，也没有整批摘要可核对空快照集"
+			return "unverifiable", NoteSetEmptyNoDigest
 		}
 		if spec.DocsManifestDigest != basis.ManifestDigest {
-			return "mismatch", "任务记录的整批摘要与这份空快照集不一致"
+			return "mismatch", NoteSetEmptyDigest
 		}
-		return "same_basis", "依据是同一份冻结的空文档集"
+		return "same_basis", NoteSameEmpty
 	}
 	if !docsync.SameDocRefs(refs, basis.Docs) {
-		return "mismatch", "任务记录中的文档引用与这份冻结依据不一致"
+		return "mismatch", NoteSetRefsMismatch
 	}
 	if !digestKnown {
-		return "refs_match", "任务记录的文档引用与这份冻结依据逐篇一致；任务没有记录整批摘要"
+		return "refs_match", NoteSetRefsNoDigest
 	}
 	if spec.DocsManifestDigest != basis.ManifestDigest {
-		return "mismatch", "任务记录的整批摘要与这份冻结依据不一致"
+		return "mismatch", NoteSetDigestMismatch
 	}
-	return "same_basis", "任务记录中的文档引用与整批摘要都与这份冻结依据一致"
+	return "same_basis", NoteSameBasis
 }
 
 // validBasisDigest 判断摘要是否是 64 位小写 hex。

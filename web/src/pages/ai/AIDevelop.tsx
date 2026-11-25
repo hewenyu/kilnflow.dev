@@ -1,5 +1,6 @@
 import { Link } from '@primer/react'
 import { Box, BoxBody, BoxHeader } from '../../components/Box'
+import { Trans, useT } from '../../i18n/locale'
 import { ReportBox } from './report'
 import css from '../job.module.css'
 import type { AIDevelop } from './schema'
@@ -8,21 +9,21 @@ import type { AIDevelop } from './schema'
 // 未选的原因只能在这里查看；属于工作项的链接到工作项的详情页。
 
 export function AIDevelopSection({ dev }: { dev: AIDevelop | null | undefined }) {
+  const t = useT()
+  const url = dev?.WorkItemURL
   return (
     <>
       <Box as="section" aria-labelledby="ai-dev-h">
-        <BoxHeader title="AI 开发" id="ai-dev-h" />
+        <BoxHeader title={t('aiDev.pageTitle')} id="ai-dev-h" />
         <BoxBody>
-          {dev?.WorkItemURL ? (
+          {url ? (
             <p className={css.emptyText}>
-              这次执行属于 <Link href={dev.WorkItemURL}>工作项</Link>：完整的记录（Issue、评论、分支）在工作项的详情页。
+              <Trans id="aiDevelop.inWorkItem" tags={{ link: (c) => <Link href={url}>{c}</Link> }} />
             </p>
           ) : (
-            <p className={css.emptyText}>
-              这次执行没有领取工作项（没有选中、dry_run 或者领取失败）：保存的选题报告只在这里查看。
-            </p>
+            <p className={css.emptyText}>{t('aiDevelop.noWorkItem')}</p>
           )}
-          {!dev?.Reports.length && <p className={css.emptyText}>还没有报告：Agent 写出有效的报告并提交后显示在这里。</p>}
+          {!dev?.Reports.length && <p className={css.emptyText}>{t('aiDevelop.noReports')}</p>}
         </BoxBody>
       </Box>
       {dev?.Reports.map((r, i) => (

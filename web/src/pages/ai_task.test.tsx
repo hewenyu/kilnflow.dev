@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/ai_task.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, envelope, rawStrings, renderPage, switchLocale, withData } from '../test/render'
 import { aiReviewSchema } from './ai/schema'
 
 // AI 任务详情页：页面数据用 dev/fixtures/ai_task.json，日志接口和表单提交用假的 fetch。
@@ -134,12 +134,12 @@ describe('AI 任务详情页', () => {
   })
 
   it('地址中的 attempt 无效：说明原因，不读取日志；没有执行过的任务显示原因', () => {
-    const view = renderPage(withData(envelope(fixture), { AttemptErr: '这个任务没有 attempt #9。' }), '/ai/tasks/520?attempt=9')
+    const view = renderPage(withData(envelope(fixture), { AttemptErr: { id: 'aiTask.attemptMissing', params: { attempt: 9 } } }), '/ai/tasks/520?attempt=9')
     expect(screen.getByText(/这个任务没有 attempt #9/)).toBeInTheDocument()
     expect(screen.getByText('选择一次有效的 attempt 后显示日志。')).toBeInTheDocument()
     expect(calls.filter((c) => c.url.includes('/log'))).toHaveLength(0)
     view.unmount()
-    renderPage(withData(envelope(fixture), { NoLog: true, Attempts: [], Attempt: 0, LogEmpty: '这个任务沿用上一次的结果，没有执行；日志见 AI 任务 #500。' }), '/ai/tasks/520')
+    renderPage(withData(envelope(fixture), { NoLog: true, Attempts: [], Attempt: 0, LogEmpty: { id: 'aiTask.logReused', params: { task: 500 } } }), '/ai/tasks/520')
     expect(screen.getByText(/日志见 AI 任务 #500/)).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: /attempt/ })).not.toBeInTheDocument()
   })
@@ -277,5 +277,73 @@ describe('AI 任务详情页', () => {
   it('AI 审计还没有报告时说明原因', () => {
     renderPage(withData(envelope(fixture), { Review: null }), '/ai/tasks/520')
     expect(screen.getByText(/还没有审计报告/)).toBeInTheDocument()
+  })
+})
+
+describe('AI 任务详情页（英文与切换语言）', () => {
+  /** rawZH 是页面数据和日志中原样显示的内容（审计报告、原因、Orca 进度、日志）。 */
+  const rawZH = [...rawStrings(fixture.Data), 'codex 开始审计']
+
+  it('英文：任务信息、attempt、审计报告的界面文字按英文显示，报告内容原样显示', async () => {
+    renderPage(envelope(fixture), '/ai/tasks/520', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI review request #88')
+    expect(screen.getByRole('navigation', { name: 'AI tasks in this request' })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'AI task details' })).toHaveTextContent('Failed')
+    const review = screen.getByRole('region', { name: /AI review/ })
+    expect(within(review).getByText('Issues found')).toBeInTheDocument()
+    expect(within(review).getAllByText('High').length).toBeGreaterThan(0)
+    expect(within(review).getByText(/^Full command log \(\d+ commands\)$/)).toBeInTheDocument()
+    expect(within(review).getByText('safeBoundary 在没有换行的长输出下缓冲区无限增长')).toBeInTheDocument()
+    expect(screen.getByText('Attempt 1')).toBeInTheDocument()
+    expect(await screen.findByText(/codex 开始审计/)).toBeInTheDocument()
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('英文：地址中的 attempt 无效与没有日志的说明是服务端给的消息，按英文显示', () => {
+    const view = renderPage(withData(envelope(fixture), { AttemptErr: { id: 'aiTask.attemptMissing', params: { attempt: 9 } } }), '/ai/tasks/520?attempt=9', {
+      locale: 'en',
+    })
+    expect(screen.getByText(/This task has no attempt #9/)).toBeInTheDocument()
+    expect(screen.getByText('Choose a valid attempt to see its logs.')).toBeInTheDocument()
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+    view.unmount()
+    renderPage(withData(envelope(fixture), { NoLog: true, Attempts: [], Attempt: 0, LogEmpty: { id: 'aiTask.logSkipped' } }), '/ai/tasks/520', { locale: 'en' })
+    expect(screen.getByText("This task was skipped and didn't run.")).toBeInTheDocument()
+  })
+
+  it('英文：开发任务的报告分区按英文显示，Agent 写的计划原样显示', () => {
+    const report = {
+      Kind: 'selection',
+      TaskID: 520,
+      TaskURL: '/ai/tasks/520',
+      Selection: { selected: [3, 4], batch_reason: '同一个模块', plan: '先改 a.go', skipped: [{ number: 5, reason: '无关', reconsider: '', later: true }] },
+      Delivery: null,
+      Raw: '',
+      RunnerVersion: '',
+      AgentVersion: '1.2.3',
+      Model: '',
+      Created: '2026-11-10T08:00:00Z',
+    }
+    const data = withData(envelope(fixture), { Request: { ...fixture.Data.Request, Type: 'develop' }, Review: null, Develop: { Reports: [report], WorkItemURL: '' } })
+    renderPage(data, '/ai/tasks/520', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI development request #88')
+    const box = screen.getByRole('region', { name: /Selection report/ })
+    expect(within(box).getByText('Selected: #3, #4')).toBeInTheDocument()
+    expect(within(box).getByText(/Runner Unknown · Agent version 1.2.3 · Model Unknown/)).toBeInTheDocument()
+    expect(within(box).getByText('(left for a later selection)', { exact: false })).toBeInTheDocument()
+    expect(chineseLeft(document.body, [...rawZH, '同一个模块', '先改 a.go', '无关'])).toEqual([])
+  })
+
+  it('展开完整执行记录后切换语言：展开状态保留，文字立即切换', async () => {
+    renderPage(envelope(fixture), '/ai/tasks/520')
+    const summary = screen.getByText(/^完整执行记录（\d+ 条命令）$/)
+    const details = closestEl(summary, 'details')
+    await userEvent.click(summary)
+    expect(details).toHaveProperty('open', true)
+    await switchLocale('English')
+    expect(details).toHaveProperty('open', true)
+    expect(details.isConnected).toBe(true)
+    expect(within(details).getByText(/^Full command log \(\d+ commands\)$/)).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'AI task details' })).toHaveTextContent('Failed')
   })
 })

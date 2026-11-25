@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../dev/fixtures/ai_dev_item.json'
-import { envelope, renderPage, withData } from '../test/render'
+import { chineseLeft, envelope, rawStrings, renderPage, switchLocale, withData } from '../test/render'
 
 let requests: { url: string; method: string; body: string }[] = []
 
@@ -175,5 +175,65 @@ describe('工作项详情', () => {
     expect(screen.getByRole('region', { name: '概要' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '再返修一轮' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '终止' })).not.toBeInTheDocument()
+  })
+})
+
+describe('工作项详情（英文与切换语言）', () => {
+  const rawZH = rawStrings(fixture.Data)
+
+  it('英文：概要、报告、评论、分支、设计依据和关联任务的界面文字按英文显示；Agent 写的内容原样显示', () => {
+    renderPage(envelope(fixture), '/ai-dev/14', { locale: 'en' })
+    expect(screen.getByRole('heading', { level: 1, name: 'Work item #14' })).toBeInTheDocument()
+    const summary = screen.getByRole('region', { name: 'Summary' })
+    expect(within(summary).getByText('Blocked')).toBeInTheDocument()
+    expect(within(summary).getByText('Fix rounds 2 / 2')).toBeInTheDocument()
+    expect(within(summary).getByText(/返修 2 轮后 CI 仍未通过/)).toBeInTheDocument()
+    const selection = screen.getByRole('region', { name: /Selection report/ })
+    expect(within(selection).getByText('Agent-reported')).toBeInTheDocument()
+    expect(within(selection).getByText(/Model Unknown/)).toBeInTheDocument()
+    expect(within(selection).getByText('Selected: #128, #129')).toBeInTheDocument()
+    const delivery = screen.getByRole('region', { name: /Delivery report/ })
+    expect(within(delivery).getByText(/PR title: Runner 详情页显示升级历史/)).toBeInTheDocument()
+    expect(within(delivery).getByText(/Not done: 按状态筛选/)).toBeInTheDocument()
+    const comments = within(screen.getByRole('list', { name: 'Comment intents' }))
+    expect(comments.getByText('Outcome unknown; not resent automatically')).toBeInTheDocument()
+    expect(comments.getByText('Claim note on #129')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Attempt branches' })).toHaveTextContent(/deleted once it's pushed or when retention ends at/)
+    expect(screen.getByRole('region', { name: 'Design basis' })).toHaveTextContent('Work item frozen snapshot')
+    const related = within(screen.getByRole('table', { name: 'Related tasks and basis' }))
+    expect(related.getByText('Linked after claim')).toBeInTheDocument()
+    // 依据关系的说明是服务端按原因码给的消息
+    expect(related.getByText("The task didn't pin documents in its spec; once claimed, they resolve to the work item's frozen snapshot")).toBeInTheDocument()
+    expect(related.getByRole('link', { name: 'Request #142' })).toHaveAttribute('href', '/ai/requests/142')
+    expect(chineseLeft(document.body, rawZH)).toEqual([])
+  })
+
+  it('关联任务的依据无法解析时，关系说明和具体原因都按语言显示', () => {
+    const item = fixture.Data.RelatedTasks[2]
+    if (!item) throw new Error('fixture 应有第三个关联任务')
+    const conflict = {
+      ...item,
+      Relation: 'mismatch',
+      Note: { id: 'docsNote.basisConflict' },
+      NoteDetail: { id: 'docsIssue.taskDevRequestMismatch', params: { task: 212, request: 141 } },
+    }
+    const view = renderPage(withData(envelope(fixture), { RelatedTasks: [conflict] }), '/ai-dev/14')
+    expect(screen.getByText('任务的文档依据记录与工作项不一致：AI 任务 #212 的工作项与开发请求 #141 的记录不一致')).toBeInTheDocument()
+    view.unmount()
+    renderPage(withData(envelope(fixture), { RelatedTasks: [conflict] }), '/ai-dev/14', { locale: 'en' })
+    expect(
+      screen.getByText("The task's design basis record doesn't match the work item: The work item of AI task #212 doesn't match the record of development request #141"),
+    ).toBeInTheDocument()
+  })
+
+  it('切换语言：页面不重新加载，标题和状态立即切换', async () => {
+    renderPage(envelope(fixture), '/ai-dev/14')
+    const summary = screen.getByRole('region', { name: '概要' })
+    expect(within(summary).getByText('受阻')).toBeInTheDocument()
+    await switchLocale('English')
+    expect(screen.getByRole('region', { name: 'Summary' })).toBe(summary)
+    expect(within(summary).getByText('Blocked')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Work item #14')
+    expect(requests.filter((r) => r.url.startsWith('/ai-dev/14'))).toHaveLength(0)
   })
 })

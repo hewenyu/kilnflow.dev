@@ -80,22 +80,21 @@ func (c *Core) devTaskWorkItem(ctx context.Context, q store.Querier, t *Task, sp
 ) (int64, error) {
 	if binding.WorkItemID != 0 {
 		if spec.WorkItemID != binding.WorkItemID {
-			return 0, fmt.Errorf("%w：AI 任务 #%d 的工作项与开发请求 #%d 的记录不一致",
-				ErrDocsBasisConflict, t.ID, t.RequestID)
+			return 0, &DocsIssue{Code: IssueTaskDevRequestMismatch, TaskID: t.ID, RequestID: t.RequestID}
 		}
 		return binding.WorkItemID, nil
 	}
 	// 请求还没有绑定工作项：只有真正的选题任务（mode=select）可以在领取后按 attempt 回退，
 	// 其余方式（implement / fix）缺失工作项本身就是坏记录，不能凭 spec 去读无关工作项。
 	if binding.Mode != agentcfg.DevModeSelect {
-		return 0, fmt.Errorf("%w：AI 任务 #%d 不是选题任务，开发请求却没有记录工作项", ErrDocsBasisConflict, t.ID)
+		return 0, &DocsIssue{Code: IssueTaskNoWorkItem, TaskID: t.ID}
 	}
 	claimed, err := workItemByAttempt(ctx, q, attemptID)
 	if err != nil {
 		return 0, err
 	}
 	if spec.WorkItemID != 0 && spec.WorkItemID != claimed {
-		return 0, fmt.Errorf("%w：AI 任务 #%d 的工作项与该任务领取到的工作项不一致", ErrDocsBasisConflict, t.ID)
+		return 0, &DocsIssue{Code: IssueTaskClaimMismatch, TaskID: t.ID}
 	}
 	return claimed, nil
 }
@@ -105,14 +104,13 @@ func (c *Core) devTaskBasis(ctx context.Context, q store.Querier, t *Task, repoI
 	var gotRepo int64
 	err := q.QueryRow(ctx, `SELECT repo_id FROM dev_work_items WHERE id=$1`, workItemID).Scan(&gotRepo)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return docsync.Basis{}, fmt.Errorf("%w：AI 任务 #%d 引用的工作项 #%d 不存在", ErrDocsBasisConflict, t.ID, workItemID)
+		return docsync.Basis{}, &DocsIssue{Code: IssueTaskWorkItemMissing, TaskID: t.ID, WorkItemID: workItemID}
 	}
 	if err != nil {
 		return docsync.Basis{}, err
 	}
 	if gotRepo != repoID {
-		return docsync.Basis{}, fmt.Errorf("%w：AI 任务 #%d 引用的工作项 #%d 不属于请求的仓库",
-			ErrDocsBasisConflict, t.ID, workItemID)
+		return docsync.Basis{}, &DocsIssue{Code: IssueTaskWorkItemOtherRepo, TaskID: t.ID, WorkItemID: workItemID}
 	}
 	return c.docs.WorkItemBasis(ctx, q, repoID, workItemID)
 }
@@ -184,7 +182,7 @@ func (c *Core) reviewDocsBasis(ctx context.Context, q store.Querier, t *Task) (d
 			return docsync.Basis{}, fmt.Errorf("读取文档快照集 #%d：%w", sid, err)
 		}
 		if gotRepo != repoID {
-			return docsync.Basis{}, fmt.Errorf("%w：文档快照集 #%d 不属于请求的仓库", ErrDocsBasisConflict, sid)
+			return docsync.Basis{}, &DocsIssue{Code: IssueSnapshotSetOtherRepo, SnapshotSetID: sid}
 		}
 		return docsync.Basis{Source: docsync.SourceSnapshotSet, RepoID: repoID, SnapshotSetID: sid, ManifestDigest: digest}, nil
 	case docsync.SourceWorkItem:
@@ -193,7 +191,7 @@ func (c *Core) reviewDocsBasis(ctx context.Context, q store.Querier, t *Task) (d
 			return docsync.Basis{}, err
 		}
 		if basis.Source != docsync.SourceWorkItem {
-			return docsync.Basis{}, fmt.Errorf("%w：AI 任务 #%d 引用的工作项快照不存在", ErrDocsBasisConflict, t.ID)
+			return docsync.Basis{}, &DocsIssue{Code: IssueTaskWorkItemSnapshot, TaskID: t.ID}
 		}
 		return basis, nil
 	case docsync.SourceNone, docsync.SourceUnplanned:
@@ -226,16 +224,16 @@ func (c *Core) reviewSpecBasis(ctx context.Context, q store.Querier, t *Task, sp
 		// 迁移前的任务 spec 没有来源字段，但仍记录工作项：必须与请求明细指向同一个工作项（缺字段也不行），
 		// 否则就可能把任务记录的引用对到别的工作项快照上。
 		if spec.DocsSource != "" || spec.DocSnapshotSetID != 0 || spec.WorkItemID != wi {
-			return docsync.Basis{}, false, fmt.Errorf("%w：AI 任务 #%d 的文档依据与请求明细不一致", ErrDocsBasisConflict, t.ID)
+			return docsync.Basis{}, false, &DocsIssue{Code: IssueTaskSpecMismatch, TaskID: t.ID}
 		}
 	case migrated:
 		// 迁移前的合法固化态：不比对 spec 里不存在的来源 / 摘要字段，按下面的引用核对。
 	case spec.DocsSource != source || spec.DocSnapshotSetID != sid || spec.WorkItemID != wi:
-		return docsync.Basis{}, false, fmt.Errorf("%w：AI 任务 #%d 的文档依据与请求明细不一致", ErrDocsBasisConflict, t.ID)
+		return docsync.Basis{}, false, &DocsIssue{Code: IssueTaskSpecMismatch, TaskID: t.ID}
 	}
 	if !migrated {
 		if source != docsync.SourceLegacy && spec.DocsManifestDigest != digest {
-			return docsync.Basis{}, false, fmt.Errorf("%w：AI 任务 #%d 的文档依据摘要与请求明细不一致", ErrDocsBasisConflict, t.ID)
+			return docsync.Basis{}, false, &DocsIssue{Code: IssueTaskSpecDigest, TaskID: t.ID}
 		}
 		return docsync.Basis{}, false, nil
 	}
@@ -243,20 +241,20 @@ func (c *Core) reviewSpecBasis(ctx context.Context, q store.Querier, t *Task, sp
 	case docsync.SourceWorkItem:
 		// 族根固化成 work_item：旧任务必须逐篇引用工作项快照，否则仍然是不一致。
 		if len(spec.Docs) == 0 || wi == 0 {
-			return docsync.Basis{}, false, fmt.Errorf("%w：AI 任务 #%d 的文档依据与请求明细不一致", ErrDocsBasisConflict, t.ID)
+			return docsync.Basis{}, false, &DocsIssue{Code: IssueTaskSpecMismatch, TaskID: t.ID}
 		}
 		basis, err := c.docs.WorkItemBasis(ctx, q, repoID, wi)
 		if err != nil {
 			return docsync.Basis{}, false, err
 		}
 		if basis.Source != docsync.SourceWorkItem || !docsync.SameDocRefs(spec.Docs, basis.Docs) {
-			return docsync.Basis{}, false, fmt.Errorf("%w：AI 任务 #%d 的文档引用与固化的依据不一致", ErrDocsBasisConflict, t.ID)
+			return docsync.Basis{}, false, &DocsIssue{Code: IssueTaskRefsMismatch, TaskID: t.ID}
 		}
 		return basis, true, nil
 	case docsync.SourceNone:
 		// 族根固化成 none：旧任务不能记录任何文档引用。
 		if len(spec.Docs) != 0 {
-			return docsync.Basis{}, false, fmt.Errorf("%w：AI 任务 #%d 记录了文档引用，与固化的依据不一致", ErrDocsBasisConflict, t.ID)
+			return docsync.Basis{}, false, &DocsIssue{Code: IssueTaskRefsUnexpected, TaskID: t.ID}
 		}
 		return docsync.Basis{Source: docsync.SourceNone, RepoID: repoID}, true, nil
 	}

@@ -246,8 +246,8 @@ type designBasisView struct {
 	ManifestDigest    string
 	ContentPurgedAt   *time.Time
 	Docs              []docMetaView
-	// IntegrityError 非空表示记录的元数据与实际快照不一致。
-	IntegrityError string
+	// IntegrityError 非空表示记录的元数据与实际快照不一致（按原因码给出的消息）。
+	IntegrityError uiText
 }
 
 // newDesignBasisView 把文档依据视图转换为页面 DTO，并生成校验后的外部链接。
@@ -259,7 +259,7 @@ func newDesignBasisView(v *docsync.SnapshotView) *designBasisView {
 		Source: v.Source, Frozen: v.Frozen, FrozenAt: v.FrozenAt, Provider: v.Provider,
 		CollectionID: v.CollectionID, CollectionName: v.CollectionName, SourceKnown: v.SourceKnown,
 		BindingGeneration: v.BindingGeneration, DocCount: v.DocCount, ManifestDigest: v.ManifestDigest,
-		ContentPurgedAt: v.ContentPurgedAt, IntegrityError: v.IntegrityError, Docs: make([]docMetaView, 0, len(v.Docs)),
+		ContentPurgedAt: v.ContentPurgedAt, IntegrityError: integrityText(v), Docs: make([]docMetaView, 0, len(v.Docs)),
 	}
 	out.SiteURL = safeSiteHref(v.BaseURL)
 	if v.CollectionID != "" {
@@ -285,8 +285,8 @@ type requestDocsPageView struct {
 	SnapshotSetID  int64
 	// Basis 是实际可读的依据；没有时 Source=none。
 	Basis *designBasisView
-	// Error 非空表示声明与实际快照不一致。
-	Error string
+	// Error 非空表示声明与实际快照不一致（按原因码给出的消息）。
+	Error uiText
 }
 
 func newRequestDocsPageView(v *ai.RequestDocsView) *requestDocsPageView {
@@ -295,7 +295,7 @@ func newRequestDocsPageView(v *ai.RequestDocsView) *requestDocsPageView {
 	}
 	out := &requestDocsPageView{
 		RequestID: v.RequestID, Type: v.Type, DeclaredSource: v.DeclaredSource, Declared: v.Declared,
-		WorkItemID: v.WorkItemID, SnapshotSetID: v.SnapshotSetID, Basis: newDesignBasisView(v.View), Error: v.Error,
+		WorkItemID: v.WorkItemID, SnapshotSetID: v.SnapshotSetID, Basis: newDesignBasisView(v.View), Error: docsErrorText(v.Issue, v.Error),
 	}
 	if v.WorkItemID != 0 {
 		out.WorkItemURL = aiDevItemURL(v.WorkItemID)
@@ -312,7 +312,8 @@ type taskDocsPageView struct {
 	BasisSource    string
 	RequestURL     string
 	Basis          *designBasisView
-	Error          string
+	// Error 非空表示任务的依据不可核对（有原因码时是消息，否则是原样的说明）。
+	Error uiText
 }
 
 func newTaskDocsPageView(v *ai.TaskDocsView) *taskDocsPageView {
@@ -321,27 +322,33 @@ func newTaskDocsPageView(v *ai.TaskDocsView) *taskDocsPageView {
 	}
 	return &taskDocsPageView{
 		TaskID: v.TaskID, RequestID: v.RequestID, Type: v.Type, DeclaredSource: v.DeclaredSource,
-		BasisSource: v.BasisSource, RequestURL: aiRequestURL(v.RequestID), Basis: newDesignBasisView(v.View), Error: v.Error,
+		BasisSource: v.BasisSource, RequestURL: aiRequestURL(v.RequestID), Basis: newDesignBasisView(v.View),
+		Error: docsErrorText(v.Issue, v.Error),
 	}
 }
 
 // relatedTaskView 是工作项的一个关联任务及其依据关系。
 type relatedTaskView struct {
-	TaskID     int64
-	RequestID  int64
-	Type       string
-	Mode       string
-	Relation   string
-	Note       string
-	TaskURL    string
-	RequestURL string
+	TaskID    int64
+	RequestID int64
+	Type      string
+	Mode      string
+	Relation  string
+	// Note 是关系的说明；NoteDetail 是依据无法解析时的具体原因（没有时为空）。
+	Note, NoteDetail uiText
+	TaskURL          string
+	RequestURL       string
 }
 
 func newRelatedTaskView(v ai.RelatedTask) relatedTaskView {
-	return relatedTaskView{
-		TaskID: v.TaskID, RequestID: v.RequestID, Type: v.Type, Mode: v.Mode, Relation: v.Relation, Note: v.Note,
-		TaskURL: aiTaskURL(v.TaskID), RequestURL: aiRequestURL(v.RequestID),
+	out := relatedTaskView{
+		TaskID: v.TaskID, RequestID: v.RequestID, Type: v.Type, Mode: v.Mode, Relation: v.Relation,
+		Note: relationNoteText(v.NoteCode, v.Note), TaskURL: aiTaskURL(v.TaskID), RequestURL: aiRequestURL(v.RequestID),
 	}
+	if out.Note.id != "" && (v.Issue != nil || v.Detail != "") {
+		out.NoteDetail = docsErrorText(v.Issue, v.Detail)
+	}
+	return out
 }
 
 // ---- 按需读取正文 ----

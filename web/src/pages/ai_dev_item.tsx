@@ -7,13 +7,14 @@ import { useLive } from '../app/live'
 import { Box, BoxHeader, BoxRow } from '../components/Box'
 import { PageHeader } from '../components/PageHeader'
 import { Ago } from '../components/Time'
+import { Trans, useLocale, useT } from '../i18n/locale'
 import { aiDevItemSchema, fixRounds, resolution, workItemMode, workItemPhase, workItemState } from '../lib/aidev'
 import { list } from '../lib/envelope'
-import { clock, short } from '../lib/format'
+import { clock, enumLabel, short } from '../lib/format'
 import { PRLink, RetryForm, StopForm } from './ai_dev'
 import { DesignBasis, RelatedTasksTable } from './ai/DesignBasis'
 import { designBasisSchema, relatedTaskSchema } from './ai/docs'
-import { AgentSays, ReportBox, reportSchema, unknownText } from './ai/report'
+import { AgentSays, ReportBox, reportSchema } from './ai/report'
 import css from './ai_dev_item.module.css'
 import { lookup } from '../lib/lookup'
 
@@ -89,35 +90,38 @@ function KV({ k, children }: { k: string; children: ReactNode }) {
 }
 
 function Summary({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
   const it = data.Item
-  const st = workItemState(it.State)
-  const rounds = fixRounds(it)
-  const phase = workItemPhase(it)
+  const st = workItemState(it.State, locale)
+  const rounds = fixRounds(it, locale)
+  const phase = workItemPhase(it, locale)
+  const finished = it.Finished
   return (
     <Box as="section" aria-labelledby="ai-dev-summary">
-      <BoxHeader id="ai-dev-summary" title="概要" />
+      <BoxHeader id="ai-dev-summary" title={t('run.summary')} />
       <BoxRow className={css.block}>
         <div className={css.labels}>
           {phase && <Label variant="secondary">{phase}</Label>}
           <Label variant={st.variant}>{st.text}</Label>
           {it.Hold && <Label variant="attention">{data.HoldLabel}</Label>}
-          {it.RequirementsChanged && <Label variant="attention">需求已变</Label>}
+          {it.RequirementsChanged && <Label variant="attention">{t('aiDev.requirementsChanged')}</Label>}
         </div>
         {it.Reason && <p className={it.State === 'blocked' ? css.reason : css.p}>{it.Reason}</p>}
         <dl className={css.kv}>
-          <KV k="仓库">
+          <KV k={t('aiReq.repo')}>
             <a href={data.RepoURL}>{it.Repo}</a>
           </KV>
-          <KV k="方式">{workItemMode(it)}</KV>
+          <KV k={t('aiDevItem.mode')}>{workItemMode(it, locale)}</KV>
           {it.DesignPR > 0 && (
-            <KV k="已合并的设计">
+            <KV k={t('aiDevItem.designPR')}>
               <PRLink github={data.GitHub} repo={it.Repo} pr={it.DesignPR} />
             </KV>
           )}
-          <KV k="目标分支">
-            <code>{data.BaseRef}</code> · 起点 <Commit data={data} sha={data.BaseSHA} label="本轮开始时目标分支的 head" />
+          <KV k={t('aiDevItem.base')}>
+            <code>{data.BaseRef}</code> · {t('aiDevItem.start')} <Commit data={data} sha={data.BaseSHA} label={t('aiDevItem.baseHead')} />
           </KV>
-          <KV k="本轮的正式分支">
+          <KV k={t('aiDevItem.branch')}>
             <code>{it.Branch}</code>
             {it.HeadSHA && (
               <>
@@ -126,32 +130,28 @@ function Summary({ data }: { data: Data }) {
               </>
             )}
           </KV>
-          <KV k="PR">{it.PR ? <PRLink github={data.GitHub} repo={it.Repo} pr={it.PR} /> : '还没有开 PR'}</KV>
+          <KV k="PR">{it.PR ? <PRLink github={data.GitHub} repo={it.Repo} pr={it.PR} /> : t('aiDevItem.noPR')}</KV>
           {data.DeliveryBranch && (
-            <KV k="待推进的交付">
-              <code>{data.DeliveryBranch}</code> · <Commit data={data} sha={data.DeliverySHA} label="交付的 commit" />
+            <KV k={t('aiDevItem.delivery')}>
+              <code>{data.DeliveryBranch}</code> · <Commit data={data} sha={data.DeliverySHA} label={t('aiDevItem.deliveredCommit')} />
             </KV>
           )}
-          <KV k="本轮返修">{rounds || `还没有返修（最多 ${it.MaxFixRounds} 轮）`}</KV>
+          <KV k={t('aiDevItem.fixes')}>{rounds || t('aiDevItem.noFixes', { count: it.MaxFixRounds })}</KV>
           {data.FixedHead && (
-            <KV k="最近返修的 head">
-              <Commit data={data} sha={data.FixedHead} label="已经为它建过返修的 head" />
+            <KV k={t('aiDevItem.fixedHead')}>
+              <Commit data={data} sha={data.FixedHead} label={t('aiDevItem.fixedHeadTitle')} />
             </KV>
           )}
-          <KV k="Agent">{it.Agent || unknownText}</KV>
+          <KV k="Agent">{it.Agent || t('devReport.unknown')}</KV>
           {data.TaskURL && (
-            <KV k="当前 AI 任务">
+            <KV k={t('aiDevItem.task')}>
               <a href={data.TaskURL}>{data.TaskURL.replace('/ai/tasks/', '#')}</a>
             </KV>
           )}
-          <KV k="时间">
-            创建于 <Ago t={it.Created} /> · 更新于 <Ago t={it.Updated} />
-            {it.Finished && (
-              <>
-                {' '}
-                · 结束于 <Ago t={it.Finished} />
-              </>
-            )}
+          <KV k={t('aiReq.time')}>
+            <Trans id="aiReq.created" tags={{ ago: () => <Ago t={it.Created} /> }} />
+            <Trans id="aiDevItem.updatedAt" tags={{ ago: () => <Ago t={it.Updated} /> }} />
+            {finished && <Trans id="aiDevItem.finishedAt" tags={{ ago: () => <Ago t={finished} /> }} />}
           </KV>
         </dl>
       </BoxRow>
@@ -160,10 +160,12 @@ function Summary({ data }: { data: Data }) {
 }
 
 function Issues({ data }: { data: Data }) {
+  const t = useT()
+  const { locale } = useLocale()
   return (
     <Box as="section" aria-labelledby="ai-dev-issues">
       <BoxHeader id="ai-dev-issues" title="Issue" />
-      {data.Item.Issues.length === 0 && <BoxRow className={css.muted}>没有 Issue。</BoxRow>}
+      {data.Item.Issues.length === 0 && <BoxRow className={css.muted}>{t('aiDevItem.noIssues')}</BoxRow>}
       {data.Item.Issues.map((is) => (
         <BoxRow key={is.Number} className={css.block}>
           {data.GitHub ? (
@@ -175,9 +177,9 @@ function Issues({ data }: { data: Data }) {
           )}{' '}
           {is.Title}
           <span className={css.muted}>
-            {is.Resolution && ` · ${resolution(is.Resolution)}（Agent 自报）`}
-            {is.Closed && ' · 已关闭'}
-            {!is.Active && ' · 已释放'}
+            {is.Resolution && t('aiDevItem.resolution', { resolution: resolution(is.Resolution, locale) })}
+            {is.Closed && t('aiDevItem.closed')}
+            {!is.Active && t('aiDevItem.released')}
           </span>
         </BoxRow>
       ))}
@@ -185,34 +187,26 @@ function Issues({ data }: { data: Data }) {
   )
 }
 
-const commentKinds: Record<string, string> = {
-  claimed: '领取说明',
-  blocked: '受阻说明',
-  dispositions: '审计问题的处置',
-  stopped: '终止说明',
-  no_change: '不需要改代码的说明',
-}
-
-const commentStates: Record<string, { text: string; variant: 'secondary' | 'attention' | 'success' | 'danger' }> = {
-  pending: { text: '等待发送', variant: 'secondary' },
-  attempted: { text: '正在发送', variant: 'attention' },
-  done: { text: '已发送', variant: 'success' },
-  unknown: { text: '结果不明，不自动重发', variant: 'attention' },
-  failed: { text: '发送失败', variant: 'danger' },
+// 评论的种类（commentKind.*）和发送状态（commentState.*）的名称在词典中，这里只有状态的颜色；未知的值原样显示。
+const commentStates: Record<string, 'secondary' | 'attention' | 'success' | 'danger'> = {
+  pending: 'secondary',
+  attempted: 'attention',
+  done: 'success',
+  unknown: 'attention',
+  failed: 'danger',
 }
 
 function CommentRow({ c }: { c: Comment }) {
-  const st = lookup(commentStates, c.State) ?? { text: c.State, variant: 'secondary' as const }
+  const t = useT()
+  const { locale } = useLocale()
   return (
     <BoxRow as="li" className={css.block}>
       <div className={css.labels}>
-        <span>
-          #{c.Number} 上的{lookup(commentKinds, c.Kind) ?? c.Kind}
-        </span>
-        <Label variant={st.variant}>{st.text}</Label>
+        <span>{t('aiDevItem.commentOn', { number: c.Number, kind: enumLabel(locale, 'commentKind', c.Kind) })}</span>
+        <Label variant={lookup(commentStates, c.State) ?? 'secondary'}>{enumLabel(locale, 'commentState', c.State)}</Label>
       </div>
       <p className={css.meta}>
-        {c.State === 'unknown' && '评论没有幂等键：请求可能已经生效，为避免重复只发一次；请到 GitHub 上确认。 '}
+        {c.State === 'unknown' && `${t('aiDevItem.commentUnknown')} `}
         {c.Error && <span className={css.reason}>{c.Error} · </span>}
         <Ago t={c.Updated} />
       </p>
@@ -221,19 +215,19 @@ function CommentRow({ c }: { c: Comment }) {
 }
 
 function BranchRow({ data, b }: { data: Data; b: Branch }) {
+  const t = useT()
+  const { locale } = useLocale()
+  const deleted = b.Deleted
   return (
     <BoxRow as="li" className={css.block}>
-      <code>{b.Branch}</code> <span className={css.muted}>{b.Kind === 'checkpoint' ? 'checkpoint' : '交付'}</span>{' '}
-      <Commit data={data} sha={b.SHA} label="分支的 commit" />
+      <code>{b.Branch}</code> <span className={css.muted}>{b.Kind === 'checkpoint' ? 'checkpoint' : t('aiDevItem.branchDelivery')}</span>{' '}
+      <Commit data={data} sha={b.SHA} label={t('aiDevItem.branchCommit')} />
       <p className={css.meta}>
-        创建于 <Ago t={b.Created} />
-        {b.Deleted ? (
-          <>
-            {' '}
-            · 已于 <Ago t={b.Deleted} /> 删除
-          </>
+        <Trans id="aiDevItem.branchCreated" tags={{ ago: () => <Ago t={b.Created} /> }} />
+        {deleted ? (
+          <Trans id="aiDevItem.branchDeleted" tags={{ ago: () => <Ago t={deleted} /> }} />
         ) : (
-          b.Expires && ` · 推进后或 ${clock(b.Expires)} 保留期满后删除`
+          b.Expires && t('aiDevItem.branchExpires', { time: clock(b.Expires, locale) })
         )}
       </p>
     </BoxRow>
@@ -241,17 +235,18 @@ function BranchRow({ data, b }: { data: Data; b: Branch }) {
 }
 
 function AIDevItemPage({ data, env }: PageProps<Data>) {
+  const t = useT()
   const admin = env.Session?.Admin ?? false
   const it = data.Item
   useLive(it.Active)
   return (
     <div className={css.page}>
       <PageHeader
-        title={`工作项 #${it.ID}`}
+        title={t('workItem.ref', { id: it.ID })}
         description={
           <>
             {it.Repo}
-            {it.Issues.length > 0 && ` · ${it.Issues.map((is) => `#${is.Number}`).join('、')}`}
+            {it.Issues.length > 0 && ` · ${it.Issues.map((is) => `#${is.Number}`).join(t('list.enum'))}`}
           </>
         }
         actions={
@@ -259,7 +254,7 @@ function AIDevItemPage({ data, env }: PageProps<Data>) {
             {admin && it.Retryable && <RetryForm item={it} />}
             {admin && it.Active && <StopForm item={it} ready={data.Ready} />}
             <LinkButton href={data.RepoURL} leadingVisual={ArrowLeftIcon}>
-              {it.Repo} 的工作项
+              {t('aiDevItem.back', { repo: it.Repo })}
             </LinkButton>
           </>
         }
@@ -270,8 +265,8 @@ function AIDevItemPage({ data, env }: PageProps<Data>) {
       <DesignBasis
         basis={data.DesignBasis}
         contentBase={`/ai-dev/${it.ID}/docs/content`}
-        emptyText="这个工作项还没有冻结设计文档。冻结只发生在仓库绑定了文档集时；页面不会用当前仓库绑定补造历史依据。"
-        integrityHint="只展示冻结时保存的元数据；之后修改 Outline 中的文档或重新绑定都不会改变这里。"
+        emptyText={t('aiDevItem.basisEmpty')}
+        integrityHint={t('aiDevItem.basisHint')}
       />
       <RelatedTasksTable tasks={data.RelatedTasks} />
       {data.Plan && (
@@ -280,7 +275,7 @@ function AIDevItemPage({ data, env }: PageProps<Data>) {
             id="ai-dev-plan"
             title={
               <>
-                计划 <AgentSays />
+                {t('devReport.plan')} <AgentSays />
               </>
             }
           />
@@ -295,28 +290,28 @@ function AIDevItemPage({ data, env }: PageProps<Data>) {
       ))}
 
       <Box as="section" aria-labelledby="ai-dev-comments">
-        <BoxHeader id="ai-dev-comments" title="评论" />
+        <BoxHeader id="ai-dev-comments" title={t('aiDevItem.comments')} />
         {data.Comments.length > 0 ? (
-          <ul className={css.rows} aria-label="评论意图">
+          <ul className={css.rows} aria-label={t('aiDevItem.commentsLabel')}>
             {data.Comments.map((c, i) => (
               <CommentRow key={i} c={c} />
             ))}
           </ul>
         ) : (
-          <BoxRow className={css.muted}>还没有要发的评论。</BoxRow>
+          <BoxRow className={css.muted}>{t('aiDevItem.noComments')}</BoxRow>
         )}
       </Box>
 
       <Box as="section" aria-labelledby="ai-dev-branches">
-        <BoxHeader id="ai-dev-branches" title="attempt 分支" />
+        <BoxHeader id="ai-dev-branches" title={t('aiDevItem.branches')} />
         {data.Branches.length > 0 ? (
-          <ul className={css.rows} aria-label="attempt 分支">
+          <ul className={css.rows} aria-label={t('aiDevItem.branches')}>
             {data.Branches.map((b) => (
               <BranchRow key={b.Branch} data={data} b={b} />
             ))}
           </ul>
         ) : (
-          <BoxRow className={css.muted}>还没有 attempt 分支。</BoxRow>
+          <BoxRow className={css.muted}>{t('aiDevItem.noBranches')}</BoxRow>
         )}
       </Box>
     </div>

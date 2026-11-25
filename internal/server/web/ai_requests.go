@@ -38,19 +38,11 @@ func aiRequestURL(id int64) string { return aiRequestsPath + "/" + strconv.Forma
 // aiTaskURL 返回 AI 任务详情页的地址。
 func aiTaskURL(id int64) string { return "/ai/tasks/" + strconv.FormatInt(id, 10) }
 
-// AI 请求的类型（ai_requests.type）的显示名称。
-func aiTypeLabel(t string) string {
-	if t == agentcfg.TaskDevelop {
-		return "AI 开发"
-	}
-	return "AI 审计"
-}
-
 // aiRequestView 是页面上的一个 AI 请求。
 type aiRequestView struct {
 	ID int64
-	// Type 是 review 或 develop，TypeLabel 是它的显示名称（AI 审计、AI 开发）。
-	Type, TypeLabel string
+	// Type 是 review 或 develop，名称由前端按语言显示。
+	Type            string
 	Repo            string
 	Event, Ref, SHA string
 	Trigger, Sender string
@@ -75,7 +67,7 @@ type aiRequestView struct {
 
 func newAIRequestView(v *admin.AIRequestView) aiRequestView {
 	out := aiRequestView{
-		ID: v.ID, Type: v.Type, TypeLabel: aiTypeLabel(v.Type), Repo: v.Repo, Event: v.Event, Ref: v.Ref, SHA: v.SHA,
+		ID: v.ID, Type: v.Type, Repo: v.Repo, Event: v.Event, Ref: v.Ref, SHA: v.SHA,
 		Trigger: v.Trigger, Sender: v.Sender, State: string(v.State), PRNumber: v.PRNumber, WorkItemID: v.WorkItemID,
 		DevMode: v.DevMode, DevRound: v.DevRound, ConfigError: deref(v.ConfigError), Warnings: deref(v.Warnings),
 		Created: v.CreatedAt, Finished: v.FinishedAt, Purged: v.PurgedAt,
@@ -98,9 +90,9 @@ type aiTaskView struct {
 	Platforms []string
 	Platform  string
 	Agent     string
-	// State 是任务的状态，StateTitle 是它的中文名称。
-	State, StateTitle string
-	Reason            string
+	// State 是任务的状态，名称由前端按语言显示；Reason 是调度和执行记下的原因（原样显示）。
+	State  string
+	Reason string
 	// ReusedFrom 是沿用结果的来源任务（没有沿用时为 0）。
 	ReusedFrom      int64
 	AttemptCount    int
@@ -115,7 +107,7 @@ type aiTaskView struct {
 func newAITaskView(t *ai.Task, at *admin.AITaskAttempt) aiTaskView {
 	v := aiTaskView{
 		ID: t.ID, RequestID: t.RequestID, Key: t.Key, DisplayName: t.DisplayName, Platforms: t.Platforms, Agent: t.Agent,
-		State: string(t.State), StateTitle: t.State.Title(), Reason: deref(t.Reason), AttemptCount: t.AttemptCount,
+		State: string(t.State), Reason: deref(t.Reason), AttemptCount: t.AttemptCount,
 		CancelRequested: t.CancelRequested, Created: t.CreatedAt, Started: t.StartedAt, Finished: t.FinishedAt,
 	}
 	if at != nil {
@@ -139,10 +131,10 @@ type aiRequestFilter struct {
 type aiRequestsPage struct {
 	Requests []aiRequestView
 	Filter   aiRequestFilter
-	// Repos 是可以筛选的仓库；Types、States 是类型和状态的选项。
+	// Repos 是可以筛选的仓库；Types、States 是类型和状态的选项（Label 是消息）。
 	Repos  []string
-	Types  []option
-	States []option
+	Types  []textOption
+	States []textOption
 	// Limit 是列出的最大条数（达到时页面提示还有更早的请求）。
 	Limit int
 }
@@ -150,35 +142,10 @@ type aiRequestsPage struct {
 // aiRequestsLimit 是 AI 请求列表一次列出的条数。
 const aiRequestsLimit = 100
 
-// aiRequestStateOptions 是 AI 请求的状态选项。
-var aiRequestStateOptions = []option{
-	{string(ai.RequestQueued), "排队中"},
-	{string(ai.RequestActive), "进行中"},
-	{string(ai.RequestSucceeded), "成功"},
-	{string(ai.RequestFailed), "失败"},
-	{string(ai.RequestCancelled), "已取消"},
-	{string(ai.RequestSkipped), "已跳过"},
-}
-
-// aiTypeOptions 是 AI 请求的类型选项。
-var aiTypeOptions = []option{
-	{agentcfg.TaskReview, aiTypeLabel(agentcfg.TaskReview)},
-	{agentcfg.TaskDevelop, aiTypeLabel(agentcfg.TaskDevelop)},
-}
-
-func optionValid(opts []option, v string) bool {
-	for _, o := range opts {
-		if o.Value == v {
-			return true
-		}
-	}
-	return false
-}
-
 func (d *Dashboard) pageAIRequests(w http.ResponseWriter, r *http.Request, _ *session) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	p := &aiRequestsPage{Types: aiTypeOptions, States: aiRequestStateOptions, Limit: aiRequestsLimit}
+	p := &aiRequestsPage{Types: aiTypeOptions(), States: aiRequestStateOptions(), Limit: aiRequestsLimit}
 	rows, err := d.db.Query(ctx, `SELECT p.owner || '/' || p.name FROM repos p WHERE EXISTS (SELECT 1 FROM ai_requests q WHERE q.repo_id=p.id) ORDER BY 1`)
 	if err != nil {
 		d.serverError(w, r, err)
@@ -195,10 +162,10 @@ func (d *Dashboard) pageAIRequests(w http.ResponseWriter, r *http.Request, _ *se
 			}
 		}
 	}
-	if v := q.Get("type"); optionValid(aiTypeOptions, v) {
+	if v := q.Get("type"); textOptionValid(p.Types, v) {
 		p.Filter.Type = v
 	}
-	if v := q.Get("state"); optionValid(aiRequestStateOptions, v) {
+	if v := q.Get("state"); textOptionValid(p.States, v) {
 		p.Filter.State = v
 	}
 	if n, err := strconv.Atoi(q.Get("pr")); err == nil && n > 0 {
@@ -215,7 +182,7 @@ func (d *Dashboard) pageAIRequests(w http.ResponseWriter, r *http.Request, _ *se
 	for _, v := range list {
 		p.Requests = append(p.Requests, newAIRequestView(v))
 	}
-	d.render(w, r, "ai_requests", "AI 请求", p)
+	d.renderPage(w, r, "ai_requests", message(msgAIRequestsTitle), p, http.StatusOK)
 }
 
 // ---- 请求详情 ----
@@ -273,7 +240,7 @@ func (d *Dashboard) pageAIRequest(w http.ResponseWriter, r *http.Request, _ *ses
 		d.serverError(w, r, err)
 		return
 	}
-	d.render(w, r, "ai_request", fmt.Sprintf("%s请求 #%d", aiTypeLabel(det.Type), det.ID), p)
+	d.renderPage(w, r, "ai_request", aiRequestTitle(det.Type, det.ID), p, http.StatusOK)
 }
 
 // ---- 任务详情 ----
@@ -413,13 +380,13 @@ type aiTaskPage struct {
 	Explicit bool
 	Viewing  *aiAttemptView
 	// AttemptErr 非空表示地址中的 attempt 无效（页面返回 404，不加载日志）。
-	AttemptErr string
+	AttemptErr uiText
 	Terminal   bool
 	// RequestTerminal 表示请求已经结束；CanRerun 表示可以重跑这个任务（已结束的审计请求中的任务）。
 	RequestTerminal, CanRerun bool
 	// NoLog 表示任务没有执行过、也不会再有日志；LogEmpty 是没有日志时的说明。
 	NoLog    bool
-	LogEmpty string
+	LogEmpty uiText
 	// AttemptKey 是日志阅读位置在浏览器 sessionStorage 中的键的一部分。
 	AttemptKey string
 	// Spec 是任务冻结的执行输入（JSON，缩进过）。
@@ -434,7 +401,7 @@ func (d *Dashboard) pageAITask(w http.ResponseWriter, r *http.Request, _ *sessio
 	ctx := r.Context()
 	t, err := ai.GetTask(ctx, d.db, pathID(r), false)
 	if errors.Is(err, ai.ErrNotFound) {
-		d.notFound(w, r, fmt.Sprintf("没有编号为 %s 的 AI 任务：编号可能写错了。", r.PathValue("id")))
+		d.notFoundText(w, r, message(msgAITaskNotFound, strArg(argValue, r.PathValue("id"))))
 		return
 	}
 	if err != nil {
@@ -448,10 +415,10 @@ func (d *Dashboard) pageAITask(w http.ResponseWriter, r *http.Request, _ *sessio
 	}
 	p.selectAttempt(r.URL.Query().Get("attempt"))
 	status := http.StatusOK
-	if p.AttemptErr != "" {
+	if !p.AttemptErr.IsZero() {
 		status = http.StatusNotFound
 	}
-	d.renderStatus(w, r, "ai_task", fmt.Sprintf("%s · %s请求 #%d", t.DisplayName, aiTypeLabel(t.Type), t.RequestID), p, status)
+	d.renderPage(w, r, "ai_task", aiTaskTitle(t), p, status)
 }
 
 // aiTaskPageData 准备 AI 任务页面的数据（不含地址中的 attempt 参数）。
@@ -502,7 +469,7 @@ func (p *aiTaskPage) selectAttempt(v string) {
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil || n <= 0 {
-		p.AttemptErr = fmt.Sprintf("地址中的 attempt 参数无效（%q），应为这个任务的某次 attempt 的编号。", v)
+		p.AttemptErr = message(msgAITaskAttemptInvalid, strArg(argValue, v))
 		return
 	}
 	for i := range p.Attempts {
@@ -516,26 +483,26 @@ func (p *aiTaskPage) selectAttempt(v string) {
 		}
 		return
 	}
-	p.AttemptErr = fmt.Sprintf("这个任务没有 attempt #%d（可能属于别的任务，或编号写错了）。", n)
+	p.AttemptErr = message(msgAITaskAttemptMissing, intArg(argAttempt, n))
 }
 
 // aiLogEmptyText 返回 AI 任务没有日志时的说明；purged 表示日志已经按保留策略清理。
-func aiLogEmptyText(t *ai.Task, hasAttempts, purged bool) string {
+func aiLogEmptyText(t *ai.Task, hasAttempts, purged bool) uiText {
 	switch {
 	case purged && hasAttempts:
-		return "日志已按保留策略清理：请求结束超过保留期后只保留结果（状态、耗时、原因）。"
+		return message(msgAITaskLogPurged)
 	case hasAttempts:
-		return "这次 attempt 没有输出日志。"
+		return message(msgAITaskLogNoOutput)
 	case t.ReusedFrom != nil:
-		return fmt.Sprintf("这个任务沿用上一次的结果，没有执行；日志见 AI 任务 #%d。", *t.ReusedFrom)
+		return message(msgAITaskLogReused, intArg(argTask, *t.ReusedFrom))
 	case t.State == ai.TaskSkipped:
-		return "这个任务被跳过，没有执行。"
+		return message(msgAITaskLogSkipped)
 	case t.State.Queued():
-		return "还没有开始执行，开始后这里会实时显示日志。"
+		return message(msgJobLogQueued)
 	case t.State.Terminal():
-		return "这个任务没有执行，没有日志（原因见上方）。"
+		return message(msgAITaskLogNotRun)
 	}
-	return "没有日志。"
+	return message(msgJobLogNone)
 }
 
 // ---- 日志 ----
@@ -584,7 +551,7 @@ func writeLogChunk(w http.ResponseWriter, r *http.Request, d *Dashboard, l *admi
 func (d *Dashboard) getAITaskLogDownload(w http.ResponseWriter, r *http.Request, _ *session) {
 	attempt, err := parseOptionalInt(r.URL.Query().Get("attempt"))
 	if err != nil || attempt < 0 {
-		d.badRequest(w, r, fmt.Sprintf("attempt 参数无效（%q），应为这个任务的某次 attempt 的编号。", r.URL.Query().Get("attempt")))
+		d.badRequestText(w, r, message(msgAITaskAttemptInvalid, strArg(argValue, r.URL.Query().Get("attempt"))))
 		return
 	}
 	id := pathID(r)
@@ -614,10 +581,10 @@ func (d *Dashboard) getAITaskLogDownload(w http.ResponseWriter, r *http.Request,
 func (d *Dashboard) postCancelAIRequest(w http.ResponseWriter, r *http.Request, se *session) {
 	id := pathID(r)
 	if err := d.admin.CancelAIRequest(r.Context(), id, se.Login); err != nil {
-		d.flashBack(w, r, aiRequestURL(id), "取消失败："+d.failure(r, err))
+		d.flashMsg(w, r, aiRequestURL(id), d.failureFlash(r, err, msgRunCancelFailed, msgRunCancelFailedRef))
 		return
 	}
-	d.flashBack(w, r, aiRequestURL(id), "已请求取消：没有开始的任务立即结束，执行中的任务由 AI 执行节点确认后结束。")
+	d.flashMsg(w, r, aiRequestURL(id), message(msgAIRequestCancelled))
 }
 
 // postRerunAIRequest 重跑 AI 审计请求：mode 为 all（全部任务）或 failed（只重跑没有成功的任务，默认）。
@@ -631,7 +598,7 @@ func (d *Dashboard) postRerunAITask(w http.ResponseWriter, r *http.Request, se *
 	id := pathID(r)
 	t, err := ai.GetTask(r.Context(), d.db, id, false)
 	if errors.Is(err, ai.ErrNotFound) {
-		d.notFound(w, r, fmt.Sprintf("没有编号为 %d 的 AI 任务，没有执行任何操作。", id))
+		d.notFoundText(w, r, message(msgAITaskRerunNotFound, intArg(argID, id)))
 		return
 	}
 	if err != nil {
@@ -644,8 +611,8 @@ func (d *Dashboard) postRerunAITask(w http.ResponseWriter, r *http.Request, se *
 func (d *Dashboard) rerunAI(w http.ResponseWriter, r *http.Request, se *session, id int64, mode review.RerunMode, taskID int64, back string) {
 	nr, err := d.admin.RerunAIRequest(r.Context(), id, mode, taskID, se.Login, store.SourceDashboard)
 	if err != nil {
-		d.flashBack(w, r, back, "重跑失败："+d.failure(r, err))
+		d.flashMsg(w, r, back, d.failureFlash(r, err, msgRunRerunFailed, msgRunRerunFailedRef))
 		return
 	}
-	d.flashBack(w, r, aiRequestURL(nr.ID), fmt.Sprintf("已创建 AI 审计请求 #%d（重跑 #%d）", nr.ID, id))
+	d.flashMsg(w, r, aiRequestURL(nr.ID), message(msgAIRequestRerun, intArg(argID, nr.ID), intArg(argFrom, id)))
 }
