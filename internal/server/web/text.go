@@ -1345,8 +1345,6 @@ const (
 	maxFlashBytes = 1024
 	// maxFlashArgRunes 是 flash 中一个文字参数的最大字符数。
 	maxFlashArgRunes = 200
-	// maxLegacyFlashBytes 是还没有迁移的整句提示的最大长度（字节，截断显示）。
-	maxLegacyFlashBytes = 600
 )
 
 // errFlash 表示地址中的提示不合格（不认识的消息、多余或缺少的参数、类型不对）。
@@ -1367,18 +1365,13 @@ func flashValue(t uiText) (string, error) {
 	return string(b), nil
 }
 
-// parseFlash 校验地址中的提示（?flash= 的值）并返回要显示的文字：
-//   - 消息（JSON）：只接受登记为 flash 的消息，参数名、类型、长度都要符合，否则不显示（返回零值）；
-//   - 其他是还没有迁移的整句提示：原样显示，过长时截断（迁移完成后不再产生）。
+// parseFlash 校验地址中的提示（?flash= 的值）并返回要显示的消息：只接受登记为 flash 的消息（JSON 对象），
+// 参数名、类型、长度都要符合；其他任何值（纯文字、不认识或不合格的消息）都不显示（返回零值）。
 //
-// 地址可以被任何人构造：提示只是纯文字，前端不把参数当作标签或 HTML。
+// 地址可以被任何人构造：不接受任意文字，提示只能是登记过的消息；参数只是纯文字，前端不把它当作标签或 HTML。
 func parseFlash(v string) uiText {
-	if v == "" || len(v) > maxFlashBytes || !utf8.ValidString(v) {
+	if v == "" || len(v) > maxFlashBytes || !utf8.ValidString(v) || !strings.HasPrefix(v, "{") {
 		return uiText{}
-	}
-	// 消息是 JSON 对象；其他的是旧的整句提示
-	if !strings.HasPrefix(v, "{") {
-		return rawText(shorten.Text(v, maxLegacyFlashBytes))
 	}
 	var m textJSON
 	dec := json.NewDecoder(strings.NewReader(v))

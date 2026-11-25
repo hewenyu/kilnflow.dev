@@ -64,20 +64,22 @@ describe('前端内跳转', () => {
   })
 
   it('首次打开时内嵌页面带 flash：显示一次，并从地址栏清理（刷新不会重复弹出）', () => {
-    renderPage(envelope(errorFixture, { Flash: '已经保存' }), '/runs?flash=' + encodeURIComponent('已经保存'))
-    expect(screen.getByText('已经保存')).toBeInTheDocument()
+    const flash = { id: 'account.unbound' }
+    renderPage(envelope(errorFixture, { Flash: flash }), '/runs?flash=' + encodeURIComponent(JSON.stringify(flash)))
+    expect(screen.getByText('已解除绑定，admin token 登录已恢复。')).toBeInTheDocument()
     expect(window.location.pathname).toBe('/runs')
     expect(window.location.search).toBe('')
   })
 
   it('服务端返回重定向时跳到重定向的地址；flash 显示一次并从地址中去掉', async () => {
-    respond = (c) =>
-      c.url === '/runs/7' ? json({ Redirect: '/runs/8?flash=' + encodeURIComponent('已经重跑') }) : json({ ...errorPage('run 8'), Flash: '已经重跑' })
+    const flash = { id: 'account.bound', params: { login: 'octocat' } }
+    const to = '/runs/8?flash=' + encodeURIComponent(JSON.stringify(flash))
+    respond = (c) => (c.url === '/runs/7' ? json({ Redirect: to }) : json({ ...errorPage('run 8'), Flash: flash }))
     renderPage(errorPage('出错了', [{ Label: '去 run 7', URL: '/runs/7', Primary: true }]), '/')
     await userEvent.click(screen.getByRole('link', { name: '去 run 7' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'run 8' })).toBeInTheDocument()
-    expect(calls.map((c) => c.url)).toEqual(['/runs/7', '/runs/8?flash=' + encodeURIComponent('已经重跑')])
-    expect(screen.getByText('已经重跑')).toBeInTheDocument()
+    expect(calls.map((c) => c.url)).toEqual(['/runs/7', to])
+    expect(screen.getByText('已绑定 GitHub 账号 octocat，现在以 octocat 的身份登录。')).toBeInTheDocument()
     expect(window.location.search).toBe('')
   })
 

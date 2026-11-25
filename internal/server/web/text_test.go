@@ -16,8 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/hewenyu/kilnflow.dev/internal/shorten"
 )
 
 // 多语言的消息契约（text.go、docs/I18N.md）：服务端给出的消息必须在前端的两种语言的词典中都有、参数一致；
@@ -334,17 +332,18 @@ func TestParseFlash(t *testing.T) {
 		`{"id":`,
 		`{` + strings.Repeat(" ", maxFlashBytes) + `}`,
 		"\xff\xfe",
+		// 不是消息的任意文字（包括 JSON 字符串、数组、数字）都不显示：提示只能是登记过的消息
+		"已请求取消",
+		"ok",
+		strings.Repeat("长", 300),
+		`"已请求取消"`,
+		`[{"id":"account.unbound"}]`,
+		"42",
+		` {"id":"account.unbound"}`,
 	} {
 		if got := parseFlash(v); !got.IsZero() {
 			t.Errorf("parseFlash(%q) = %+v，应不显示", v, got)
 		}
-	}
-	// 还没有迁移的整句提示原样显示，过长的截断
-	if got := parseFlash("已请求取消"); got.raw != "已请求取消" || got.id != "" {
-		t.Errorf("旧的提示 = %+v", got)
-	}
-	if got := parseFlash(strings.Repeat("长", 300)); got.id != "" || len(got.raw) > maxLegacyFlashBytes+len(shorten.Ellipsis) || got.raw == "" {
-		t.Errorf("过长的旧提示应截断：%d 字节", len(got.raw))
 	}
 	// 只有登记为 flash 的消息可以放进地址
 	if _, err := flashValue(message(msgErrForbiddenReason, strArg(argLogin, "bob"))); err == nil {
@@ -352,6 +351,50 @@ func TestParseFlash(t *testing.T) {
 	}
 	if _, err := flashValue(message(msgAccountBound, strArg(argLogin, strings.Repeat("x", maxFlashArgRunes+1)))); err == nil {
 		t.Error("过长的参数不应能放进地址")
+	}
+}
+
+// TestFlashMessagesRoundTrip：每条登记为 flash 的消息带上合格的参数都能放进地址，经 parseFlash 原样取回；
+// 少一个参数就不显示。
+func TestFlashMessagesRoundTrip(t *testing.T) {
+	n := 0
+	for id, spec := range messages {
+		if !spec.flash {
+			continue
+		}
+		n++
+		params := make(map[string]any, len(spec.params))
+		for name, kind := range spec.params {
+			if kind == paramInt {
+				params[name] = int64(1800000000)
+			} else {
+				params[name] = "acme/kiln <b>&"
+			}
+		}
+		text := uiText{id: id, params: params}
+		if len(params) == 0 {
+			text.params = nil
+		}
+		v, err := flashValue(text)
+		if err != nil {
+			t.Errorf("%q 不能放进地址：%v", id, err)
+			continue
+		}
+		got := parseFlash(v)
+		if got.id != id || !maps.Equal(got.params, text.params) {
+			t.Errorf("%q 往返后 = %+v，应为 %+v", id, got, text)
+		}
+		for name := range spec.params {
+			short := maps.Clone(params)
+			delete(short, name)
+			b, _ := json.Marshal(textJSON{ID: id, Params: short})
+			if got := parseFlash(string(b)); !got.IsZero() {
+				t.Errorf("%q 缺少参数 %q 时应不显示：%+v", id, name, got)
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("没有登记为 flash 的消息")
 	}
 }
 
@@ -365,7 +408,8 @@ func TestFlashInPage(t *testing.T) {
 		{`{"id":"account.unbound"}`, `{"id":"account.unbound"}`},
 		{`{"id":"account.bound","params":{"login":"octocat"}}`, `{"id":"account.bound","params":{"login":"octocat"}}`},
 		{`{"id":"error.csrfReason"}`, `""`},
-		{"已保存", `"已保存"`},
+		{"已保存", `""`},
+		{"<b>已保存</b>", `""`},
 	} {
 		for _, browser := range []bool{false, true} {
 			w := serve(mux, testReq{target: "/no/such/page?flash=" + url.QueryEscape(c.flash), browser: browser})

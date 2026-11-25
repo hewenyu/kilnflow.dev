@@ -122,6 +122,9 @@ function Code({ code, label }: { code: string; label: string }) {
 
 const rich: Tags = { b: (c) => <b>{c}</b>, code: (c) => <code>{c}</code> }
 
+/** defaultPool 是不写 pool 时 Runner 所在的 pool（配置值，两种语言中都原样显示）。 */
+const defaultPool = 'default'
+
 function Prepare({ data }: { data: Data }) {
   const t = useT()
   const ver = shortVersion(data.ServerVersion)
@@ -239,7 +242,7 @@ function TokenForm({ data }: { data: Data }) {
                 name="pool"
                 defaultValue={value}
                 list="e-pools"
-                placeholder="default"
+                placeholder={defaultPool}
                 spellCheck={false}
                 autoCapitalize="off"
                 validationStatus={invalid ? 'error' : undefined}

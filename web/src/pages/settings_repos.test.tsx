@@ -7,6 +7,21 @@ import { envelope, renderPage, tFor, withData } from '../test/render'
 import { hidden } from './settings/testing'
 
 describe('设置 · 仓库', () => {
+  it('仓库的可见性按语言显示', () => {
+    const { unmount } = renderPage(envelope(fixture), '/settings/repos')
+    const row = (name: string): HTMLElement => {
+      const el = screen.getByText(name).parentElement
+      if (!el) throw new Error(`找不到 ${name} 所在的行`)
+      return el
+    }
+    expect(within(row('acme/kilnflow.dev')).getByText('私有')).toBeInTheDocument()
+    expect(within(row('acme/kiln')).getByText('公开')).toBeInTheDocument()
+    unmount()
+    renderPage(envelope(fixture), '/settings/repos', { locale: 'en' })
+    expect(within(row('acme/kilnflow.dev')).getByText('Private')).toBeInTheDocument()
+    expect(within(row('acme/kiln')).getByText('Public')).toBeInTheDocument()
+  })
+
   it('统计、最近一次刷新、仓库操作和分页', () => {
     renderPage(envelope(fixture), '/settings/repos')
     expect(screen.getByText('共 112 个仓库，第 1 / 3 页')).toBeInTheDocument()

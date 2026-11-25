@@ -143,7 +143,7 @@ function RepoRow({ r, data }: { r: Repo; data: Data }) {
         <span className={css.name}>{r.FullName}</span>
         <div className={css.meta}>
           {r.DefaultBranch && <span>{r.DefaultBranch} ·</span>}
-          <span>{r.Private ? 'private' : 'public'}</span>
+          <span>{t(r.Private ? 'repoVisibility.private' : 'repoVisibility.public')}</span>
           {!r.Active && <Label variant="attention">{t('repos.inactive')}</Label>}
           {r.DocBound && (
             <>

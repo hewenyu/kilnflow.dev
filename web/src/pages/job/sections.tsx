@@ -102,7 +102,7 @@ export function JobHeader({ p }: { p: JobPage }) {
           </li>
         )}
         {j.ActionKey !== null && (
-          <li title={`action key ${j.ActionKey}`}>
+          <li title={t('job.actionKeyTitle', { key: j.ActionKey })}>
             <KeyIcon size={16} />
             <code>{short(j.ActionKey)}</code>
           </li>
@@ -532,7 +532,7 @@ function TargetResult({ target: t }: { target: ReleaseTarget }) {
                   · dist-tag <code>{d.dist_tag}</code>
                 </>
               )}
-              {d.access && ` · access ${d.access}`}
+              {d.access && ` · ${tr('job.npmAccess', { access: d.access })}`}
             </span>
           )}
           {d.previous && <span className={`${css.muted} ${css.block}`}>{tr('job.npmPrevious')}</span>}

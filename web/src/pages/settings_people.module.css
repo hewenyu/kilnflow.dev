@@ -215,6 +215,13 @@
   overflow-wrap: anywhere;
 }
 
+/* 表格比内容区宽时（设置页的侧栏旁、较长的英文日期和状态）在框内横向滚动，不撑出页面；
+   relative 让表头中只给读屏软件的文字（visually-hidden，绝对定位）也在滚动区域内 */
+.scroll {
+  position: relative;
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -266,6 +273,11 @@
 .err {
   color: var(--fgColor-danger);
   overflow-wrap: anywhere;
+}
+
+/* 表格中的错误原文可以在任意位置折行，不给最小宽度时会被挤成一两个字符宽；宽度不够时表格在框内横向滚动 */
+.table .err {
+  min-width: 200px;
 }
 
 .emptyCell {

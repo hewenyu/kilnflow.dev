@@ -17,7 +17,7 @@ describe('启动构建', () => {
     renderPage(envelope(pickerFixture), '/runs/new')
     expect(screen.getByText('共 5 个可构建的仓库')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '选择 acme/kiln' })).toHaveAttribute('href', '/runs/new?repo=acme%2Fkiln')
-    expect(screen.getByText('默认分支 master · public')).toBeInTheDocument()
+    expect(screen.getByText('默认分支 master · 公开')).toBeInTheDocument()
   })
 
   it('仓库选择器：搜索结果、分页和仓库错误', () => {
