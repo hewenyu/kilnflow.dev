@@ -168,9 +168,13 @@ type Entry struct {
 	ActionBase  string
 	ActionAt    *time.Time
 	ActionTries int
-	Status      string
-	Reason      string
-	MergeSHA    string
+	// Status、Reason 是中文说明（CLI、日志和评论用）；StatusNote、ReasonNote 是同一个判断的原因码和原始参数（Dashboard 按语言
+	// 显示，见 notes.go）。升级前的旧行原因码为空。
+	Status     string
+	Reason     string
+	StatusNote Note
+	ReasonNote Note
+	MergeSHA   string
 	// CommentState 是出队评论的状态：attempted 表示已经尝试过（PLAN #29.8，结果不明时不再评论）。
 	CommentState string
 	// MergeLabels 是请求合并时 PR 的 label（merge_labels，与 action=merging 一起写下；nil 表示没有记下）：自动打 tag 用它
@@ -180,19 +184,24 @@ type Entry struct {
 	// 默认分支的 head。与 action=removing 一起记下：评论之后崩溃时，重试也知道要交回。
 	Removal      string
 	ConflictBase string
-	EnqueuedAt   time.Time
-	UpdatedAt    time.Time
-	FinishedAt   *time.Time
+	// IssuesState、IssuesTries 是队列合并后关闭关联 issue 的进度（pending、done、failed；不需要关闭时为空）和失败次数。
+	IssuesState string
+	IssuesTries int
+	EnqueuedAt  time.Time
+	UpdatedAt   time.Time
+	FinishedAt  *time.Time
 }
 
 const entryCols = `id, repo_id, pr_number, state, head_sha, base_ref, enqueued_by, action, action_head, action_base, action_at, action_tries,
-	status, reason, merge_sha, comment_state, merge_labels, removal, conflict_base, enqueued_at, updated_at, finished_at`
+	status, reason, status_code, status_params, reason_code, reason_params, merge_sha, comment_state, merge_labels, removal, conflict_base,
+	issues_state, issues_tries, enqueued_at, updated_at, finished_at`
 
 func scanEntries(rows pgx.Rows) ([]*Entry, error) {
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (*Entry, error) {
 		var e Entry
 		err := r.Scan(&e.ID, &e.RepoID, &e.PR, &e.State, &e.HeadSHA, &e.BaseRef, &e.EnqueuedBy, &e.Action, &e.ActionHead, &e.ActionBase,
-			&e.ActionAt, &e.ActionTries, &e.Status, &e.Reason, &e.MergeSHA, &e.CommentState, &e.MergeLabels, &e.Removal, &e.ConflictBase,
+			&e.ActionAt, &e.ActionTries, &e.Status, &e.Reason, &e.StatusNote.Code, &e.StatusNote.Params, &e.ReasonNote.Code,
+			&e.ReasonNote.Params, &e.MergeSHA, &e.CommentState, &e.MergeLabels, &e.Removal, &e.ConflictBase, &e.IssuesState, &e.IssuesTries,
 			&e.EnqueuedAt, &e.UpdatedAt, &e.FinishedAt)
 		return &e, err
 	})

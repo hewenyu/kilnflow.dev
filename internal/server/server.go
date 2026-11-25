@@ -465,6 +465,18 @@ var devOriginKinds = map[aidev.AutoTagOriginKind]autotag.OriginKind{
 	aidev.AutoTagOriginDenied:         autotag.OriginDenied,
 }
 
+// devOriginReasons 把 aidev 不自动发布的原因码换成自动打 tag 的（不认识的为空，Dashboard 原样显示中文说明）。
+var devOriginReasons = map[string]string{
+	aidev.AutoTagReasonDesign:       autotag.ReasonDesignPR,
+	aidev.AutoTagReasonChecking:     autotag.ReasonOriginChecking,
+	aidev.AutoTagReasonUnconfirmed:  autotag.ReasonOriginUnconfirmed,
+	aidev.AutoTagReasonHeadMismatch: autotag.ReasonOriginHeadMismatch,
+	aidev.AutoTagReasonBaseMismatch: autotag.ReasonOriginBaseMismatch,
+	aidev.AutoTagReasonStopped:      autotag.ReasonOriginStopped,
+	aidev.AutoTagReasonNoChange:     autotag.ReasonOriginNoChange,
+	aidev.AutoTagReasonNoRecord:     autotag.ReasonOriginNoRecord,
+}
+
 func (devTagOrigin) Resolve(ctx context.Context, q store.Querier, repoID int64, pr int, headRef, baseRef string) (autotag.DevOrigin, error) {
 	o, err := aidev.ResolveAutoTagOrigin(ctx, q, repoID, pr, headRef, baseRef)
 	if err != nil {
@@ -477,6 +489,7 @@ func (devTagOrigin) Resolve(ctx context.Context, q store.Querier, repoID int64, 
 	return autotag.DevOrigin{
 		Kind: kind, WorkItemID: o.WorkItemID, Phase: o.Phase, ImplRound: o.ImplRound, BaseRef: o.BaseRef,
 		CreatorLogin: o.CreatorLogin, DeliveryTaskID: o.DeliveryTaskID, Issues: o.Issues, Reason: o.Reason,
+		ReasonCode: devOriginReasons[o.ReasonCode],
 	}, nil
 }
 

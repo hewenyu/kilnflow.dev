@@ -23,7 +23,7 @@ import { RunHeader } from '../components/RunHeader'
 import { RunSidebar } from '../components/RunSidebar'
 import { StatusIcon } from '../components/StatusIcon'
 import { Ago, Duration } from '../components/Time'
-import { Msg, Trans, useLocale, useT } from '../i18n/locale'
+import { Msg, Trans, useLocale, useT, useText } from '../i18n/locale'
 import { list, textSchema } from '../lib/envelope'
 import { clock, eventLabel, jobStatesSummary, refKind, refName, rerunLabel, runState, short } from '../lib/format'
 import { jobViewSchema, mergeQueueEntrySchema, runSchema, type Run } from '../lib/schemas'
@@ -142,14 +142,15 @@ function RerunPicker({ data }: { data: Data }) {
   )
 }
 
-/** MergeQueueNotice 是 PR 在合并队列中的状态；没有记录时不显示。队列给出的状态和原因（Status、Reason）原样显示。 */
+/** MergeQueueNotice 是 PR 在合并队列中的状态；没有记录时不显示。队列给出的状态和原因（Status、Reason）按当前语言显示。 */
 function MergeQueueNotice({ mq }: { mq: MergeQueue }) {
   const t = useT()
+  const text = useText()
   const e = mq.Entry
   if (!e) return null
   const link = <Link href={mq.URL}>{t('run.mqLink')}</Link>
   if (e.State === 'queued') {
-    const detail = [e.BaseRef ? t('run.mqTarget', { branch: e.BaseRef }) : '', t('run.mqPos', { pos: mq.Pos }), e.Status].filter(Boolean).join(' · ')
+    const detail = [e.BaseRef ? t('run.mqTarget', { branch: e.BaseRef }) : '', t('run.mqPos', { pos: mq.Pos }), text(e.Status)].filter(Boolean).join(' · ')
     return (
       <Callout title={t('run.mqQueued', { detail })}>
         {t('run.mqQueuedText', { pr: mq.PR })}
@@ -159,13 +160,13 @@ function MergeQueueNotice({ mq }: { mq: MergeQueue }) {
   }
   if (e.State === 'merged') {
     return (
-      <Callout tone="success" title={e.Reason || (e.MergeSHA ? t('run.mqMergedSHA', { sha: short(e.MergeSHA) }) : t('run.mqMerged'))}>
+      <Callout tone="success" title={e.Reason ? text(e.Reason) : (e.MergeSHA ? t('run.mqMergedSHA', { sha: short(e.MergeSHA) }) : t('run.mqMerged'))}>
         {link}
       </Callout>
     )
   }
   return (
-    <Callout tone="warning" title={e.Reason ? t('run.mqRemovedReason', { reason: e.Reason }) : t('run.mqRemoved')}>
+    <Callout tone="warning" title={e.Reason ? t('run.mqRemovedReason', { reason: text(e.Reason) }) : t('run.mqRemoved')}>
       {t('run.mqRemovedText')}
       {link}
     </Callout>

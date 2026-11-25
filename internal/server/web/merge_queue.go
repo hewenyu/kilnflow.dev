@@ -42,8 +42,11 @@ type mergeQueueEntry struct {
 	BaseRef string
 	// EnqueuedBy 是入队的操作者（github:<login>，或 Dashboard、CLI 的操作者）。
 	EnqueuedBy string
-	// Status 是排队中时当前在等什么；Reason 是出队原因（合并时可能说明是在队列之外合并的）。
-	Status, Reason string
+	// Status 是排队中时当前在等什么（合并后是关闭关联 issue 的进度）；Reason 是出队原因（合并时可能说明是在队列之外合并的）。
+	// 有原因码的是消息，没有原因码的旧记录原样显示中文说明。
+	Status, Reason uiText
+	// StatusTone 是状态的语义级别（toneBad：失败；toneWarn：需要人确认；其余为空）：页面按它决定样式，不看译文。
+	StatusTone string
 	// Removal 是自动出队的类别（mergequeue.RemovalConflictDev、RemovalConflictAuthor；其他为空）。
 	Removal    string
 	MergeSHA   string
@@ -53,7 +56,8 @@ type mergeQueueEntry struct {
 
 func newMergeQueueEntry(e *mergequeue.Entry) mergeQueueEntry {
 	return mergeQueueEntry{
-		PR: e.PR, State: e.State, HeadSHA: e.HeadSHA, BaseRef: e.BaseRef, EnqueuedBy: e.EnqueuedBy, Status: e.Status, Reason: e.Reason,
+		PR: e.PR, State: e.State, HeadSHA: e.HeadSHA, BaseRef: e.BaseRef, EnqueuedBy: e.EnqueuedBy,
+		Status: mqNoteText(e.StatusNote, e.Status), Reason: mqNoteText(e.ReasonNote, e.Reason), StatusTone: mqStatusTone(e),
 		Removal: e.Removal, MergeSHA: e.MergeSHA, EnqueuedAt: e.EnqueuedAt, FinishedAt: e.FinishedAt,
 	}
 }
@@ -98,11 +102,12 @@ type autoTagView struct {
 	Source string
 	// State 是 pending、tagging、tagged、planned、skipped 或 failed。
 	State string
-	// Tag 是打的（或要打的）tag；Reason 是跳过或失败的原因。
-	Tag, Reason string
-	Tries       int
-	Created     time.Time
-	Updated     time.Time
+	// Tag 是打的（或要打的）tag；Reason 是跳过或失败的原因（没有原因码的旧记录原样显示中文说明）。
+	Tag     string
+	Reason  uiText
+	Tries   int
+	Created time.Time
+	Updated time.Time
 	// Retryable 表示可以重试（failed 或 skipped）。
 	Retryable bool
 }
@@ -111,7 +116,7 @@ func newAutoTagView(r *autotag.Record) autoTagView {
 	v := autoTagView{
 		SHA: r.SHA, PR: r.PR, BaseRef: r.BaseRef, Labels: r.Labels, MergedBy: r.MergedBy, SenderIsBot: r.SenderIsBot, Source: r.Source,
 		State: r.State,
-		Tag:   r.Tag, Reason: r.Reason, Tries: r.Tries, Created: r.CreatedAt, Updated: r.UpdatedAt,
+		Tag:   r.Tag, Reason: autoTagNoteText(r.ReasonNote, r.Reason), Tries: r.Tries, Created: r.CreatedAt, Updated: r.UpdatedAt,
 		Retryable: r.State == autotag.StateFailed || r.State == autotag.StateSkipped,
 	}
 	if r.WorkItemID != nil {
@@ -141,7 +146,7 @@ func (d *Dashboard) pageMergeQueue(w http.ResponseWriter, r *http.Request, se *s
 		q, err := d.admin.ListMergeQueue(ctx, p.Repo)
 		// 写的不是 owner/name 时 store.FindRepo 返回的不是 ErrRepoNotFound，同样不可能是任何仓库
 		if errors.Is(err, store.ErrRepoNotFound) || (err != nil && !admin.ValidRepoFullName(p.Repo)) {
-			d.notFound(w, r, fmt.Sprintf("Kiln 中没有仓库 %s：名称可能写错了，或者仓库还没有同步。", p.Repo))
+			d.notFoundText(w, r, message(msgMQRepoNotFound, strArg(argRepo, p.Repo)))
 			return
 		}
 		if err != nil {
@@ -177,60 +182,83 @@ func (d *Dashboard) pageMergeQueue(w http.ResponseWriter, r *http.Request, se *s
 			return
 		}
 	}
-	title := "合并队列"
+	title := message(msgMQTitle)
 	if p.Repo != "" {
-		title += " · " + p.Repo
+		title = message(msgMQTitleRepo, strArg(argRepo, p.Repo))
 	}
-	d.render(w, r, "merge_queue", title, p)
+	d.renderPage(w, r, "merge_queue", title, p, http.StatusOK)
 }
 
-// mergeQueueForm 读取入队、移除表单的仓库和 PR 号；PR 号无效时返回错误说明。
-func mergeQueueForm(r *http.Request) (repo string, pr int, msg string) {
+// mergeQueueOp 是入队、移除操作的提示消息。
+type mergeQueueOp struct {
+	noRepo, badPR, failed, failedRef, noForge, repoMissing msgID
+}
+
+var (
+	mergeQueueAddOp    = mergeQueueOp{msgMQAddNoRepo, msgMQAddBadPR, msgMQAddFailed, msgMQAddFailedRef, msgMQAddNoForge, msgMQAddRepoMissing}
+	mergeQueueRemoveOp = mergeQueueOp{
+		msgMQRemoveNoRepo, msgMQRemoveBadPR, msgMQRemoveFailed, msgMQRemoveFailedRef, msgMQRemoveNoForge, msgMQRemoveRepoMiss,
+	}
+)
+
+// mergeQueueForm 读取入队、移除表单的仓库和 PR 号；没有选仓库、PR 号无效时返回操作 op 的提示（零值表示表单有效）。
+func mergeQueueForm(r *http.Request, op mergeQueueOp) (repo string, pr int, problem uiText) {
 	repo = strings.TrimSpace(r.PostFormValue("repo"))
 	if repo == "" {
-		return "", 0, "请选择仓库"
+		return "", 0, message(op.noRepo)
 	}
 	raw := strings.TrimPrefix(strings.TrimSpace(r.PostFormValue("pr")), "#")
 	pr, err := strconv.Atoi(raw)
 	if err != nil || pr <= 0 {
-		return repo, 0, fmt.Sprintf("PR 号 %q 无效，应为正整数", raw)
+		return repo, 0, message(op.badPR, strArg(argValue, raw))
 	}
-	return repo, pr, ""
+	return repo, pr, uiText{}
+}
+
+// mergeQueueFailure 返回入队、移除失败后的提示：没有配置 GitHub App、仓库不存在时给出各自的说明；其余按 failureFlash。
+func (d *Dashboard) mergeQueueFailure(r *http.Request, err error, op mergeQueueOp, repo string, pr int) uiText {
+	switch {
+	case errors.Is(err, mergequeue.ErrNoForge):
+		return message(op.noForge, strArg(argRepo, repo), intArg(argPR, int64(pr)))
+	case errors.Is(err, store.ErrRepoNotFound):
+		return message(op.repoMissing, strArg(argRepo, repo))
+	}
+	return d.failureFlash(r, err, op.failed, op.failedRef, strArg(argRepo, repo), intArg(argPR, int64(pr)))
 }
 
 // postMergeQueueAdd 把 PR 加入合并队列（给 PR 加上 label kiln:merge），回到这个仓库的合并队列页。
 func (d *Dashboard) postMergeQueueAdd(w http.ResponseWriter, r *http.Request, se *session) {
-	repo, pr, msg := mergeQueueForm(r)
+	repo, pr, problem := mergeQueueForm(r, mergeQueueAddOp)
 	back := mergeQueueURL(repo)
-	if msg != "" {
-		d.flashBack(w, r, back, "加入合并队列失败："+msg)
+	if !problem.IsZero() {
+		d.flashMsg(w, r, back, problem)
 		return
 	}
 	added, err := d.admin.AddToMergeQueue(r.Context(), repo, pr, se.Login)
 	switch {
 	case err != nil:
-		d.flashBack(w, r, back, fmt.Sprintf("把 %s#%d 加入合并队列失败：%s", repo, pr, d.failure(r, err)))
+		d.flashMsg(w, r, back, d.mergeQueueFailure(r, err, mergeQueueAddOp, repo, pr))
 	case !added:
-		d.flashBack(w, r, back, fmt.Sprintf("%s#%d 已经在合并队列中", repo, pr))
+		d.flashMsg(w, r, back, message(msgMQAlreadyQueued, strArg(argRepo, repo), intArg(argPR, int64(pr))))
 	default:
-		d.flashBack(w, r, back, fmt.Sprintf("已把 %s#%d 加入合并队列（加上了 label %s）", repo, pr, mergequeue.Label))
+		d.flashMsg(w, r, back, message(msgMQAdded, strArg(argRepo, repo), intArg(argPR, int64(pr)), strArg(argLabel, mergequeue.Label)))
 	}
 }
 
 // postMergeQueueRemove 把 PR 移出合并队列（去掉 PR 的 label kiln:merge），回到这个仓库的合并队列页。
 // 出队由队列的执行者完成，回到页面时可能还显示在排队中，稍后刷新即可。
 func (d *Dashboard) postMergeQueueRemove(w http.ResponseWriter, r *http.Request, se *session) {
-	repo, pr, msg := mergeQueueForm(r)
+	repo, pr, problem := mergeQueueForm(r, mergeQueueRemoveOp)
 	back := mergeQueueURL(repo)
-	if msg != "" {
-		d.flashBack(w, r, back, "移出合并队列失败："+msg)
+	if !problem.IsZero() {
+		d.flashMsg(w, r, back, problem)
 		return
 	}
 	if err := d.admin.RemoveFromMergeQueue(r.Context(), repo, pr, se.Login); err != nil {
-		d.flashBack(w, r, back, fmt.Sprintf("把 %s#%d 移出合并队列失败：%s", repo, pr, d.failure(r, err)))
+		d.flashMsg(w, r, back, d.mergeQueueFailure(r, err, mergeQueueRemoveOp, repo, pr))
 		return
 	}
-	d.flashBack(w, r, back, fmt.Sprintf("已请求把 %s#%d 移出合并队列（去掉了 label %s）", repo, pr, mergequeue.Label))
+	d.flashMsg(w, r, back, message(msgMQRemoveRequested, strArg(argRepo, repo), intArg(argPR, int64(pr)), strArg(argLabel, mergequeue.Label)))
 }
 
 // postAutoTagRetry 重新处理失败或跳过的自动打 tag 记录（从头计算版本号，已经建好的 tag 会被认出来），回到这个仓库的合并队列页。
@@ -238,17 +266,20 @@ func (d *Dashboard) postAutoTagRetry(w http.ResponseWriter, r *http.Request, se 
 	repo, sha := strings.TrimSpace(r.PostFormValue("repo")), strings.TrimSpace(r.PostFormValue("sha"))
 	back := mergeQueueURL(repo)
 	if repo == "" || sha == "" {
-		d.flashBack(w, r, back, "没有重试：缺少仓库或 commit")
+		d.flashMsg(w, r, back, message(msgATRetryMissing))
 		return
 	}
+	short := strArg(argSHA, shortSHA(sha))
 	err := d.admin.RetryAutoTag(r.Context(), repo, sha, se.Login)
 	switch {
 	case errors.Is(err, autotag.ErrNotRetryable):
-		d.flashBack(w, r, back, fmt.Sprintf("没有重试 %s：%s（可能已经在处理或已经完成，请刷新）", shortSHA(sha), err.Error()))
+		d.flashMsg(w, r, back, message(msgATNotRetryable, short))
+	case errors.Is(err, store.ErrRepoNotFound):
+		d.flashMsg(w, r, back, message(msgATRetryRepoMissing, strArg(argRepo, repo)))
 	case err != nil:
-		d.flashBack(w, r, back, fmt.Sprintf("重试 %s 的自动打 tag 失败：%s", shortSHA(sha), d.failure(r, err)))
+		d.flashMsg(w, r, back, d.failureFlash(r, err, msgATRetryFailed, msgATRetryFailedRef, short))
 	default:
-		d.flashBack(w, r, back, fmt.Sprintf("已重新处理 %s：重新计算版本号后打 tag 并规划发布", shortSHA(sha)))
+		d.flashMsg(w, r, back, message(msgATRetried, short))
 	}
 }
 

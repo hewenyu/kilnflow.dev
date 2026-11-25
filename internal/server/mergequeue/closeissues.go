@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -46,13 +45,10 @@ const (
 )
 
 // statusClosingIssues 是队列合并、还没关闭关联 issue 时的状态。
-const statusClosingIssues = "正在关闭关联的 issue"
+var statusClosingIssues = Note{Code: StatusClosingIssues}
 
 // closeIssuesGiveUp 是合并之后仍然关闭失败时放弃的时间。
 const closeIssuesGiveUp = 24 * time.Hour
-
-// permissionHint 是平台拒绝读取或关闭 issue 时附在原因后面的说明。
-const permissionHint = "（GitHub App 需要 Issues 的读写权限，见 DEPLOY.md #3）"
 
 // mergedEntry 是等待关闭关联 issue 的队列项。
 type mergedEntry struct {
@@ -240,15 +236,6 @@ func (p *pass) recordClosed(ctx context.Context, e *mergedEntry, issue int) erro
 	})
 }
 
-// issueRefs 把 issue 号写成 "#3、#4"。
-func issueRefs(nums []int) string {
-	refs := make([]string, len(nums))
-	for i, n := range nums {
-		refs[i] = "#" + strconv.Itoa(n)
-	}
-	return strings.Join(refs, "、")
-}
-
 // finishIssues 记录关联的 issue 已经处理完（状态中列出关闭的和结果不明的）。
 func (p *pass) finishIssues(ctx context.Context, e *mergedEntry) error {
 	var closed, unknown []int
@@ -260,32 +247,29 @@ func (p *pass) finishIssues(ctx context.Context, e *mergedEntry) error {
 			unknown = append(unknown, n)
 		}
 	}
-	var parts []string
-	if len(closed) > 0 {
-		parts = append(parts, "已关闭关联的 issue "+issueRefs(closed))
+	// 没有关闭任何 issue（没有关联的、都已经关闭了）时没有状态
+	st := Note{}
+	if len(closed) > 0 || len(unknown) > 0 {
+		st = Note{Code: StatusIssuesDone, Params: NoteParams{Closed: closed, Unknown: unknown}}
 	}
-	if len(unknown) > 0 {
-		parts = append(parts, "关闭 "+issueRefs(unknown)+" 的结果不明（之后读到仍然打开），没有再关闭，请人工确认")
-	}
-	_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET issues_state=$2, status=$3, updated_at=now()
-		WHERE id=$1 AND issues_state=$4`, e.ID, issuesDone, strings.Join(parts, "；"), issuesPending)
+	_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET issues_state=$2, status=$3, status_code=$5, status_params=$6, updated_at=now()
+		WHERE id=$1 AND issues_state=$4`, e.ID, issuesDone, st.Text(), issuesPending, st.Code, st.Params)
 	return err
 }
 
 // recordIssuesFailure 记下关闭失败的原因（显示在 status 中）；合并超过 closeIssuesGiveUp 时放弃。
 func (p *pass) recordIssuesFailure(ctx context.Context, e *mergedEntry, cause error) error {
 	tries := e.Tries + 1
-	msg := cause.Error()
-	if forge.IsRejected(cause) {
-		msg += permissionHint
-	}
-	state, status := issuesPending, fmt.Sprintf("关闭关联的 issue 失败（第 %d 次，稍后重试）：%s", tries, msg)
+	params := NoteParams{Tries: tries, Detail: cause.Error(), Rejected: forge.IsRejected(cause)}
+	state, code := issuesPending, StatusIssuesRetry
 	if p.s.now().Sub(e.Finished) >= closeIssuesGiveUp {
-		state, status = issuesFailed, fmt.Sprintf("关闭关联的 issue 失败 %d 次，已放弃：%s", tries, msg)
+		state, code = issuesFailed, StatusIssuesGaveUp
 	}
+	st := note(code, params)
 	p.s.log.Warn("合并队列：关闭关联的 issue", "repo", p.repo.FullName(), "pr", e.PR, "tries", tries, "err", cause)
-	_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET issues_state=$2, issues_tries=$3, status=$4, updated_at=now()
-		WHERE id=$1 AND issues_state=$5`, e.ID, state, tries, shorten.Text(status, maxReasonLen), issuesPending)
+	_, err := p.conn.Exec(ctx, `UPDATE merge_queue SET issues_state=$2, issues_tries=$3, status=$4, status_code=$6, status_params=$7,
+		updated_at=now() WHERE id=$1 AND issues_state=$5`,
+		e.ID, state, tries, shorten.Text(st.Text(), maxReasonLen), issuesPending, st.Code, st.Params)
 	return err
 }
 

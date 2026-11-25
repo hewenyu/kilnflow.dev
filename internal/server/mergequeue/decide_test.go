@@ -1,6 +1,7 @@
 package mergequeue
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -127,7 +128,7 @@ func TestDecide(t *testing.T) {
 		{
 			name: "正在更新，新 head 还没到",
 			s:    snapshot{Entry: &Entry{HeadSHA: head, Action: actionUpdating, ActionHead: head, ActionAt: &recent, ActionTries: 1}, Pull: openPull(nil)},
-			want: wait("正在更新 PR 分支，等待新的 commit"),
+			want: wait(Note{Code: StatusUpdating}),
 		},
 		{
 			name: "更新超时，重新请求",
@@ -156,7 +157,7 @@ func TestDecide(t *testing.T) {
 		{
 			name: "配置错误",
 			s:    snapshot{Pull: openPull(nil), ConfigErr: "method 只能是", Processed: true, Runs: passed},
-			want: wait("配置错误：method 只能是"),
+			want: wait(configErrorStatus("method 只能是")),
 		},
 		{
 			name: "还没有按默认分支规划这个 head",
@@ -166,7 +167,7 @@ func TestDecide(t *testing.T) {
 		{
 			name: "验证中",
 			s:    snapshot{Pull: openPull(nil), Processed: true, Runs: []runInfo{passed[0], {ID: 2, Name: "AI 审计", State: store.RunActive}}},
-			want: wait("等待验证：1/2 个 run 已结束"),
+			want: wait(Note{Code: StatusWaitRuns, Params: NoteParams{Done: 1, Total: 2}}),
 		},
 		{
 			name: "验证失败（有的还在跑也出队）",
@@ -232,7 +233,7 @@ func TestDecide(t *testing.T) {
 				Pull: openPull(nil), Processed: true, Required: req("ci/test"),
 				Runs: []runInfo{ciRun(store.RunActive, jobInfo{"test", store.JobRunning})},
 			},
-			want: wait("等待验证：0/1 个 run 已结束"),
+			want: wait(Note{Code: StatusWaitRuns, Params: NoteParams{Total: 1}}),
 		},
 		{
 			name: "必需的 job 被跳过（run 仍算成功）",
@@ -285,13 +286,27 @@ func TestDecide(t *testing.T) {
 			}
 			s.DefaultBranch, s.Now = "main", now
 			got := decide(&s)
+			// 原因码和中文说明来自同一个判断：有原因码时中文说明就是它的 Text（继续旧行的自动出队时沿用记下的说明）
+			for _, n := range []struct {
+				text string
+				note Note
+			}{{got.Status, got.StatusNote}, {got.Reason, got.ReasonNote}} {
+				if n.note.Code != "" && n.note.Text() != n.text {
+					t.Fatalf("原因码 %s 的说明 %q，记下的是 %q", n.note.Code, n.note.Text(), n.text)
+				}
+			}
+			if got.Kind == actRemove && got.ReasonNote.Code == "" && s.Entry.Action != actionRemoving {
+				t.Fatalf("新的出队原因没有原因码：%+v", got)
+			}
+			got.StatusNote, got.ReasonNote = Note{}, Note{}
+			tt.want.StatusNote, tt.want.ReasonNote = Note{}, Note{}
 			if tt.reason != "" {
 				if !strings.Contains(got.Reason, tt.reason) {
 					t.Fatalf("原因 %q 应包含 %q", got.Reason, tt.reason)
 				}
 				got.Reason = ""
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("decide() = %+v，想要 %+v", got, tt.want)
 			}
 		})

@@ -22,11 +22,11 @@ func testMergeQueuePage(now time.Time) *mergeQueuePage {
 		Label: mergequeue.Label, GitHub: "https://github.com", Repos: []string{"tester/demo"},
 		Queues: []mergeQueueView{{
 			Repo: "tester/demo", URL: mergeQueueURL("tester/demo"),
-			Queued: []mergeQueueEntry{{PR: 7, State: mergequeue.StateQueued, HeadSHA: "abc", EnqueuedBy: "alice", Status: "等待验证", EnqueuedAt: now}},
+			Queued: []mergeQueueEntry{{PR: 7, State: mergequeue.StateQueued, HeadSHA: "abc", EnqueuedBy: "alice", Status: rawText("等待验证"), EnqueuedAt: now}},
 			Recent: []mergeQueueEntry{{PR: 5, State: mergequeue.StateMerged, MergeSHA: "def", EnqueuedAt: now, FinishedAt: &now}},
 			AutoTags: []autoTagView{
 				{SHA: "def", PR: 5, Labels: []string{"minor"}, MergedBy: "alice", Source: "queue", State: autotag.StatePlanned, Tag: "v0.2.0", Created: now, Updated: now},
-				{SHA: "abc", PR: 4, Source: "webhook", State: autotag.StateFailed, Reason: "创建 tag 被拒绝", Tries: 3, Created: now, Updated: now, Retryable: true},
+				{SHA: "abc", PR: 4, Source: "webhook", State: autotag.StateFailed, Reason: rawText("创建 tag 被拒绝"), Tries: 3, Created: now, Updated: now, Retryable: true},
 			},
 		}},
 	}
@@ -44,6 +44,9 @@ func (e *webEnv) addQueueEntry(repoID int64, pr int, state, status, reason, merg
 	}
 	return id
 }
+
+// isRaw 表示 x 是原样显示的文字 s（没有原因码的旧记录：不按中文反推原因码）。
+func isRaw(x uiText, s string) bool { return x.id == "" && x.raw == s }
 
 func queuedPRs(v mergeQueueView) []int {
 	var out []int
@@ -118,13 +121,13 @@ func TestPageMergeQueue(t *testing.T) {
 	if !slices.Equal(queuedPRs(demo), []int{12, 3}) || !slices.Equal(recentPRs(demo), []int{4, 9}) || demo.URL != "/merge-queue?repo=tester%2Fdemo" {
 		t.Errorf("tester/demo：排队 %v，最近 %v，地址 %q", queuedPRs(demo), recentPRs(demo), demo.URL)
 	}
-	if q := demo.Queued[0]; q.Status != "等待验证：1/2 个 run 已结束" || q.EnqueuedBy != "github:alice" || q.HeadSHA == "" || q.FinishedAt != nil {
+	if q := demo.Queued[0]; !isRaw(q.Status, "等待验证：1/2 个 run 已结束") || q.EnqueuedBy != "github:alice" || q.HeadSHA == "" || q.FinishedAt != nil {
 		t.Errorf("队首 = %+v", q)
 	}
 	if m := demo.Recent[1]; m.State != mergequeue.StateMerged || m.MergeSHA != "fedcba9876543210" || m.FinishedAt == nil {
 		t.Errorf("已合并的一项 = %+v", m)
 	}
-	if r := demo.Recent[0]; r.State != mergequeue.StateRemoved || r.Reason != "验证失败：ci.yml" {
+	if r := demo.Recent[0]; r.State != mergequeue.StateRemoved || !isRaw(r.Reason, "验证失败：ci.yml") {
 		t.Errorf("已移出的一项 = %+v", r)
 	}
 
@@ -174,19 +177,19 @@ func TestPostMergeQueue_Errors(t *testing.T) {
 	wantStatus(t, "成员移除", e.post(e.bob, mergeQueuePath+"/remove", form()), http.StatusForbidden)
 	wantStatus(t, "CSRF 不对", e.post(e.alice, mergeQueuePath+"/add", url.Values{"repo": {testRepo}, "pr": {"7"}, "csrf": {"bad"}}), http.StatusForbidden)
 
-	flash := wantRedirect(t, "没有 GitHub 时入队", e.post(e.alice, mergeQueuePath+"/add", form()), "/merge-queue?repo=tester%2Fdemo")
+	flash := flashZH(t, wantRedirect(t, "没有 GitHub 时入队", e.post(e.alice, mergeQueuePath+"/add", form()), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "加入合并队列失败") || !strings.Contains(flash, mergequeue.ErrNoForge.Error()) {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "没有 GitHub 时移除", e.post(e.alice, mergeQueuePath+"/remove", form()), "/merge-queue?repo=tester%2Fdemo")
+	flash = flashZH(t, wantRedirect(t, "没有 GitHub 时移除", e.post(e.alice, mergeQueuePath+"/remove", form()), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "移出合并队列失败") || !strings.Contains(flash, mergequeue.ErrNoForge.Error()) {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "PR 号无效", e.post(e.alice, mergeQueuePath+"/add", url.Values{"repo": {testRepo}, "pr": {"abc"}}), "/merge-queue?repo=tester%2Fdemo")
+	flash = flashZH(t, wantRedirect(t, "PR 号无效", e.post(e.alice, mergeQueuePath+"/add", url.Values{"repo": {testRepo}, "pr": {"abc"}}), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "PR 号") {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "没有选仓库", e.post(e.alice, mergeQueuePath+"/add", url.Values{"pr": {"7"}}), mergeQueuePath)
+	flash = flashZH(t, wantRedirect(t, "没有选仓库", e.post(e.alice, mergeQueuePath+"/add", url.Values{"pr": {"7"}}), mergeQueuePath))
 	if !strings.Contains(flash, "请选择仓库") {
 		t.Errorf("提示 = %q", flash)
 	}
@@ -204,7 +207,7 @@ func TestPostMergeQueue_GitHub(t *testing.T) {
 	e.gh.SetPull(e.ghRepo, fakegithub.Pull{Number: 8, HeadRef: "old", HeadSHA: head, State: "closed"})
 	form := func() url.Values { return url.Values{"repo": {testRepo}, "pr": {"#7"}} }
 
-	flash := wantRedirect(t, "入队", e.post(e.alice, mergeQueuePath+"/add", form()), "/merge-queue?repo=tester%2Fdemo")
+	flash := flashZH(t, wantRedirect(t, "入队", e.post(e.alice, mergeQueuePath+"/add", form()), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "已把 tester/demo#7 加入合并队列") {
 		t.Errorf("提示 = %q", flash)
 	}
@@ -214,7 +217,7 @@ func TestPostMergeQueue_GitHub(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM merge_queue WHERE repo_id=$1 AND pr_number=7 AND state='queued' AND enqueued_by='alice' AND head_sha=$2`, testRepoID, head); n != 1 {
 		t.Errorf("排队中的 PR #7 有 %d 项", n)
 	}
-	flash = wantRedirect(t, "重复入队", e.post(e.alice, mergeQueuePath+"/add", form()), "/merge-queue?repo=tester%2Fdemo")
+	flash = flashZH(t, wantRedirect(t, "重复入队", e.post(e.alice, mergeQueuePath+"/add", form()), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "已经在合并队列中") {
 		t.Errorf("提示 = %q", flash)
 	}
@@ -225,7 +228,7 @@ func TestPostMergeQueue_GitHub(t *testing.T) {
 		t.Errorf("入队后的合并队列页 = %+v", p)
 	}
 
-	flash = wantRedirect(t, "移除", e.post(e.alice, mergeQueuePath+"/remove", url.Values{"repo": {testRepo}, "pr": {"7"}}), "/merge-queue?repo=tester%2Fdemo")
+	flash = flashZH(t, wantRedirect(t, "移除", e.post(e.alice, mergeQueuePath+"/remove", url.Values{"repo": {testRepo}, "pr": {"7"}}), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "已请求把 tester/demo#7 移出合并队列") {
 		t.Errorf("提示 = %q", flash)
 	}
@@ -236,7 +239,7 @@ func TestPostMergeQueue_GitHub(t *testing.T) {
 		t.Errorf("移除的审计日志 = %+v", a)
 	}
 
-	flash = wantRedirect(t, "关闭的 PR 入队", e.post(e.alice, mergeQueuePath+"/add", url.Values{"repo": {testRepo}, "pr": {"8"}}), "/merge-queue?repo=tester%2Fdemo")
+	flash = flashZH(t, wantRedirect(t, "关闭的 PR 入队", e.post(e.alice, mergeQueuePath+"/add", url.Values{"repo": {testRepo}, "pr": {"8"}}), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "加入合并队列失败") || !strings.Contains(flash, "不是打开的") {
 		t.Errorf("提示 = %q", flash)
 	}
@@ -266,7 +269,7 @@ func TestPageRun_MergeQueue(t *testing.T) {
 	e.addQueueEntry(testRepoID, 3, mergequeue.StateQueued, "等待验证：0/1 个 run 已结束", "", "")
 	e.addQueueEntry(testRepoID, 7, mergequeue.StateQueued, "排在第 2 个", "", "")
 	mq = pageData[runData](t, e.get(e.bob, runPath(pr)).Body.String()).MergeQueue
-	if mq == nil || mq.Entry == nil || mq.Entry.State != mergequeue.StateQueued || mq.Pos != 2 || mq.Entry.Status != "排在第 2 个" {
+	if mq == nil || mq.Entry == nil || mq.Entry.State != mergequeue.StateQueued || mq.Pos != 2 || !isRaw(mq.Entry.Status, "排在第 2 个") {
 		t.Fatalf("排队中 = %+v", mq)
 	}
 
@@ -304,18 +307,18 @@ func TestMergeQueueAutoTags(t *testing.T) {
 	}
 	f, pl := p.Queues[0].AutoTags[0], p.Queues[0].AutoTags[1]
 	expect(t, "失败的记录（新的在前）", f, f.SHA == failedSHA, f.PR == 4, f.State == autotag.StateFailed, f.Tag == "v0.3.0",
-		strings.Contains(f.Reason, "Contents"), f.Retryable, f.MergedBy == "alice", f.Source == "webhook", len(f.Labels) == 1,
+		isRaw(f.Reason, "创建 tag 被拒绝：App 需要 Contents 写权限"), f.Retryable, f.MergedBy == "alice", f.Source == "webhook", len(f.Labels) == 1,
 		!f.SenderIsBot, f.WorkItemID == 0)
 	// 机器人合并的可信 AI 开发实现 PR：列出真实的发送者和认定的工作项
 	expect(t, "已规划的记录", pl, pl.State == autotag.StatePlanned, !pl.Retryable, pl.SenderIsBot, pl.WorkItemID == 12)
 
 	form := func(sha string) url.Values { return url.Values{"repo": {testRepo}, "sha": {sha}} }
 	wantStatus(t, "成员重试", e.post(e.bob, mergeQueuePath+"/autotag/retry", form(failedSHA)), http.StatusForbidden)
-	flash := wantRedirect(t, "重试已完成的记录", e.post(e.alice, mergeQueuePath+"/autotag/retry", form(plannedSHA)), "/merge-queue?repo=tester%2Fdemo")
+	flash := flashZH(t, wantRedirect(t, "重试已完成的记录", e.post(e.alice, mergeQueuePath+"/autotag/retry", form(plannedSHA)), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, autotag.ErrNotRetryable.Error()) {
 		t.Errorf("提示 = %q", flash)
 	}
-	flash = wantRedirect(t, "重试失败的记录", e.post(e.alice, mergeQueuePath+"/autotag/retry", form(failedSHA)), "/merge-queue?repo=tester%2Fdemo")
+	flash = flashZH(t, wantRedirect(t, "重试失败的记录", e.post(e.alice, mergeQueuePath+"/autotag/retry", form(failedSHA)), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "已重新处理 aaaaaaa") {
 		t.Errorf("提示 = %q", flash)
 	}
@@ -325,8 +328,67 @@ func TestMergeQueueAutoTags(t *testing.T) {
 	if a := e.audits("autotag.retry"); len(a) != 1 || a[0].Actor != "alice" {
 		t.Errorf("重试的审计：%+v", a)
 	}
-	flash = wantRedirect(t, "缺少 commit", e.post(e.alice, mergeQueuePath+"/autotag/retry", url.Values{"repo": {testRepo}}), "/merge-queue?repo=tester%2Fdemo")
+	flash = flashZH(t, wantRedirect(t, "缺少 commit", e.post(e.alice, mergeQueuePath+"/autotag/retry", url.Values{"repo": {testRepo}}), "/merge-queue?repo=tester%2Fdemo"))
 	if !strings.Contains(flash, "缺少") {
 		t.Errorf("提示 = %q", flash)
+	}
+}
+
+// 合并队列页的文字（多语言）：有原因码的状态和原因是消息，没有原因码的旧记录原样显示中文说明；关闭关联 issue 的失败按原因码
+// （旧记录按 issues_state 和失败次数）给出语义级别，不看中文说明。页面标题和找不到仓库的说明是消息。
+func TestPageMergeQueue_Text(t *testing.T) {
+	t.Parallel()
+	e := newWebEnv(t)
+	e.exec(`INSERT INTO merge_queue (repo_id, pr_number, state, status, status_code, status_params)
+		VALUES ($1, 12, 'queued', '等待验证：1/2 个 run 已结束', 'wait_runs', '{"done":1,"total":2}')`, testRepoID)
+	e.exec(`INSERT INTO merge_queue (repo_id, pr_number, state, reason, reason_code, reason_params, removal, finished_at)
+		VALUES ($1, 11, 'removed', '与目标分支 main（0123456789ab）冲突，已交给 AI 开发返修（工作项 #12）', 'conflict_dev',
+		'{"branch":"main","sha":"0123456789abcdef","work_item":12}', 'conflict_dev', now() - interval '3 minutes')`, testRepoID)
+	e.exec(`INSERT INTO merge_queue (repo_id, pr_number, state, merge_sha, status, status_code, status_params, issues_state, issues_tries,
+		finished_at) VALUES ($1, 10, 'merged', 'abc', '关闭关联的 issue 失败（第 1 次，稍后重试）：403', 'issues_retry',
+		'{"tries":1,"detail":"403","rejected":true}', 'pending', 1, now() - interval '2 minutes')`, testRepoID)
+	// 升级前的旧记录：没有原因码
+	e.exec(`INSERT INTO merge_queue (repo_id, pr_number, state, merge_sha, status, issues_state, issues_tries, finished_at)
+		VALUES ($1, 9, 'merged', 'def', '关闭关联的 issue 失败 3 次，已放弃：x', 'failed', 3, now() - interval '1 minute')`, testRepoID)
+	e.exec(`INSERT INTO auto_tags (repo_id, sha, pr_number, merged_by, source, state, reason, reason_code, reason_params)
+		VALUES ($1, 'aaaa', 4, 'alice', 'webhook', 'skipped', '目标分支 dev 不是发版分支 main，不自动打 tag', 'not_default_branch',
+		'{"branch":"dev","release":"main"}')`, testRepoID)
+	e.addAutoTag(testRepoID, "bbbb", 5, autotag.StateFailed, "", "暂时失败，稍后重试：旧的说明", 0, false)
+
+	body := e.get(e.bob, mergeQueuePath).Body.String()
+	wantPageZH(t, body, "merge_queue", "merge_queue", "合并队列")
+	p := pageData[mergeQueuePage](t, body)
+	if len(p.Queues) != 1 || len(p.Queues[0].Queued) != 1 || len(p.Queues[0].Recent) != 3 || len(p.Queues[0].AutoTags) != 2 {
+		t.Fatalf("合并队列页 = %+v", p)
+	}
+	q := p.Queues[0]
+	if s := q.Queued[0].Status; s.id != msgMQStatusWaitRuns || textZH(t, s) != "等待验证：1/2 个 run 已结束" {
+		t.Errorf("排队中的状态 = %+v", s)
+	}
+	legacy, failing, removed := q.Recent[0], q.Recent[1], q.Recent[2]
+	if !isRaw(legacy.Status, "关闭关联的 issue 失败 3 次，已放弃：x") || legacy.StatusTone != toneBad {
+		t.Errorf("旧记录：状态 %+v，级别 %q", legacy.Status, legacy.StatusTone)
+	}
+	if failing.Status.id != msgMQStatusIssuesRetryDeny || failing.StatusTone != toneBad ||
+		textZH(t, failing.Status) != "关闭关联的 issue 失败（第 1 次，稍后重试）：403（GitHub App 需要 Issues 的读写权限，见 DEPLOY.md #3）" {
+		t.Errorf("关闭失败：状态 %+v（%s），级别 %q", failing.Status, textZH(t, failing.Status), failing.StatusTone)
+	}
+	if removed.Reason.id != msgMQReasonConflictDev || textZH(t, removed.Reason) != "与目标分支 main（0123456789ab）冲突，已交给 AI 开发返修（工作项 #12）" ||
+		removed.StatusTone != toneNone {
+		t.Errorf("冲突出队：原因 %+v，级别 %q", removed.Reason, removed.StatusTone)
+	}
+	old, coded := q.AutoTags[0], q.AutoTags[1]
+	if old.Reason.id != "" || !isRaw(old.Reason, "暂时失败，稍后重试：旧的说明") {
+		t.Errorf("旧的自动打 tag 记录：%+v", old.Reason)
+	}
+	if coded.Reason.id != msgATReasonNotDefault || textZH(t, coded.Reason) != "目标分支 dev 不是发版分支 main，不自动打 tag" {
+		t.Errorf("自动打 tag 的原因：%+v", coded.Reason)
+	}
+
+	wantPageZH(t, e.get(e.bob, mergeQueuePath+"?repo=tester/demo").Body.String(), "merge_queue", "merge_queue", "合并队列 · tester/demo")
+	w := e.get(e.bob, mergeQueuePath+"?repo=tester/ghost")
+	wantStatus(t, "不存在的仓库", w, http.StatusNotFound)
+	if got := pageTextZH(t, w.Body.String()); !strings.Contains(got, "Kiln 中没有仓库 tester/ghost") {
+		t.Errorf("找不到仓库的说明 = %q", got)
 	}
 }

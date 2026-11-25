@@ -1,6 +1,8 @@
 {
  "Page": "merge_queue",
- "Title": "合并队列",
+ "Title": {
+  "id": "mergeQueue.pageTitle"
+ },
  "Nav": "merge_queue",
  "Status": 200,
  "Session": {
@@ -25,13 +27,20 @@
       "State": "queued",
       "HeadSHA": "9f2c4e1a7b3d5c6e8f0a1b2c3d4e5f6a7b8c9d0e",
       "EnqueuedBy": "github:octocat",
-      "Status": "等待验证：2/3 个 run 已结束",
+      "Status": {
+       "id": "mqStatus.waitRuns",
+       "params": {
+        "done": 2,
+        "total": 3
+       }
+      },
       "Reason": "",
       "Removal": "",
       "MergeSHA": "",
       "EnqueuedAt": "2026-11-08T09:12:00-08:00",
       "FinishedAt": null,
-      "BaseRef": "main"
+      "BaseRef": "main",
+      "StatusTone": ""
      },
      {
       "PR": 107,
@@ -44,20 +53,28 @@
       "MergeSHA": "",
       "EnqueuedAt": "2026-11-08T09:20:00-08:00",
       "FinishedAt": null,
-      "BaseRef": "dev"
+      "BaseRef": "dev",
+      "StatusTone": ""
      },
      {
       "PR": 108,
       "State": "queued",
       "HeadSHA": "",
       "EnqueuedBy": "github:lin-design",
-      "Status": "目标 dev · 排在第 2 个",
+      "Status": {
+       "id": "mqStatus.positionBranch",
+       "params": {
+        "branch": "dev",
+        "pos": 2
+       }
+      },
       "Reason": "",
       "Removal": "",
       "MergeSHA": "",
       "EnqueuedAt": "2026-11-08T09:31:00-08:00",
       "FinishedAt": null,
-      "BaseRef": "dev"
+      "BaseRef": "dev",
+      "StatusTone": ""
      }
     ],
     "Recent": [
@@ -66,13 +83,19 @@
       "State": "merged",
       "HeadSHA": "c0ffee1234567890abcdef1234567890abcdef12",
       "EnqueuedBy": "github:octocat",
-      "Status": "已关闭关联的 issue #101",
+      "Status": {
+       "id": "mqStatus.issuesClosed",
+       "params": {
+        "closed": "#101"
+       }
+      },
       "Reason": "",
       "Removal": "",
       "MergeSHA": "5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f",
       "EnqueuedAt": "2026-11-08T08:40:00-08:00",
       "FinishedAt": "2026-11-08T09:05:00-08:00",
-      "BaseRef": "main"
+      "BaseRef": "main",
+      "StatusTone": ""
      },
      {
       "PR": 101,
@@ -85,7 +108,8 @@
       "MergeSHA": "",
       "EnqueuedAt": "2026-11-08T07:58:00-08:00",
       "FinishedAt": "2026-11-08T08:21:00-08:00",
-      "BaseRef": "main"
+      "BaseRef": "main",
+      "StatusTone": ""
      },
      {
       "PR": 99,
@@ -93,12 +117,15 @@
       "HeadSHA": "bb11bb22cc33dd44ee55ff6677889900aabbccdd",
       "EnqueuedBy": "github:octocat",
       "Status": "",
-      "Reason": "PR 在合并队列之外被合并",
+      "Reason": {
+       "id": "mqReason.mergedOutside"
+      },
       "Removal": "",
       "MergeSHA": "1234abcd5678ef901234abcd5678ef901234abcd",
       "EnqueuedAt": "2026-11-07T16:10:00-08:00",
       "FinishedAt": "2026-11-07T16:30:00-08:00",
-      "BaseRef": "main"
+      "BaseRef": "main",
+      "StatusTone": ""
      },
      {
       "PR": 97,
@@ -106,12 +133,20 @@
       "HeadSHA": "cc11bb22cc33dd44ee55ff6677889900aabbccdd",
       "EnqueuedBy": "auto",
       "Status": "",
-      "Reason": "与目标分支 main（5e6f7a8b9c0d）冲突，已交给 AI 开发返修（工作项 #12）",
+      "Reason": {
+       "id": "mqReason.conflictDev",
+       "params": {
+        "branch": "main",
+        "sha": "5e6f7a8b9c0d",
+        "item": 12
+       }
+      },
       "Removal": "conflict_dev",
       "MergeSHA": "",
       "EnqueuedAt": "2026-11-07T15:10:00-08:00",
       "FinishedAt": "2026-11-07T15:20:00-08:00",
-      "BaseRef": "main"
+      "BaseRef": "main",
+      "StatusTone": ""
      },
      {
       "PR": 96,
@@ -124,7 +159,28 @@
       "MergeSHA": "",
       "EnqueuedAt": "2026-11-07T14:10:00-08:00",
       "FinishedAt": "2026-11-07T14:20:00-08:00",
-      "BaseRef": "main"
+      "BaseRef": "main",
+      "StatusTone": ""
+     },
+     {
+      "PR": 95,
+      "State": "merged",
+      "HeadSHA": "ee11bb22cc33dd44ee55ff6677889900aabbccdd",
+      "EnqueuedBy": "github:octocat",
+      "Status": {
+       "id": "mqStatus.issuesGaveUpDenied",
+       "params": {
+        "count": 5,
+        "detail": "403 Resource not accessible by integration"
+       }
+      },
+      "Reason": "",
+      "Removal": "",
+      "MergeSHA": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+      "EnqueuedAt": "2026-11-07T12:10:00-08:00",
+      "FinishedAt": "2026-11-07T12:30:00-08:00",
+      "BaseRef": "main",
+      "StatusTone": "bad"
      }
     ],
     "AutoTags": [
@@ -157,7 +213,12 @@
       "Source": "webhook",
       "State": "failed",
       "Tag": "v0.4.3",
-      "Reason": "创建 tag 被拒绝：GitHub App 需要 Contents 读写权限",
+      "Reason": {
+       "id": "autoTagReason.permission",
+       "params": {
+        "detail": "403 Resource not accessible by integration"
+       }
+      },
       "Tries": 3,
       "Created": "2026-11-05T03:00:00-08:00",
       "Updated": "2026-11-05T03:05:00-08:00",
@@ -182,6 +243,25 @@
       "SenderIsBot": true,
       "WorkItemID": 12,
       "BaseRef": "main"
+     },
+     {
+      "SHA": "aabbccddeeff00112233445566778899aabbccdd",
+      "PR": 110,
+      "Labels": [
+       "release:skip"
+      ],
+      "MergedBy": "octocat",
+      "Source": "webhook",
+      "State": "skipped",
+      "Tag": "",
+      "Reason": "PR 有 release:skip",
+      "Tries": 1,
+      "Created": "2026-11-03T10:00:00-08:00",
+      "Updated": "2026-11-03T10:00:05-08:00",
+      "Retryable": true,
+      "SenderIsBot": false,
+      "WorkItemID": 0,
+      "BaseRef": "main"
      }
     ]
    },
@@ -196,12 +276,15 @@
       "HeadSHA": "dd11bb22cc33dd44ee55ff6677889900aabbccdd",
       "EnqueuedBy": "octocat",
       "Status": "",
-      "Reason": "PR 已关闭",
+      "Reason": {
+       "id": "mqReason.prClosed"
+      },
       "Removal": "",
       "MergeSHA": "",
       "EnqueuedAt": "2026-11-06T10:00:00-08:00",
       "FinishedAt": "2026-11-06T11:00:00-08:00",
-      "BaseRef": "main"
+      "BaseRef": "main",
+      "StatusTone": ""
      }
     ]
    }

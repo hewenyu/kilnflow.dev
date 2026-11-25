@@ -1,9 +1,7 @@
 package mergequeue
 
 import (
-	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/hewenyu/kilnflow.dev/internal/forge"
@@ -53,7 +51,7 @@ type snapshot struct {
 	ConfigErr string
 	// BranchRemoval 表示 PR 的目标分支不在配置允许的合并分支中（BranchReason 是出队原因）：配置有效时才判断。
 	BranchRemoval bool
-	BranchReason  string
+	BranchReason  Note
 	// Parents 是 PR 当前 head 的父提交（只在 head 与记录不同、且正在更新分支时读取）。
 	Parents []string
 	// Processed 表示 Kiln 已经按 PR 的目标分支规划完这个 head（pr_plans 中有记录）。
@@ -85,24 +83,35 @@ const (
 	actMerge
 )
 
-// decision 是对一个队列项的决定。
+// decision 是对一个队列项的决定。Status、Reason 是中文说明，StatusNote、ReasonNote 是同一个判断的原因码（见 notes.go）。
 type decision struct {
-	Kind      actionKind
-	Status    string
-	Reason    string
-	Comment   bool
-	DropLabel bool
-	Head      string
+	Kind       actionKind
+	Status     string
+	Reason     string
+	StatusNote Note
+	ReasonNote Note
+	Comment    bool
+	DropLabel  bool
+	Head       string
 	// Removal、ConflictBase 是出队的类别和冲突时默认分支的 head（见 Entry）。
 	Removal      string
 	ConflictBase string
 }
 
-func wait(status string) decision { return decision{Kind: actWait, Status: status} }
+func wait(status Note) decision {
+	return decision{Kind: actWait, Status: status.Text(), StatusNote: status}
+}
+
+// removeNote 出队，原因是 reason（不评论、不去掉 label）。
+func removeNote(reason Note) decision {
+	return decision{Kind: actRemove, Reason: reason.Text(), ReasonNote: reason}
+}
 
 // removeWithComment 出队，去掉 label 并在 PR 上评论原因（自动出队）。
-func removeWithComment(reason string) decision {
-	return decision{Kind: actRemove, Reason: reason, Comment: true, DropLabel: true}
+func removeWithComment(reason Note) decision {
+	d := removeNote(reason)
+	d.Comment, d.DropLabel = true, true
+	return d
 }
 
 // decidePull 根据 PR 本身的状态决定（PLAN #28.3 决策表的前几行）。返回 false 表示 PR 本身没有问题，需要继续看验证结果。
@@ -115,17 +124,20 @@ func decidePull(s *snapshot) (decision, bool) {
 	case e.Action == actionRemoving:
 		// 上一次自动出队没有完成（例如评论失败）：按记下的原因继续（关闭的 PR 不评论）
 		return decision{
-			Kind: actRemove, Reason: e.Reason, Comment: true, DropLabel: p.HasLabel(Label), Removal: e.Removal, ConflictBase: e.ConflictBase,
+			Kind: actRemove, Reason: e.Reason, ReasonNote: e.ReasonNote, Comment: true, DropLabel: p.HasLabel(Label), Removal: e.Removal,
+			ConflictBase: e.ConflictBase,
 		}, true
 	case p.State == forge.PullClosed:
 		// 关闭的 PR 不评论；去掉 label，重新打开时不会被当成仍在队列中
-		return decision{Kind: actRemove, Reason: "PR 已关闭", DropLabel: p.HasLabel(Label)}, true
+		d := removeNote(Note{Code: ReasonPRClosed})
+		d.DropLabel = p.HasLabel(Label)
+		return d, true
 	case !p.HasLabel(Label):
-		return decision{Kind: actRemove, Reason: "去掉了 " + Label + " label"}, true
+		return removeNote(Note{Code: ReasonLabelRemoved}), true
 	case p.Fork:
-		return removeWithComment("fork 的 PR 不能合并"), true
+		return removeWithComment(Note{Code: ReasonFork}), true
 	case p.Draft:
-		return removeWithComment("PR 是 draft"), true
+		return removeWithComment(Note{Code: ReasonDraft}), true
 	case e.HeadSHA == "":
 		return decision{Kind: actAcceptHead, Head: p.HeadSHA}, true
 	case p.HeadSHA != e.HeadSHA:
@@ -136,7 +148,7 @@ func decidePull(s *snapshot) (decision, bool) {
 			(e.ActionBase == "" || e.ActionBase == p.BaseRef) && (e.BaseRef == "" || e.BaseRef == p.BaseRef) {
 			return decision{Kind: actAcceptHead, Head: p.HeadSHA}, true
 		}
-		return removeWithComment("入队后推送了新的 commit，确认后重新加上 " + Label + " 即可再次入队"), true
+		return removeWithComment(Note{Code: ReasonNewCommit}), true
 	}
 	return decision{}, false
 }
@@ -200,8 +212,22 @@ func unsuccessfulRequired(s *snapshot) []string {
 }
 
 // notPlannedStatus 是等待 Kiln 按目标分支规划 head 时的状态。
-func notPlannedStatus(baseRef string) string {
-	return "等待 Kiln 按 " + baseRef + " 规划这个 commit 的验证（接入 Kiln 或升级到合并队列之前打开的 PR 需要推送新的 commit，或关闭后重新打开）"
+func notPlannedStatus(baseRef string) Note {
+	return Note{Code: StatusWaitPlan, Params: NoteParams{Branch: baseRef}}
+}
+
+// configErrorStatus 是默认分支的 .kiln/merge.yml 有错误时的状态。
+func configErrorStatus(cfgErr string) Note {
+	return note(StatusConfigError, NoteParams{Detail: cfgErr})
+}
+
+// updateExhausted 是更新 PR 分支 tries 次都没有完成（请求没有超时，在等平台确认或者暂时失败）时的出队原因：status 是当时的
+// 状态。在等平台确认可合并状态时（StatusMergeability）带上那个状态。
+func updateExhausted(tries int, status string, statusNote Note) Note {
+	if statusNote.Code == StatusMergeability {
+		return note(ReasonUpdateUnconfirmed, NoteParams{Tries: tries, State: statusNote.Params.State, Detail: status})
+	}
+	return note(ReasonUpdateStalled, NoteParams{Tries: tries, Detail: status})
 }
 
 // decide 决定一项的下一步动作（PLAN #28.3）。
@@ -213,29 +239,29 @@ func decide(s *snapshot) decision {
 	// 配置错误时一律等待（PLAN #28.5）：不按允许的分支出队合法 PR，也不因为正在更新分支就继续发请求——配置修好之前
 	// 不改变队列，也不写平台。
 	if s.ConfigErr != "" {
-		return wait("配置错误：" + s.ConfigErr)
+		return wait(configErrorStatus(s.ConfigErr))
 	}
 	if e.Action == actionUpdating {
 		if e.ActionAt == nil {
 			if e.ActionTries >= maxUpdateTries {
 				// 计了次数的等待（平台回答冲突、PR 的可合并状态却一直没有确认）用完：出队，不交给 AI 开发
-				return removeWithComment(fmt.Sprintf("更新 PR 分支 %d 次都没有完成（%s）", e.ActionTries, e.Status))
+				return removeWithComment(updateExhausted(e.ActionTries, e.Status, e.StatusNote))
 			}
 			// 上一次请求暂时失败（结果未知）或者在等平台计算可合并状态，新 head 也没有到：重新请求
 			return decision{Kind: actUpdate}
 		}
 		if s.Now.Sub(*e.ActionAt) < updateTimeout {
-			return wait("正在更新 PR 分支，等待新的 commit")
+			return wait(Note{Code: StatusUpdating})
 		}
 		if e.ActionTries >= maxUpdateTries {
-			return removeWithComment(fmt.Sprintf("更新 PR 分支 %d 次都没有完成", e.ActionTries))
+			return removeWithComment(Note{Code: ReasonUpdateTimeout, Params: NoteParams{Tries: e.ActionTries}})
 		}
 		return decision{Kind: actUpdate}
 	}
 	if !s.Processed {
 		return wait(notPlannedStatus(s.Pull.BaseRef))
 	}
-	var failed []string
+	var failed []RunRef
 	done := 0
 	for _, r := range s.Runs {
 		switch {
@@ -244,25 +270,25 @@ func decide(s *snapshot) decision {
 			done++
 		default:
 			done++
-			failed = append(failed, fmt.Sprintf("%s（run #%d，%s）", r.Name, r.ID, r.State))
+			failed = append(failed, RunRef{Name: r.Name, ID: r.ID, State: string(r.State)})
 		}
 	}
 	if len(failed) > 0 {
-		return removeWithComment("验证没有通过：" + strings.Join(failed, "、"))
+		return removeWithComment(Note{Code: ReasonChecksFailed, Params: NoteParams{Runs: failed}})
 	}
 	// 规划完成后 run 和 job 都已确定（与 run 在同一事务中创建）：没有任何 run、缺少必需的验证时不会再出现，直接出队
 	// 跳过的 run（例如 paths 不匹配）不算验证：PR 可以改自己 head 中的过滤条件让 run 被跳过
 	if !slices.ContainsFunc(s.Runs, func(r runInfo) bool { return r.State != store.RunSkipped }) {
-		return removeWithComment("这个 commit 没有任何验证（没有 pull_request 的 run，或者都被跳过了，例如 PR 删掉了 .kiln/workflows 中的 workflow、改了 paths）：合并队列不合并没有经过验证的 PR")
+		return removeWithComment(Note{Code: ReasonNoChecks})
 	}
 	if missing := missingRequired(s); len(missing) > 0 {
-		return removeWithComment(fmt.Sprintf("缺少必需的验证：%s（默认分支的 %s 要求；PR 不能删除或改名它们）", strings.Join(missing, "、"), mergecfg.Path))
+		return removeWithComment(Note{Code: ReasonMissingRequired, Params: NoteParams{Checks: missing}})
 	}
 	if done < len(s.Runs) {
-		return wait(fmt.Sprintf("等待验证：%d/%d 个 run 已结束", done, len(s.Runs)))
+		return wait(Note{Code: StatusWaitRuns, Params: NoteParams{Done: done, Total: len(s.Runs)}})
 	}
 	if bad := unsuccessfulRequired(s); len(bad) > 0 {
-		return removeWithComment(fmt.Sprintf("必需的验证没有成功：%s（默认分支的 %s 要求）", strings.Join(bad, "、"), mergecfg.Path))
+		return removeWithComment(Note{Code: ReasonRequiredFailed, Params: NoteParams{Checks: bad}})
 	}
 	if s.Behind > 0 {
 		return decision{Kind: actUpdate}

@@ -25,6 +25,7 @@ import (
 	"github.com/hewenyu/kilnflow.dev/internal/server/mqevents"
 	"github.com/hewenyu/kilnflow.dev/internal/server/outbox"
 	"github.com/hewenyu/kilnflow.dev/internal/server/store"
+	"github.com/hewenyu/kilnflow.dev/internal/shorten"
 )
 
 // 自动打 tag 的功能测试（PLAN #29.4 的崩溃点表、T1–T3）：数据库用 pgtest，GitHub 用 fakegithub（本地 git 仓库），
@@ -184,7 +185,23 @@ func (h *harness) get(sha string) *Record {
 	if err != nil || len(rs) != 1 {
 		h.t.Fatalf("记录 %s：%v（%d 条）", sha, err, len(rs))
 	}
-	return rs[0]
+	// 原因码和中文说明一起写入、一起清空，中文说明就是原因码的说明（AI 开发归属的说明由 AI 开发给出，Text 为空）
+	r := rs[0]
+	if r.Reason == "" && r.ReasonNote.Code != "" {
+		h.t.Fatalf("记录 %s 没有原因，原因码却是 %q", sha[:7], r.ReasonNote.Code)
+	}
+	if txt := r.ReasonNote.Text(); txt != "" && shorten.Text(txt, maxReasonLen) != r.Reason {
+		h.t.Fatalf("记录 %s 的原因码 %s 的说明是 %q，记下的是 %q", sha[:7], r.ReasonNote.Code, txt, r.Reason)
+	}
+	return r
+}
+
+// wantReason 断言记录的原因码。
+func (h *harness) wantReason(r *Record, code string) {
+	h.t.Helper()
+	if r.ReasonNote.Code != code {
+		h.t.Fatalf("记录 %s：原因码 %q（%s），想要 %q", r.SHA[:7], r.ReasonNote.Code, r.Reason, code)
+	}
 }
 
 // tagsAt 返回仓库中指向 commit 的 tag。
@@ -280,10 +297,11 @@ func TestSkipped(t *testing.T) {
 	for name, tc := range map[string]struct {
 		yml    string
 		labels []string
+		code   string
 	}{
-		"没有 merge.yml": {"", nil},
-		"没有 tag:":      {"method: squash\n", nil},
-		"release:skip": {tagConfig, []string{LabelMajor, LabelSkip}},
+		"没有 merge.yml": {"", nil, ReasonNoTagConfig},
+		"没有 tag:":      {"method: squash\n", nil, ReasonNoTagConfig},
+		"release:skip": {tagConfig, []string{LabelMajor, LabelSkip}, ReasonSkipLabel},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -291,7 +309,7 @@ func TestSkipped(t *testing.T) {
 			sha := h.commit(nil, "PR")
 			h.record(sha, 1, tc.labels...)
 			h.mustProcess()
-			h.wantState(sha, StateSkipped, "")
+			h.wantReason(h.wantState(sha, StateSkipped, ""), tc.code)
 			if h.countRequests(refsRoute) != 0 || len(h.planner.requests()) != 0 {
 				t.Error("跳过的记录不应建 tag 或规划")
 			}
@@ -306,8 +324,10 @@ func TestConfigError(t *testing.T) {
 	c1 := h.commit(nil, "one")
 	h.record(c1, 1)
 	h.mustProcess()
-	if r := h.wantState(c1, StateFailed, ""); !strings.Contains(r.Reason, "tag.prefix") {
-		t.Errorf("原因：%s", r.Reason)
+	if r := h.wantState(c1, StateFailed, ""); !strings.Contains(r.Reason, "tag.prefix") || !strings.Contains(r.ReasonNote.Params.Detail, "tag.prefix") {
+		t.Errorf("原因：%s（%+v）", r.Reason, r.ReasonNote)
+	} else {
+		h.wantReason(r, ReasonConfigError)
 	}
 }
 
@@ -350,12 +370,18 @@ func TestCreateRejected(t *testing.T) {
 	h.mustProcess()
 	if r := h.wantState(sha, StateFailed, "v0.1.0"); !strings.Contains(r.Reason, "Contents") {
 		t.Errorf("原因应提示权限：%s", r.Reason)
+	} else {
+		h.wantReason(r, ReasonPermission)
 	}
 	if h.audits("autotag.failed") != 1 {
 		t.Error("应写审计日志 autotag.failed")
 	}
 	if err := h.svc.Retry(h.ctx, repoID, sha, "admin"); err != nil {
 		t.Fatal(err)
+	}
+	// 重试清掉原因和原因码
+	if r := h.wantState(sha, StatePending, ""); r.Reason != "" || r.ReasonNote.Code != "" || r.ReasonNote.Params != (NoteParams{}) {
+		t.Fatalf("重试后应清掉原因：%q %+v", r.Reason, r.ReasonNote)
 	}
 	if err := h.svc.Retry(h.ctx, repoID, sha, "admin"); !errors.Is(err, ErrNotRetryable) {
 		t.Errorf("pending 的记录不能重试：%v", err)
@@ -523,8 +549,10 @@ func TestLateEventOlderCommit(t *testing.T) {
 	h.wantState(newer, StatePlanned, "v0.1.0")
 	h.record(old, 1)
 	h.mustProcess()
-	if r := h.wantState(old, StateSkipped, ""); !strings.Contains(r.Reason, "v0.1.0") {
-		t.Errorf("原因：%s", r.Reason)
+	if r := h.wantState(old, StateSkipped, ""); !strings.Contains(r.Reason, "v0.1.0") || r.ReasonNote.Params.Tag != "v0.1.0" {
+		t.Errorf("原因：%s（%+v）", r.Reason, r.ReasonNote)
+	} else {
+		h.wantReason(r, ReasonVersionOrder)
 	}
 	if got := h.tagsAt(old); len(got) != 0 {
 		t.Errorf("旧 commit 不应打 tag：%v", got)
@@ -645,6 +673,8 @@ func TestNextOutOfRange(t *testing.T) {
 	h.mustProcess()
 	if r := h.wantState(sha, StateFailed, ""); !strings.Contains(r.Reason, "超出范围") {
 		t.Fatalf("原因：%q", r.Reason)
+	} else {
+		h.wantReason(r, ReasonVersionOverflow)
 	}
 	h.wantState(next, StatePlanned, "v999999999.0.1")
 	if h.countRequests(refsRoute) != 1 {

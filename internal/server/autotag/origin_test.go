@@ -70,7 +70,8 @@ func TestBotUnknownSkipped(t *testing.T) {
 	h.botRecord(sha, 8)
 	h.mustProcess()
 	r := h.wantState(sha, StateSkipped, "")
-	if !strings.Contains(r.Reason, "机器人") || !strings.Contains(r.Reason, "kiln-test[bot]") {
+	if !strings.Contains(r.Reason, "机器人") || !strings.Contains(r.Reason, "kiln-test[bot]") || r.ReasonNote.Code != ReasonBotSender ||
+		r.ReasonNote.Params.Login != "kiln-test[bot]" {
 		t.Fatalf("原因：%s", r.Reason)
 	}
 	if h.countRequests(refsRoute) != 0 || len(h.planner.requests()) != 0 {

@@ -42,8 +42,27 @@ type AutoTagOrigin struct {
 	CreatorLogin   string
 	DeliveryTaskID int64
 	Issues         []int
-	Reason         string
+	// Reason 是不自动发布的中文说明；ReasonCode 是同一个原因的原因码（AutoTagReason*，没有原因时为空），由组装层换成自动打
+	// tag 的原因码（Dashboard 按语言显示）。
+	Reason     string
+	ReasonCode string
 }
+
+// AutoTagOrigin.ReasonCode 的取值。
+const (
+	// AutoTagReasonDesign：工作项的设计 PR。
+	AutoTagReasonDesign = "design"
+	// AutoTagReasonChecking、AutoTagReasonUnconfirmed：PR 创建归属正在核验、尚未确认（推进中，编号还没记下）。
+	AutoTagReasonChecking    = "checking"
+	AutoTagReasonUnconfirmed = "unconfirmed"
+	// AutoTagReasonHeadMismatch、AutoTagReasonBaseMismatch：PR 的来源分支、目标分支与工作项的记录不一致。
+	AutoTagReasonHeadMismatch = "head_mismatch"
+	AutoTagReasonBaseMismatch = "base_mismatch"
+	// AutoTagReasonStopped、AutoTagReasonNoChange、AutoTagReasonNoRecord：工作项已终止、没有改动、缺少领取或交付记录。
+	AutoTagReasonStopped  = "stopped"
+	AutoTagReasonNoChange = "no_change"
+	AutoTagReasonNoRecord = "no_record"
+)
 
 // pullOrigin 是要写入 dev_pull_origins 的一条归属。
 type pullOrigin struct {
@@ -222,13 +241,13 @@ func ResolveAutoTagOrigin(ctx context.Context, q store.Querier, repoID int64, pr
 		// “归属正在核验”；非设计的待核验记录、推进中的工作项返回 Recording，等执行者核验、Server 记下之后再重试。
 		switch priority {
 		case 2, 3, 6:
-			o.Kind = AutoTagOriginDesign
+			o.Kind, o.ReasonCode = AutoTagOriginDesign, AutoTagReasonDesign
 			o.Reason = designReason(o.WorkItemID)
 		case 4:
-			o.Kind = AutoTagOriginRecording
+			o.Kind, o.ReasonCode = AutoTagOriginRecording, AutoTagReasonChecking
 			o.Reason = fmt.Sprintf("AI 开发工作项 #%d 的 PR 创建归属正在核验，确认后可重试", o.WorkItemID)
 		default: // 5：工作项已经建了 PR、编号还没记下（推进中）
-			o.Kind = AutoTagOriginRecording
+			o.Kind, o.ReasonCode = AutoTagOriginRecording, AutoTagReasonUnconfirmed
 			o.Reason = fmt.Sprintf("AI 开发工作项 #%d 的 PR 创建归属尚未确认，确认后可重试", o.WorkItemID)
 		}
 		return o, nil
@@ -237,29 +256,29 @@ func ResolveAutoTagOrigin(ctx context.Context, q store.Querier, repoID int64, pr
 		o.DeliveryTaskID = *deliveryID
 	}
 	if o.Phase == PhaseDesign {
-		o.Kind = AutoTagOriginDesign
+		o.Kind, o.ReasonCode = AutoTagOriginDesign, AutoTagReasonDesign
 		o.Reason = designReason(o.WorkItemID)
 		return o, nil
 	}
 	if headRef != "" && storedHead != headRef {
-		o.Kind = AutoTagOriginDenied
+		o.Kind, o.ReasonCode = AutoTagOriginDenied, AutoTagReasonHeadMismatch
 		o.Reason = fmt.Sprintf("PR 的来源分支与 AI 开发工作项 #%d 的记录不一致，不自动发布", o.WorkItemID)
 		return o, nil
 	}
 	if baseRef != "" && o.BaseRef != baseRef {
-		o.Kind = AutoTagOriginDenied
+		o.Kind, o.ReasonCode = AutoTagOriginDenied, AutoTagReasonBaseMismatch
 		o.Reason = fmt.Sprintf("PR 的目标分支与 AI 开发工作项 #%d 的记录不一致，不自动发布", o.WorkItemID)
 		return o, nil
 	}
 	switch {
 	case state == StateStopped:
-		o.Kind = AutoTagOriginDenied
+		o.Kind, o.ReasonCode = AutoTagOriginDenied, AutoTagReasonStopped
 		o.Reason = fmt.Sprintf("AI 开发工作项 #%d 已终止，不自动发布", o.WorkItemID)
 	case state == StateNoChange:
-		o.Kind = AutoTagOriginDenied
+		o.Kind, o.ReasonCode = AutoTagOriginDenied, AutoTagReasonNoChange
 		o.Reason = fmt.Sprintf("AI 开发工作项 #%d 没有改动，不自动发布", o.WorkItemID)
 	case claim == 0 || (deliveryID == nil && delivery == ""):
-		o.Kind = AutoTagOriginDenied
+		o.Kind, o.ReasonCode = AutoTagOriginDenied, AutoTagReasonNoRecord
 		o.Reason = fmt.Sprintf("AI 开发工作项 #%d 缺少领取或交付记录，不自动发布", o.WorkItemID)
 	default:
 		o.Kind = AutoTagOriginImplementation

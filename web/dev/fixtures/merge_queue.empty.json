@@ -1,6 +1,8 @@
 {
  "Page": "merge_queue",
- "Title": "合并队列",
+ "Title": {
+  "id": "mergeQueue.pageTitle"
+ },
  "Nav": "merge_queue",
  "Status": 200,
  "Session": {

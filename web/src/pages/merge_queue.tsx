@@ -8,11 +8,13 @@ import { EmptyState } from '../components/EmptyState'
 import { ConfirmForm, Form, SubmitButton } from '../components/Form'
 import { PageHeader } from '../components/PageHeader'
 import { Ago } from '../components/Time'
-import { list } from '../lib/envelope'
+import { Msg, Trans, useLocale, useT } from '../i18n/locale'
+import { defaultLocale, msg, translate, type Locale, type MsgKey } from '../i18n/messages'
+import { list, textSchema } from '../lib/envelope'
 import { short } from '../lib/format'
+import { lookup } from '../lib/lookup'
 import { mergeQueueEntrySchema, type MergeQueueEntry } from '../lib/schemas'
 import css from './merge_queue.module.css'
-import { lookup } from '../lib/lookup'
 
 // 合并队列（PLAN #28）：按仓库列出排队中的 PR（第一个是队首，正在处理）和最近结束的项。
 // PR 加上 label kiln:merge 即入队；管理员也可以在这里入队、移出（等同于加上、去掉这个 label）。
@@ -41,7 +43,8 @@ const autoTagSchema = z.object({
   /** pending、tagging、tagged、planned、skipped、failed。 */
   State: z.string(),
   Tag: z.string(),
-  Reason: z.string(),
+  /** 原因（服务端的消息；没有原因码的旧记录是原样的中文说明）。 */
+  Reason: textSchema,
   Tries: z.number(),
   Created: z.string(),
   Updated: z.string(),
@@ -75,11 +78,14 @@ const schema = z.object({
 type Data = z.infer<typeof schema>
 
 /** enqueuedBy 返回入队者的说明：github:<login> 是在 GitHub 上给 PR 加了 label，auto 是验证通过后自动入队（PLAN #29.5）。 */
-export function enqueuedBy(by: string): string {
-  if (by.startsWith('github:')) return `${by.slice('github:'.length)}（加 label）`
-  if (by === 'auto') return 'Kiln（验证通过后自动入队）'
-  return by || '未知'
+export function enqueuedBy(by: string, locale: Locale = defaultLocale): string {
+  if (by.startsWith('github:')) return translate(locale, msg('mergeQueue.byLabel', { login: by.slice('github:'.length) }))
+  if (by === 'auto') return translate(locale, msg('mergeQueue.byAuto'))
+  return by || translate(locale, msg('mergeQueue.byUnknown'))
 }
+
+/** toneClass 返回状态的样式：服务端给出的语义级别（StatusTone）是失败或需要人确认时突出显示。 */
+const toneClass = (tone: string) => (tone === 'bad' || tone === 'warn' ? css.reason : undefined)
 
 function PRLink({ data, repo, pr }: { data: Data; repo: string; pr: number }) {
   if (!data.GitHub) return <b>#{pr}</b>
@@ -91,6 +97,7 @@ function PRLink({ data, repo, pr }: { data: Data; repo: string; pr: number }) {
 }
 
 function Commit({ data, repo, sha, label }: { data: Data; repo: string; sha: string; label: string }) {
+  // label 是已经翻译好的说明（title 中放在完整 SHA 之前）
   if (!sha) return null
   return data.GitHub ? (
     <a href={`${data.GitHub}/${repo}/commit/${sha}`} rel="noreferrer" className="mono" title={`${label} ${sha}`}>
@@ -102,38 +109,40 @@ function Commit({ data, repo, sha, label }: { data: Data; repo: string; sha: str
 }
 
 function QueuedRow({ data, q, e, n, head, admin }: { data: Data; q: Queue; e: MergeQueueEntry; n: number; head: boolean; admin: boolean }) {
+  const t = useT()
+  const { locale } = useLocale()
   return (
     <BoxRow as="li" className={css.row}>
-      <span className={css.pos} aria-label={`第 ${n} 个`}>
+      <span className={css.pos} aria-label={t('mergeQueue.position', { n })}>
         {n}
       </span>
       <div className={css.text}>
         <div className={css.title}>
           <PRLink data={data} repo={q.Repo} pr={e.PR} />
           {e.BaseRef && <Label variant="secondary">→ {e.BaseRef}</Label>}
-          {head && <Label variant="accent">正在处理</Label>}
-          <span className={css.status}>{e.Status || '等待处理'}</span>
+          {head && <Label variant="accent">{t('mergeQueue.processing')}</Label>}
+          <span className={css.status}>{e.Status ? <Msg text={e.Status} /> : t('mergeQueue.waiting')}</span>
         </div>
         <p className={css.meta}>
           {e.HeadSHA && (
             <>
-              head <Commit data={data} repo={q.Repo} sha={e.HeadSHA} label="head" /> ·{' '}
+              {t('mergeQueue.head')} <Commit data={data} repo={q.Repo} sha={e.HeadSHA} label={t('mergeQueue.head')} /> ·{' '}
             </>
           )}
-          由 {enqueuedBy(e.EnqueuedBy)} 于 <Ago t={e.EnqueuedAt} /> 入队
+          <Trans id="mergeQueue.enqueued" params={{ by: enqueuedBy(e.EnqueuedBy, locale) }} tags={{ ago: () => <Ago t={e.EnqueuedAt} /> }} />
         </p>
       </div>
       {admin && (
         <ConfirmForm
           action="/merge-queue/remove"
           fields={{ repo: q.Repo, pr: String(e.PR) }}
-          button="移出"
+          button={t('mergeQueue.remove')}
           buttonProps={{ size: 'small' }}
-          title={`把 #${e.PR} 移出合并队列？`}
-          confirmLabel="移出合并队列"
-          cancelLabel="返回"
+          title={t('mergeQueue.removeTitle', { pr: e.PR })}
+          confirmLabel={t('mergeQueue.removeConfirm')}
+          cancelLabel={t('mergeQueue.removeCancel')}
         >
-          Kiln 会去掉 PR 上的 label {data.Label}，这个 PR 不再自动合并。之后重新加上 label 或在这里加入，会排到队尾。
+          {t('mergeQueue.removeText', { label: data.Label })}
         </ConfirmForm>
       )}
     </BoxRow>
@@ -141,50 +150,64 @@ function QueuedRow({ data, q, e, n, head, admin }: { data: Data; q: Queue; e: Me
 }
 
 /** removals 是冲突出队的类别（PLAN #28.3）：按 PR 的归属，AI 开发的 PR 交回返修，其余的等提交者解决。 */
-const removals: Record<string, { text: string; variant: 'accent' | 'attention' }> = {
-  conflict_dev: { text: '冲突：已交给 AI 开发', variant: 'accent' },
-  conflict_author: { text: '冲突：等待提交者解决', variant: 'attention' },
+const removals: Record<string, { text: MsgKey; variant: 'accent' | 'attention' }> = {
+  conflict_dev: { text: 'mergeQueue.removalDev', variant: 'accent' },
+  conflict_author: { text: 'mergeQueue.removalAuthor', variant: 'attention' },
 }
 
 function RecentRow({ data, q, e }: { data: Data; q: Queue; e: MergeQueueEntry }) {
+  const t = useT()
   const merged = e.State === 'merged'
   const removed = lookup(removals, e.Removal)
+  const ago = { ago: () => <Ago t={e.FinishedAt} fallback="—" /> }
   return (
     <BoxRow as="li" className={css.row}>
       <div className={css.text}>
         <div className={css.title}>
           <PRLink data={data} repo={q.Repo} pr={e.PR} />
           {e.BaseRef && <Label variant="secondary">→ {e.BaseRef}</Label>}
-          {merged ? <Label variant="done">已合并</Label> : <Label variant="secondary">已移出</Label>}
-          {removed && <Label variant={removed.variant}>{removed.text}</Label>}
-          {merged && e.MergeSHA && <Commit data={data} repo={q.Repo} sha={e.MergeSHA} label="合并提交" />}
+          {merged ? <Label variant="done">{t('mergeQueue.merged')}</Label> : <Label variant="secondary">{t('mergeQueue.removed')}</Label>}
+          {removed && <Label variant={removed.variant}>{t(removed.text)}</Label>}
+          {merged && e.MergeSHA && <Commit data={data} repo={q.Repo} sha={e.MergeSHA} label={t('mergeQueue.mergeCommit')} />}
         </div>
         <p className={css.meta}>
-          {e.Reason && <span className={merged ? undefined : css.reason}>{e.Reason} · </span>}
-          {merged ? '合并于 ' : '移出于 '}
-          <Ago t={e.FinishedAt} fallback="—" />
-          {/* 队列合并后关闭关联 issue 的进度或失败原因（PLAN #28.3） */}
-          {merged && e.Status && <span className={e.Status.includes('失败') ? css.reason : undefined}> · {e.Status}</span>}
+          {e.Reason && (
+            <span className={merged ? undefined : css.reason}>
+              <Msg text={e.Reason} /> ·{' '}
+            </span>
+          )}
+          <Trans id={merged ? 'mergeQueue.mergedAt' : 'mergeQueue.removedAt'} tags={ago} />
+          {/* 队列合并后关闭关联 issue 的进度或失败原因（PLAN #28.3）：样式按服务端给出的语义级别，不看文字 */}
+          {merged && e.Status && (
+            <span className={toneClass(e.StatusTone)}>
+              {' · '}
+              <Msg text={e.Status} />
+            </span>
+          )}
         </p>
       </div>
     </BoxRow>
   )
 }
 
-const autoTagStates: Record<string, { text: string; variant: 'secondary' | 'accent' | 'success' | 'attention' | 'danger' }> = {
-  pending: { text: '等待处理', variant: 'secondary' },
-  tagging: { text: '正在打 tag', variant: 'accent' },
-  tagged: { text: '已打 tag，正在规划发布', variant: 'accent' },
-  planned: { text: '已规划发布', variant: 'success' },
-  skipped: { text: '已跳过', variant: 'attention' },
-  failed: { text: '失败', variant: 'danger' },
+const autoTagStates: Record<string, { text: MsgKey; variant: 'secondary' | 'accent' | 'success' | 'attention' | 'danger' }> = {
+  pending: { text: 'autoTagState.pending', variant: 'secondary' },
+  tagging: { text: 'autoTagState.tagging', variant: 'accent' },
+  tagged: { text: 'autoTagState.tagged', variant: 'accent' },
+  planned: { text: 'autoTagState.planned', variant: 'success' },
+  skipped: { text: 'autoTagState.skipped', variant: 'attention' },
+  failed: { text: 'autoTagState.failed', variant: 'danger' },
 }
 
 /** autoTagActive 表示记录还在处理中（页面自动刷新）。 */
+/** mergeConfigPath 是合并队列和自动打 tag 的配置文件（internal/mergecfg.Path）。 */
+const mergeConfigPath = '.kiln/merge.yml'
+
 const autoTagActive = (t: AutoTag) => t.State === 'pending' || t.State === 'tagging' || t.State === 'tagged'
 
 function AutoTagTitle({ data, q, t }: { data: Data; q: Queue; t: AutoTag }) {
-  if (!t.Tag) return <span className={css.muted}>版本号未定</span>
+  const tr = useT()
+  if (!t.Tag) return <span className={css.muted}>{tr('mergeQueue.noVersion')}</span>
   if (data.GitHub && (t.State === 'tagged' || t.State === 'planned')) {
     return (
       <a href={`${data.GitHub}/${q.Repo}/releases/tag/${encodeURIComponent(t.Tag)}`} rel="noreferrer" className={`mono ${css.pr ?? ''}`}>
@@ -196,35 +219,43 @@ function AutoTagTitle({ data, q, t }: { data: Data; q: Queue; t: AutoTag }) {
 }
 
 function AutoTagRow({ data, q, t, admin }: { data: Data; q: Queue; t: AutoTag; admin: boolean }) {
-  const st = lookup(autoTagStates, t.State) ?? { text: t.State, variant: 'secondary' as const }
+  const tr = useT()
+  const st = lookup(autoTagStates, t.State)
   return (
     <BoxRow as="li" className={css.row}>
       <div className={css.text}>
         <div className={css.title}>
           <AutoTagTitle data={data} q={q} t={t} />
-          <Label variant={st.variant}>{st.text}</Label>
-          <Commit data={data} repo={q.Repo} sha={t.SHA} label="合入的 commit" />
+          <Label variant={st?.variant ?? 'secondary'}>{st ? tr(st.text) : t.State}</Label>
+          <Commit data={data} repo={q.Repo} sha={t.SHA} label={tr('mergeQueue.mergedCommitLabel')} />
         </div>
         <p className={css.meta}>
-          {t.Reason && <span className={t.State === 'failed' ? css.reason : undefined}>{t.Reason} · </span>}
-          <PRLink data={data} repo={q.Repo} pr={t.PR} /> {t.Source === 'queue' ? '经合并队列' : '在队列之外'}合入
+          {t.Reason && (
+            <span className={t.State === 'failed' ? css.reason : undefined}>
+              <Msg text={t.Reason} /> ·{' '}
+            </span>
+          )}
+          <Trans
+            id={t.Source === 'queue' ? 'mergeQueue.viaQueue' : 'mergeQueue.viaOutside'}
+            tags={{ pr: () => <PRLink data={data} repo={q.Repo} pr={t.PR} /> }}
+          />
           {t.BaseRef && ` → ${t.BaseRef}`}
-          {t.MergedBy && `（${t.MergedBy}${t.SenderIsBot ? '，机器人' : ''}）`}
+          {t.MergedBy && tr(t.SenderIsBot ? 'mergeQueue.mergedByBot' : 'mergeQueue.mergedBy', { login: t.MergedBy })}
           {t.WorkItemID > 0 && (
             <>
               {' · '}
-              <a href={`/ai-dev/${t.WorkItemID}`}>工作项 #{t.WorkItemID}</a>
+              <a href={`/ai-dev/${t.WorkItemID}`}>{tr('mergeQueue.workItem', { id: t.WorkItemID })}</a>
             </>
           )}
-          {t.Labels.length > 0 && `，label ${t.Labels.join('、')}`} · <Ago t={t.Updated} />
-          {t.Tries > 1 && `，尝试 ${t.Tries} 次`}
+          {t.Labels.length > 0 && tr('mergeQueue.labels', { labels: t.Labels.join(tr('mergeQueue.labelSep')) })} · <Ago t={t.Updated} />
+          {t.Tries > 1 && tr('mergeQueue.tries', { count: t.Tries })}
         </p>
       </div>
       {admin && t.Retryable && (
-        <Form action="/merge-queue/autotag/retry" aria-label={`重试 ${t.SHA.slice(0, 7)} 的自动打 tag`}>
+        <Form action="/merge-queue/autotag/retry" aria-label={tr('mergeQueue.retryLabel', { sha: t.SHA.slice(0, 7) })}>
           <input type="hidden" name="repo" value={q.Repo} />
           <input type="hidden" name="sha" value={t.SHA} />
-          <SubmitButton size="small">重试</SubmitButton>
+          <SubmitButton size="small">{tr('mergeQueue.retry')}</SubmitButton>
         </Form>
       )}
     </BoxRow>
@@ -232,6 +263,7 @@ function AutoTagRow({ data, q, t, admin }: { data: Data; q: Queue; t: AutoTag; a
 }
 
 function QueueBox({ data, q, admin }: { data: Data; q: Queue; admin: boolean }) {
+  const t = useT()
   const id = `mq-${q.Repo.replace(/[^A-Za-z0-9_-]/g, '-')}`
   // 每条目标分支各自排队、互不阻塞（PLAN #28.5）：每个分支的第一个排队项都是这一条分支的队首（正在处理），排位按同一目标
   // 分支计算，与状态文案"目标 dev · 排在第 2 个"严格一致。
@@ -258,30 +290,30 @@ function QueueBox({ data, q, admin }: { data: Data; q: Queue; admin: boolean }) 
         }
       />
       {q.Queued.length > 0 ? (
-        <ol className={css.rows} aria-label={`${q.Repo} 排队中的 PR`}>
+        <ol className={css.rows} aria-label={t('mergeQueue.queuedList', { repo: q.Repo })}>
           {q.Queued.map((e, i) => (
             <QueuedRow key={e.PR} data={data} q={q} e={e} n={positions[i] ?? i + 1} head={heads.has(e.PR)} admin={admin} />
           ))}
         </ol>
       ) : (
-        <BoxRow className={css.muted}>没有排队中的 PR。</BoxRow>
+        <BoxRow className={css.muted}>{t('mergeQueue.noQueued')}</BoxRow>
       )}
-      <BoxRow className={css.subhead}>最近结束</BoxRow>
+      <BoxRow className={css.subhead}>{t('mergeQueue.recent')}</BoxRow>
       {q.Recent.length > 0 ? (
-        <ul className={css.rows} aria-label={`${q.Repo} 最近结束的 PR`}>
+        <ul className={css.rows} aria-label={t('mergeQueue.recentList', { repo: q.Repo })}>
           {q.Recent.map((e) => (
             <RecentRow key={`${e.PR}-${e.EnqueuedAt}`} data={data} q={q} e={e} />
           ))}
         </ul>
       ) : (
-        <BoxRow className={css.muted}>还没有合并或移出的记录。</BoxRow>
+        <BoxRow className={css.muted}>{t('mergeQueue.noRecent')}</BoxRow>
       )}
       {q.AutoTags.length > 0 && (
         <>
-          <BoxRow className={css.subhead}>自动打 tag（合入发版分支后按 .kiln/merge.yml 打 tag 并发布）</BoxRow>
-          <ul className={css.rows} aria-label={`${q.Repo} 自动打 tag 的记录`}>
-            {q.AutoTags.map((t) => (
-              <AutoTagRow key={t.SHA} data={data} q={q} t={t} admin={admin} />
+          <BoxRow className={css.subhead}>{t('mergeQueue.autoTags', { path: mergeConfigPath })}</BoxRow>
+          <ul className={css.rows} aria-label={t('mergeQueue.autoTagList', { repo: q.Repo })}>
+            {q.AutoTags.map((a) => (
+              <AutoTagRow key={a.SHA} data={data} q={q} t={a} admin={admin} />
             ))}
           </ul>
         </>
@@ -292,10 +324,11 @@ function QueueBox({ data, q, admin }: { data: Data; q: Queue; admin: boolean }) 
 
 /** AddForm 是管理员把 PR 加入合并队列的表单。 */
 function AddForm({ data }: { data: Data }) {
+  const t = useT()
   return (
-    <Form action="/merge-queue/add" className={css.add} aria-label="加入合并队列">
+    <Form action="/merge-queue/add" className={css.add} aria-label={t('mergeQueue.add')}>
       <FormControl required>
-        <FormControl.Label>仓库</FormControl.Label>
+        <FormControl.Label>{t('mergeQueue.repo')}</FormControl.Label>
         <Select name="repo" defaultValue={data.Repo || data.Repos[0]}>
           {data.Repos.map((r) => (
             <Select.Option key={r} value={r}>
@@ -305,30 +338,29 @@ function AddForm({ data }: { data: Data }) {
         </Select>
       </FormControl>
       <FormControl required>
-        <FormControl.Label>PR 号</FormControl.Label>
-        <TextInput name="pr" inputMode="numeric" pattern="#?[0-9]+" placeholder="例如 42" className={css.prInput} />
+        <FormControl.Label>{t('mergeQueue.prNumber')}</FormControl.Label>
+        <TextInput name="pr" inputMode="numeric" pattern="#?[0-9]+" placeholder={t('mergeQueue.prPlaceholder')} className={css.prInput} />
       </FormControl>
-      <SubmitButton leadingVisual={GitMergeQueueIcon}>加入合并队列</SubmitButton>
+      <SubmitButton leadingVisual={GitMergeQueueIcon}>{t('mergeQueue.add')}</SubmitButton>
     </Form>
   )
 }
 
+const code = { code: (c: string) => <code>{c}</code> }
+
 function MergeQueuePage({ data, env }: PageProps<Data>) {
+  const t = useT()
   const admin = env.Session?.Admin ?? false
   useLive(data.Queues.some((q) => q.Queued.length > 0 || q.AutoTags.some(autoTagActive)))
   return (
     <div className={css.page}>
       <PageHeader
-        title={data.Repo ? `${data.Repo} 的合并队列` : '合并队列'}
-        description={
-          <>
-            按目标分支分别排队，逐条验证各分支队首 PR 的 head，CI 和 AI 审计通过、不落后于目标分支时自动合并。给 PR 加上 label <code>{data.Label}</code> 即加入合并队列。
-          </>
-        }
+        title={data.Repo ? t('mergeQueue.headingRepo', { repo: data.Repo }) : t('mergeQueue.heading')}
+        description={<Trans id="mergeQueue.description" params={{ label: data.Label }} tags={code} />}
         actions={
           data.Repo && (
             <LinkButton href="/merge-queue" leadingVisual={ArrowLeftIcon}>
-              全部仓库
+              {t('mergeQueue.allRepos')}
             </LinkButton>
           )
         }
@@ -340,8 +372,8 @@ function MergeQueuePage({ data, env }: PageProps<Data>) {
         data.Queues.map((q) => <QueueBox key={q.Repo} data={data} q={q} admin={admin} />)
       ) : (
         <Box>
-          <EmptyState icon={GitMergeQueueIcon} title="合并队列是空的">
-            给 PR 加上 label <code>{data.Label}</code> 即加入合并队列{admin ? '，也可以在上面填写仓库和 PR 号加入' : ''}。
+          <EmptyState icon={GitMergeQueueIcon} title={t('mergeQueue.emptyTitle')}>
+            <Trans id={admin ? 'mergeQueue.emptyTextAdmin' : 'mergeQueue.emptyText'} params={{ label: data.Label }} tags={code} />
           </EmptyState>
         </Box>
       )}

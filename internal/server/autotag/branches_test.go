@@ -36,8 +36,9 @@ func TestBranchNotRelease(t *testing.T) {
 	h.recordBase(dev, 1, "dev", "main")
 	h.mustProcess()
 	r := h.wantState(dev, StateSkipped, "")
-	if r.SkipCode != SkipCodeBranchNotRelease || !strings.Contains(r.Reason, "dev") || !strings.Contains(r.Reason, "master") {
-		t.Fatalf("跳过的记录：skip_code=%q reason=%q", r.SkipCode, r.Reason)
+	if r.SkipCode != SkipCodeBranchNotRelease || !strings.Contains(r.Reason, "dev") || !strings.Contains(r.Reason, "master") ||
+		r.ReasonNote.Params.Branch != "dev" || r.ReasonNote.Params.Release != "master" {
+		t.Fatalf("跳过的记录：skip_code=%q reason=%q note=%+v", r.SkipCode, r.Reason, r.ReasonNote)
 	}
 	if h.countRequests(refsRoute) != 0 || len(h.planner.requests()) != 0 {
 		t.Error("不是发版分支的合并不应建 tag 或规划发布")
@@ -372,8 +373,8 @@ func TestInactiveRepoClearsCandidates(t *testing.T) {
 	}
 	h.exec(`UPDATE repos SET active=false WHERE id=$1`, repoID)
 	h.mustProcess()
-	if r := h.wantState(c1, StateFailed, ""); !strings.Contains(r.Reason, "仓库已停用") {
-		t.Fatalf("停用后的原因：%q", r.Reason)
+	if r := h.wantState(c1, StateFailed, ""); !strings.Contains(r.Reason, "仓库已停用") || r.ReasonNote.Code != ReasonRepoInactive {
+		t.Fatalf("停用后的原因：%q %+v", r.Reason, r.ReasonNote)
 	}
 	if n := h.countCandidates(c1); n != 0 {
 		t.Fatalf("停用时应清空候选，实际 %d 条", n)

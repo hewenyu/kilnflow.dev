@@ -122,3 +122,22 @@ func TestAutoTagOriginSingleConnectionPool(t *testing.T) {
 		t.Fatalf("应规划一次发布：%+v", reqs)
 	}
 }
+
+// TestDevOriginReasons：AI 开发不自动发布的每个原因码都换成自动打 tag 的原因码（Dashboard 按语言显示），换过去的都是
+// 自动打 tag 认识的原因码，各不相同。
+func TestDevOriginReasons(t *testing.T) {
+	known := map[string]bool{}
+	for _, c := range autotag.ReasonCodes() {
+		known[c] = true
+	}
+	seen := map[string]bool{}
+	for from, to := range devOriginReasons {
+		if from == "" || !known[to] || seen[to] {
+			t.Errorf("AI 开发的原因码 %q 换成了 %q：应是自动打 tag 认识的、不重复的原因码", from, to)
+		}
+		seen[to] = true
+	}
+	if len(devOriginReasons) != 8 {
+		t.Errorf("AI 开发有 8 个不自动发布的原因码，登记了 %d 个", len(devOriginReasons))
+	}
+}
