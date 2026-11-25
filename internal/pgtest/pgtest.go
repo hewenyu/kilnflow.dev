@@ -662,26 +662,31 @@ func sequenceOwned(ctx context.Context, conn *pgx.Conn, name string) (bool, erro
 	return owned, nil
 }
 
-// schemaSignatureSQL 对 public 中全部普通表 / 分区表、列与类型、约束、索引、序列、函数和触发器生成一个确定性签名。
-// 任一结构被测试改动（重命名表、删约束、建函数等）都会得到不同的签名，从而丢弃该槽位。
+// schemaSignatureSQL 对 public 中全部普通表 / 分区表、列（含默认值、identity、生成列）、约束、索引、序列、
+// 函数、触发器、视图、自定义类型、RLS 策略、已安装的扩展，以及 public 以外的额外 schema 生成一个确定性签名。
+// 任一结构被测试改动（改列默认值、删约束、建视图等）都会得到不同的签名，从而丢弃该槽位。
+// 签名只比较同一个模板库和它的副本：CREATE DATABASE ... TEMPLATE 保留对象 OID，模板与副本上的系统目录一致。
 const schemaSignatureSQL = `
 SELECT md5(coalesce(string_agg(sig, E'\n' ORDER BY sig), ''))
 FROM (
-  SELECT format('table:%s', c.relname) AS sig
+  SELECT format('table:%s:%s:%s:%s:%s:%s', c.relname, c.relkind::text, c.relrowsecurity, c.relforcerowsecurity,
+                c.relpersistence::text, coalesce(array_to_string(c.reloptions, ','), '')) AS sig
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
   UNION ALL
-  SELECT format('column:%s.%s:%s:%s', c.relname, a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull)
+  SELECT format('column:%s.%s:%s:%s:%s:%s:%s', c.relname, a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
+                a.attidentity::text, a.attgenerated::text, coalesce(pg_get_expr(ad.adbin, ad.adrelid), ''))
   FROM pg_attribute a
   JOIN pg_class c ON c.oid = a.attrelid
   JOIN pg_namespace n ON n.oid = c.relnamespace
+  LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
   WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
   UNION ALL
-  SELECT format('constraint:%s:%s:%s:%s', c.relname, con.conname, con.contype, pg_get_constraintdef(con.oid))
+  SELECT format('constraint:%s:%s:%s:%s', coalesce(c.relname, ''), con.conname, con.contype::text, pg_get_constraintdef(con.oid))
   FROM pg_constraint con
-  JOIN pg_class c ON c.oid = con.conrelid
-  JOIN pg_namespace n ON n.oid = c.relnamespace
+  LEFT JOIN pg_class c ON c.oid = con.conrelid
+  JOIN pg_namespace n ON n.oid = con.connamespace
   WHERE n.nspname = 'public'
   UNION ALL
   SELECT format('index:%s:%s', tc.relname, pg_get_indexdef(i.indexrelid))
@@ -690,9 +695,10 @@ FROM (
   JOIN pg_namespace n ON n.oid = tc.relnamespace
   WHERE n.nspname = 'public'
   UNION ALL
-  SELECT format('sequence:%s', c.relname)
+  SELECT format('sequence:%s:%s:%s:%s:%s:%s', c.relname, s.seqincrement, s.seqstart, s.seqmin, s.seqmax, s.seqcache)
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_sequence s ON s.seqrelid = c.oid
   WHERE n.nspname = 'public' AND c.relkind = 'S'
   UNION ALL
   SELECT format('function:%s:%s', p.proname, pg_get_functiondef(p.oid))
@@ -705,6 +711,35 @@ FROM (
   JOIN pg_class c ON c.oid = t.tgrelid
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public' AND NOT t.tgisinternal
+  UNION ALL
+  SELECT format('view:%s:%s:%s', c.relname, c.relkind::text, pg_get_viewdef(c.oid))
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')
+  UNION ALL
+  SELECT format('type:%s:%s:%s:%s:%s', t.typname, t.typtype::text,
+                coalesce(format_type(t.typbasetype, t.typtypmod), ''),
+                coalesce((SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) FROM pg_enum e WHERE e.enumtypid = t.oid), ''),
+                coalesce(pg_get_expr(t.typdefaultbin, 0), ''))
+  FROM pg_type t
+  JOIN pg_namespace n ON n.oid = t.typnamespace
+  WHERE n.nspname = 'public' AND t.typtype IN ('e', 'd', 'c', 'r', 'm')
+    AND (t.typrelid = 0 OR EXISTS (SELECT 1 FROM pg_class c WHERE c.oid = t.typrelid AND c.relkind = 'c'))
+  UNION ALL
+  SELECT format('policy:%s:%s:%s:%s:%s', c.relname, p.polname, p.polcmd::text,
+                coalesce(pg_get_expr(p.polqual, p.polrelid), ''), coalesce(pg_get_expr(p.polwithcheck, p.polrelid), ''))
+  FROM pg_policy p
+  JOIN pg_class c ON c.oid = p.polrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public'
+  UNION ALL
+  SELECT format('extension:%s:%s', e.extname, e.extversion)
+  FROM pg_extension e
+  UNION ALL
+  SELECT format('schema:%s', n.nspname)
+  FROM pg_namespace n
+  WHERE n.nspname <> 'public' AND n.nspname <> '` + seedSchema + `'
+    AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
 ) s`
 
 // userTablesSQL 列出要清空的表：public 中的普通表和分区表，但保留迁移记录。

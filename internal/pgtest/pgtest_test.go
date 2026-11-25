@@ -266,6 +266,32 @@ func TestDDLChangeDiscardsSlot(t *testing.T) {
 			}
 		})
 	})
+	t.Run("修改列默认值", func(t *testing.T) {
+		resetSlots(t)
+		var damaged string
+		t.Run("破坏", func(t *testing.T) {
+			p := Pool(t)
+			damaged = currentDatabase(t, p)
+			if _, err := p.Exec(t.Context(), `ALTER TABLE installations ALTER COLUMN account_type SET DEFAULT 'Organization'`); err != nil {
+				t.Fatal(err)
+			}
+		})
+		t.Run("新槽位默认值完好", func(t *testing.T) {
+			p := Pool(t)
+			if got := currentDatabase(t, p); got == damaged {
+				t.Fatalf("改过列默认值的槽位应被丢弃，实际复用了 %s", got)
+			}
+			// 插入时不指定 account_type：必须拿到迁移定义的默认值，而不是上一个测试设置的 'Organization'。
+			var accountType string
+			if err := p.QueryRow(t.Context(),
+				`INSERT INTO installations (id, account_id, account_login) VALUES (1, 1, 'alice') RETURNING account_type`).Scan(&accountType); err != nil {
+				t.Fatal(err)
+			}
+			if accountType != "User" {
+				t.Fatalf("新槽位的 account_type 默认值应为 User，实际 %q", accountType)
+			}
+		})
+	})
 }
 
 // leakedConnHangGuard 是等待 releaseSlot 返回的余量：超过 residualConnWait 这么多还没返回，

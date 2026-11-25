@@ -261,6 +261,65 @@ func TestServeAssetHead(t *testing.T) {
 	}
 }
 
+// TestServeAssetConditional：压缩表示与原文表示对条件请求的处理一致。If-None-Match 命中时都返回 304、
+// 没有正文、不留下 Content-Encoding 等表示元数据，Vary 与 Cache-Control 保留；If-Match 不匹配时都返回 412、
+// 没有正文。压缩分支不能绕开 ServeContent 直接写 200。
+func TestServeAssetConditional(t *testing.T) {
+	t.Parallel()
+	body := assetBody("console.log('kiln');\n")
+	d := assetDashboard(fstest.MapFS{"ui/dist/assets/app-abc123.js": &fstest.MapFile{Data: body}})
+
+	const cacheControl = "public, max-age=31536000, immutable"
+	cases := []struct {
+		name       string
+		method     string
+		encoding   string
+		header     string
+		value      string
+		wantStatus int
+	}{
+		{"GET 压缩 If-None-Match", http.MethodGet, "gzip", "If-None-Match", "*", http.StatusNotModified},
+		{"GET 原文 If-None-Match", http.MethodGet, "identity", "If-None-Match", "*", http.StatusNotModified},
+		{"HEAD 压缩 If-None-Match", http.MethodHead, "gzip", "If-None-Match", "*", http.StatusNotModified},
+		{"HEAD 原文 If-None-Match", http.MethodHead, "identity", "If-None-Match", "*", http.StatusNotModified},
+		{"GET 压缩 If-Match", http.MethodGet, "gzip", "If-Match", `"nope"`, http.StatusPreconditionFailed},
+		{"GET 原文 If-Match", http.MethodGet, "identity", "If-Match", `"nope"`, http.StatusPreconditionFailed},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			r := httptest.NewRequest(c.method, "/assets/app-abc123.js", nil)
+			r.Header.Set("Accept-Encoding", c.encoding)
+			r.Header.Set(c.header, c.value)
+			w := httptest.NewRecorder()
+			d.serveAsset(w, r)
+
+			res := w.Result()
+			if res.StatusCode != c.wantStatus {
+				t.Fatalf("状态码 = %d，应为 %d", res.StatusCode, c.wantStatus)
+			}
+			if w.Body.Len() != 0 {
+				t.Errorf("%d 响应不应有正文，实际 %d 字节", c.wantStatus, w.Body.Len())
+			}
+			if got := res.Header.Get("Content-Encoding"); got != "" {
+				t.Errorf("Content-Encoding = %q，不应带压缩标记", got)
+			}
+			if got := res.Header.Get("Content-Type"); got != "" {
+				t.Errorf("Content-Type = %q，不应带表示元数据", got)
+			}
+			if got := res.Header.Get("Content-Length"); got != "" {
+				t.Errorf("Content-Length = %q，没有正文时不应声明长度", got)
+			}
+			if got := res.Header.Get("Vary"); got != "Accept-Encoding" {
+				t.Errorf("Vary = %q，应为 Accept-Encoding", got)
+			}
+			if got := res.Header.Get("Cache-Control"); got != cacheControl {
+				t.Errorf("Cache-Control = %q，应为 %q", got, cacheControl)
+			}
+		})
+	}
+}
+
 // TestServeAssetRange：带 Range 的请求不对部分内容压缩，交给 ServeContent 返回 206。
 func TestServeAssetRange(t *testing.T) {
 	t.Parallel()

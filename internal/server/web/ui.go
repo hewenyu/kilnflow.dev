@@ -292,8 +292,28 @@ func (d *Dashboard) gzipAsset(name string, body []byte) []byte {
 	return out.Bytes()
 }
 
+// gzipLengthWriter 给压缩表示的响应补回 Content-Length：标准库的 ServeContent 在 Content-Encoding 非空时
+// 故意不设置它（它要兼容边压边写的处理器，那里长度不可知），而这里发送的是已知长度的预压缩字节。
+// 只在 200 时补：304 与 412 没有正文，带 Content-Length 会让客户端等待不存在的正文。这两个状态也不该
+// 留下描述 gzip 表示的元数据（304 由 ServeContent 自己清理，412 不会，两边都要和原文表示的行为一致）。
+type gzipLengthWriter struct {
+	http.ResponseWriter
+	length string
+}
+
+func (w gzipLengthWriter) WriteHeader(status int) {
+	if status == http.StatusOK {
+		w.Header().Set("Content-Length", w.length)
+	} else {
+		w.Header().Del("Content-Type")
+		w.Header().Del("Content-Encoding")
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
 // serveAsset 发送前端构建产物（ui/dist/assets/ 下带内容摘要的文件名，长期缓存；以及 ui/dist/ 下的图标）。
 // 文本类资产在客户端接受 gzip 时发送压缩后的字节；带 Range 的请求照常由 ServeContent 处理（不对部分内容压缩）。
+// 压缩表示也经 ServeContent 写出，条件请求（If-None-Match 等）与 HEAD 的处理和原文表示完全一致。
 func (d *Dashboard) serveAsset(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	if name == "index.html" || strings.HasPrefix(name, ".") {
@@ -315,16 +335,13 @@ func (d *Dashboard) serveAsset(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Vary", "Accept-Encoding")
 		if len(body) >= assetGzipMinSize && r.Header.Get("Range") == "" && acceptsGzip(r) {
 			gz := d.gzipAsset(name, body)
+			// 先设好 Content-Type 和 Content-Encoding：ServeContent 会据前者决定不再嗅探
+			// （gzip 字节会被认成 application/x-gzip），后者让客户端按压缩表示解析。
 			w.Header().Set("Content-Type", contentType)
 			w.Header().Set("Content-Encoding", "gzip")
-			w.Header().Set("Content-Length", strconv.Itoa(len(gz)))
-			w.WriteHeader(http.StatusOK)
-			if r.Method == http.MethodHead {
-				return
-			}
-			if _, err := w.Write(gz); err != nil {
-				d.log.Debug("发送压缩的静态资产", "name", name, "err", err)
-			}
+			http.ServeContent(
+				gzipLengthWriter{ResponseWriter: w, length: strconv.Itoa(len(gz))},
+				r, path.Base(name), time.Time{}, bytes.NewReader(gz))
 			return
 		}
 	}
